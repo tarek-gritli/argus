@@ -1,0 +1,8 @@
+{
+  "rules": [
+    {"rule_id": "SQL_FORMAT_STRING", "description": "Formatted SQL string construction", "owasp": "A03:2021"},
+    {"rule_id": "DANGEROUS_EVAL", "description": "Use of eval()", "owasp": "A03:2021"},
+    {"rule_id": "DANGEROUS_EXEC", "description": "Use of exec()", "owasp": "A03:2021"},
+    {"rule_id": "SUBPROCESS_SHELL_TRUE", "description": "subprocess with shell=True", "owasp": "A03:2021"}
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "A01:2021": {"name": "Broken Access Control", "severity_range": "HIGH-CRITICAL"},
+  "A02:2021": {"name": "Cryptographic Failures", "severity_range": "HIGH-CRITICAL"},
+  "A03:2021": {"name": "Injection", "severity_range": "HIGH-CRITICAL"},
+  "A06:2021": {"name": "Vulnerable and Outdated Components", "severity_range": "MEDIUM-HIGH"}
+}
