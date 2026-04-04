@@ -1,0 +1,4 @@
+{
+  "jinja2@2.10": {"cve_id": "CVE-2019-10906", "cvss_score": 7.5, "fix_version": "2.10.1"},
+  "lodash@4.17.15": {"cve_id": "CVE-2020-8203", "cvss_score": 7.4, "fix_version": "4.17.21"}
+}
