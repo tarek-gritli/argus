@@ -11,7 +11,7 @@ Shared Pydantic models, SQLAlchemy DB session, and Celery queue primitives.
 ## Usage
 
 ```python
-from argus_shared import ReviewRequest, Finding, get_session
+from shared import ReviewRequest, Finding, get_session
 
 request = ReviewRequest(...)
 async with get_session() as session:

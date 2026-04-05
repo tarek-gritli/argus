@@ -4,6 +4,8 @@ version = "0.1.0"
 description = "Argus: Multi-agent AI platform for automated code review at pull-request / merge-request level"
 readme = "README.md"
 requires-python = ">=3.12"
+dependencies = []
+
 [tool.uv.workspace]
 members = [
     "apps/gateway",
@@ -13,6 +15,12 @@ members = [
     "packages/context",
     "packages/integrations",
 ]
+
+[tool.uv.sources]
+argus-shared = { workspace = true }
+argus-context = { workspace = true }
+argus-integrations = { workspace = true }
+
 
 [tool.ruff]
 line-length = 100

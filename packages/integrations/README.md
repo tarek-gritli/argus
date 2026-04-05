@@ -12,7 +12,7 @@ External service integrations for code platforms and notifications.
 ## Usage
 
 ```python
-from argus_integrations import GitHubClient, GitLabClient, SlackNotifier
+from integrations import GitHubClient, GitLabClient, SlackNotifier
 
 gh = GitHubClient(app_id=..., private_key=...)
 slack = SlackNotifier(webhook_url=...)

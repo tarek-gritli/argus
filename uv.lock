@@ -36,32 +36,32 @@ dev = [{ name = "ruff", specifier = ">=0.15.9" }]
 [[package]]
 name = "argus-agents"
 version = "0.1.0"
-source = { virtual = "apps/agents" }
+source = { editable = "apps/agents" }
 
 [[package]]
 name = "argus-cli"
 version = "0.1.0"
-source = { virtual = "apps/cli" }
+source = { editable = "apps/cli" }
 
 [[package]]
 name = "argus-context"
 version = "0.1.0"
-source = { virtual = "packages/context" }
+source = { editable = "packages/context" }
 
 [[package]]
 name = "argus-gateway"
 version = "0.1.0"
-source = { virtual = "apps/gateway" }
+source = { editable = "apps/gateway" }
 
 [[package]]
 name = "argus-integrations"
 version = "0.1.0"
-source = { virtual = "packages/integrations" }
+source = { editable = "packages/integrations" }
 
 [[package]]
 name = "argus-shared"
 version = "0.1.0"
-source = { virtual = "packages/shared" }
+source = { editable = "packages/shared" }
 
 [[package]]
 name = "ruff"

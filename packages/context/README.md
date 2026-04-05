@@ -11,7 +11,7 @@ Vector embeddings, dependency graph analysis, and AST parsing for context enrich
 ## Usage
 
 ```python
-from argus_context import CodeEmbedder, DependencyGraph, LanguageParser
+from context import CodeEmbedder, DependencyGraph, LanguageParser
 
 embedder = CodeEmbedder()
 graph = DependencyGraph()
