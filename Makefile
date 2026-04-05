@@ -1,92 +1,150 @@
-.PHONY: help install test lint format clean build up down logs
+.PHONY: help \
+	install install-python install-web \
+	run-gateway run-agents run-cli run-web \
+	add-dep remove-dep lock upgrade \
+	build up down logs restart \
+	lint fmt fix \
+	migrate migrate-up migrate-down \
+	test clean deps-tree
 
 PYTHON := python3
-UV := uv
-PROJECT := argus
+UV     := uv
+PNPM   := pnpm
+
+# ============================================================
+# Help
+# ============================================================
 
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
+		| sort \
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-# === Development ===
+# ============================================================
+# Install
+# ============================================================
 
-install: ## Install dependencies
+install: install-python install-web ## Install all dependencies
+
+install-python: ## Install Python dependencies
 	$(UV) sync
 
-# === Running Apps ===
+install-web: ## Install web dependencies
+	cd apps/web && $(PNPM) install
+
+# ============================================================
+# Run
+# ============================================================
 
 run-gateway: ## Run the gateway service
-	$(UV) run --package argus-gateway gateway
-
-run-cli: ## Run the CLI
-	$(UV) run --package argus-cli cli
+	$(UV) run --package argus-gateway argus-gateway
 
 run-agents: ## Run the agents service
-	$(UV) run --package argus-agents agents
-	
-# === Dependencies ===
+	$(UV) run --package argus-agents argus-agents
 
-add-dep: ## Add a dependency (usage: make add-dep PKG=argus-gateway DEP=fastapi)
+run-cli: ## Run the CLI
+	$(UV) run --package argus-cli argus-cli
+
+run-web: ## Run the web dev server
+	cd apps/web && $(PNPM) dev
+
+# ============================================================
+# Dependencies
+# ============================================================
+
+add-dep: ## Add external dep (usage: make add-dep PKG=argus-gateway DEP=fastapi)
 	$(UV) add --package $(PKG) $(DEP)
 
-add-workspace-dep: ## Add a workspace dependency (usage: make add-workspace-dep PKG=argus-gateway DEP=argus-shared)
-	$(UV) add --package $(PKG) $(DEP)
-
-remove-dep: ## Remove a dependency (usage: make remove-dep PKG=argus-gateway DEP=fastapi)
+remove-dep: ## Remove a dep (usage: make remove-dep PKG=argus-gateway DEP=fastapi)
 	$(UV) remove --package $(PKG) $(DEP)
 
 lock: ## Lock dependencies
 	$(UV) lock
 
-upgrade: ## Upgrade all dependencies
+upgrade: ## Upgrade all dependencies to latest
 	$(UV) lock --upgrade
 
-# === Docker ===
+# ============================================================
+# Docker
+# ============================================================
 
 build: ## Build all Docker images
 	docker compose build
 
-up: ## Start all services
+up: ## Start all services in background
 	docker compose up -d
 
 down: ## Stop all services
 	docker compose down
 
-logs: ## View logs (usage: make logs SVC=gateway)
+down-v: ## Stop all services and delete volumes
+	docker compose down -v
+
+logs: ## Tail logs (usage: make logs SVC=gateway)
 	docker compose logs -f $(SVC)
 
 restart: ## Restart a service (usage: make restart SVC=gateway)
 	docker compose restart $(SVC)
 
-# === Linting & Formatting ===
+# ============================================================
+# Lint & Format
+# ============================================================
 
-lint: ## Run linter
+lint: ## Check for lint errors
 	$(UV) run ruff check .
 
 fmt: ## Format code
 	$(UV) run ruff format .
 
-fix: ## Fix linting issues automatically
+fix: ## Auto-fix lint errors
 	$(UV) run ruff check --fix .
 
-# === Database ===
+# ============================================================
+# Database
+# ============================================================
 
-migrate: ## Create a new migration
+migrate: ## Create migration (usage: make migrate NAME="add users table")
 	$(UV) run alembic revision --autogenerate -m "$(NAME)"
 
-migrate-up: ## Apply migrations
+migrate-up: ## Apply all pending migrations
 	$(UV) run alembic upgrade head
 
 migrate-down: ## Rollback last migration
 	$(UV) run alembic downgrade -1
 
-# === Cleanup ===
+migrate-history: ## Show migration history
+	$(UV) run alembic history --verbose
 
-clean: ## Clean build artifacts
-	rm -rf .venv .pytest_cache .ruff_cache htmlcov .coverage build dist *.egg-info
+# ============================================================
+# Tests
+# ============================================================
+
+test: ## Run all tests
+	$(UV) run pytest tests/
+
+test-unit: ## Run unit tests only
+	$(UV) run pytest tests/unit/
+
+test-integration: ## Run integration tests only
+	$(UV) run pytest tests/integration/
+
+test-cov: ## Run tests with coverage report
+	$(UV) run pytest tests/ --cov --cov-report=html
+
+# ============================================================
+# Cleanup
+# ============================================================
+
+clean: ## Remove all build artifacts and caches
+	rm -rf .venv .pytest_cache .ruff_cache htmlcov .coverage build dist
 	find . -type d -name __pycache__ -exec rm -rf {} +
+	find . -type d -name "*.egg-info" -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
+	cd apps/web && rm -rf .next out node_modules
 
-# === Info ===
+# ============================================================
+# Info
+# ============================================================
 
-deps-tree: ## Show dependency tree
+deps-tree: ## Show Python dependency tree
 	$(UV) tree
