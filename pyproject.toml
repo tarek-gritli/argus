@@ -1,0 +1,15 @@
+[project]
+name = "argus"
+version = "0.1.0"
+description = "Argus: Multi-agent AI platform for automated code review at pull-request / merge-request level"
+readme = "README.md"
+requires-python = ">=3.12"
+[tool.uv.workspace]
+members = [
+    "apps/gateway",
+    "apps/agents",
+    "apps/cli",
+    "packages/shared",
+    "packages/context",
+    "packages/integrations",
+]

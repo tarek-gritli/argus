@@ -1,0 +1,7 @@
+[project]
+name = "argus-gateway"
+version = "0.1.0"
+description = "FastAPI API gateway - GitHub/GitLab webhooks, authentication, rate limiting, routes review jobs to queue"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []

@@ -1,0 +1,7 @@
+[project]
+name = "argus-context"
+version = "0.1.0"
+description = "Vector embeddings (Qdrant), dependency graph (Neo4j), and AST parsing for context enrichment"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []

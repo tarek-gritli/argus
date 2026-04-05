@@ -1,0 +1,7 @@
+[project]
+name = "argus-cli"
+version = "0.1.0"
+description = "Typer CLI for local pre-commit review, fix application, and watch mode"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
