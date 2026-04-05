@@ -13,3 +13,15 @@ members = [
     "packages/context",
     "packages/integrations",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]  # errors, pyflakes, isort
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.9",
+]
