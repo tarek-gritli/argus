@@ -39,9 +39,9 @@ Add a PyPI package to a specific workspace member:
 
 ```bash
 # From the workspace root, target a specific member:
-uv add --package argus-gateway fastapi uvicorn
-uv add --package argus-agents langgraph
-uv add --package argus-cli typer
+uv add --package gateway fastapi uvicorn
+uv add --package agents langgraph
+uv add --package cli typer
 ```
 
 ### Add an Internal Dependency (Workspace Package)
@@ -50,18 +50,18 @@ Make one workspace member depend on another. The workspace automatically handles
 
 ```bash
 # Example: gateway imports from integrations (github, gitlab)
-uv add --package argus-gateway argus-integrations
+uv add --package gateway integrations
 
 # Example: gateway imports from shared (db, queue, models, schemas)
-uv add --package argus-gateway argus-shared
+uv add --package gateway shared
 
 # Example: agents depends on shared and context
-uv add --package argus-agents argus-shared
-uv add --package argus-agents argus-context
+uv add --package agents shared
+uv add --package agents context
 
 # Example: CLI imports from shared and integrations
-uv add --package argus-cli argus-shared
-uv add --package argus-cli argus-integrations
+uv add --package cli shared
+uv add --package cli integrations
 ```
 
 uv automatically resolves internal packages via `tool.uv.sources` with `workspace = true`.
@@ -69,26 +69,26 @@ uv automatically resolves internal packages via `tool.uv.sources` with `workspac
 ### Remove a Dependency
 
 ```bash
-uv remove --package argus-gateway some-package
+uv remove --package gateway some-package
 ```
 
 ### Run a Specific App
 
 ```bash
 # Run the gateway entry point
-uv run --package argus-gateway gateway
+uv run --package gateway gateway
 
 # Run the CLI entry point
-uv run --package argus-cli argus-cli
+uv run --package cli cli
 
 # Run the agents entry point
-uv run --package argus-agents argus-agents
+uv run --package agents agents
 ```
 
 Or run a Python module directly:
 
 ```bash
-uv run --package argus-gateway python -m gateway.main
+uv run --package gateway python -m gateway.main
 ```
 
 ### Run Arbitrary Commands in the Environment
@@ -135,9 +135,9 @@ uv sync
 | Task | Command |
 |------|---------|
 | Install everything | `uv sync` |
-| Add external dep to an app | `uv add --package argus-gateway <pkg>` |
-| Add internal dep | `uv add --package argus-gateway argus-shared` |
-| Remove a dep | `uv remove --package argus-gateway <pkg>` |
-| Run an app | `uv run --package argus-gateway gateway` |
+| Add external dep to an app | `uv add --package gateway <pkg>` |
+| Add internal dep | `uv add --package gateway shared` |
+| Remove a dep | `uv remove --package gateway <pkg>` |
+| Run an app | `uv run --package gateway gateway` |
 | Update all deps | `uv lock --upgrade` |
 | View dep tree | `uv tree` |

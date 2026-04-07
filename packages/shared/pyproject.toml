@@ -1,5 +1,5 @@
 [project]
-name = "argus-shared"
+name = "shared"
 version = "0.1.0"
 description = "Shared Pydantic models, SQLAlchemy DB session, and Celery queue primitives"
 readme = "README.md"

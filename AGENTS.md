@@ -36,9 +36,9 @@ uv run pytest tests/           # All tests
 
 Adding dependencies:
 ```bash
-uv add --package argus-gateway httpx          # External dep to specific app
-uv add --package argus-gateway argus-shared   # Internal workspace dep
-uv add --package argus-shared sqlalchemy      # External dep to shared package
+uv add --package gateway httpx          # External dep to specific app
+uv add --package gateway shared   # Internal workspace dep
+uv add --package shared sqlalchemy      # External dep to shared package
 ```
 
 ---

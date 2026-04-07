@@ -1,5 +1,5 @@
 [project]
-name = "argus-integrations"
+name = "integrations"
 version = "0.1.0"
 description = "GitHub App and GitLab MR clients, Slack and Notion notification adapters"
 readme = "README.md"

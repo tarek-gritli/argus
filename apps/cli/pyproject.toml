@@ -1,5 +1,5 @@
 [project]
-name = "argus-cli"
+name = "cli"
 version = "0.1.0"
 description = "Typer CLI for local pre-commit review, fix application, and watch mode"
 readme = "README.md"

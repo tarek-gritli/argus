@@ -37,13 +37,13 @@ install-web: ## Install web dependencies
 # ============================================================
 
 run-gateway: ## Run the gateway service
-	$(UV) run --package argus-gateway argus-gateway
+	$(UV) run --package gateway gateway
 
 run-agents: ## Run the agents service
-	$(UV) run --package argus-agents argus-agents
+	$(UV) run --package agents agents
 
 run-cli: ## Run the CLI
-	$(UV) run --package argus-cli argus-cli
+	$(UV) run --package cli cli
 
 run-web: ## Run the web dev server
 	cd apps/web && $(PNPM) dev
@@ -52,10 +52,10 @@ run-web: ## Run the web dev server
 # Dependencies
 # ============================================================
 
-add-dep: ## Add external dep (usage: make add-dep PKG=argus-gateway DEP=fastapi)
+add-dep: ## Add external dep (usage: make add-dep PKG=gateway DEP=fastapi)
 	$(UV) add --package $(PKG) $(DEP)
 
-remove-dep: ## Remove a dep (usage: make remove-dep PKG=argus-gateway DEP=fastapi)
+remove-dep: ## Remove a dep (usage: make remove-dep PKG=gateway DEP=fastapi)
 	$(UV) remove --package $(PKG) $(DEP)
 
 lock: ## Lock dependencies

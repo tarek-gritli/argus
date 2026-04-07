@@ -17,9 +17,9 @@ members = [
 ]
 
 [tool.uv.sources]
-argus-shared = { workspace = true }
-argus-context = { workspace = true }
-argus-integrations = { workspace = true }
+shared = { workspace = true }
+context = { workspace = true }
+integrations = { workspace = true }
 
 
 [tool.ruff]
