@@ -27,7 +27,7 @@ and learns from accepted/rejected suggestions over time.
 - **Python version: 3.12**
 
 ```bash
-uv sync                        # Install all workspace members
+uv sync --all-packages         # Install all workspace members
 uv run ruff check .            # Lint
 uv run ruff check --fix .      # Fix lint
 uv run ruff format .           # Format

@@ -27,7 +27,7 @@ help: ## Show this help
 install: install-python install-web ## Install all dependencies
 
 install-python: ## Install Python dependencies
-	$(UV) sync
+	$(UV) sync --all-packages
 	$(UV) run pre-commit install
 
 install-web: ## Install web dependencies

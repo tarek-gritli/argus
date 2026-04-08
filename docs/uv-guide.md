@@ -28,7 +28,7 @@ All members are part of a single workspace managed from the root `pyproject.toml
 Installs all workspace members and their dependencies into `.venv/`.
 
 ```bash
-uv sync
+uv sync --all-packages
 ```
 
 Always run this after pulling changes or modifying dependencies.
@@ -125,7 +125,7 @@ uv tree
 ```bash
 # Remove .venv/ and start fresh
 rm -rf .venv
-uv sync
+uv sync --all-packages
 ```
 
 ---
@@ -134,7 +134,7 @@ uv sync
 
 | Task | Command |
 |------|---------|
-| Install everything | `uv sync` |
+| Install everything | `uv sync --all-packages` |
 | Add external dep to an app | `uv add --package gateway <pkg>` |
 | Add internal dep | `uv add --package gateway shared` |
 | Remove a dep | `uv remove --package gateway <pkg>` |
