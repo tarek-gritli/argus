@@ -1,0 +1,19 @@
+{
+  "typeCheckingMode": "standard",
+  "pythonVersion": "3.12",
+  "venvPath": ".",
+  "venv": ".venv",
+  "reportMissingTypeStubs": false,
+  "include": [
+    "apps/**/*.py",
+    "packages/**/*.py"
+  ],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.*",
+    "**/build",
+    "**/dist",
+    "**/migrations"
+  ]
+}

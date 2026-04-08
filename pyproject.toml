@@ -32,4 +32,6 @@ select = ["E", "F", "I"]  # errors, pyflakes, isort
 [dependency-groups]
 dev = [
     "ruff>=0.15.9",
+    "pyright>=1.1.300",
+    "pre-commit>=4.5.1",
 ]

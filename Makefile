@@ -28,6 +28,7 @@ install: install-python install-web ## Install all dependencies
 
 install-python: ## Install Python dependencies
 	$(UV) sync
+	$(UV) run pre-commit install
 
 install-web: ## Install web dependencies
 	cd apps/web && $(PNPM) install
@@ -98,6 +99,9 @@ fmt: ## Format code
 
 fix: ## Auto-fix lint errors
 	$(UV) run ruff check --fix .
+
+typecheck: ## Run type checking with pyright
+	$(UV) run pyright
 
 # ============================================================
 # Database
