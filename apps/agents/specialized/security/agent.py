@@ -363,19 +363,9 @@ def _scan_dependencies(diff_lines: list[DiffLine]) -> list[DependencyHit]:
                 continue
             package = req.group(1).lower()
             version = req.group(2)
-            key = f"{package}@{version}"
-            if key in cves:
-                item = cves[key]
-                hits.append(
-                    DependencyHit(
-                        package=package,
-                        version=version,
-                        cve_id=str(item["cve_id"]),
-                        cvss_score=float(item["cvss_score"]),
-                        fix_version=str(item.get("fix_version") or ""),
-                        severity_hint=Severity.MEDIUM if float(item["cvss_score"]) < 7 else Severity.HIGH,
-                    )
-                )
+            hit = _lookup_cve_hit(cves, package, version)
+            if hit:
+                hits.append(hit)
 
         if file_name == "package.json":
             match = re.search(r'"([@a-zA-Z0-9_./\-]+)"\s*:\s*"\^?([0-9][^"]*)"', line.content)
@@ -383,19 +373,27 @@ def _scan_dependencies(diff_lines: list[DiffLine]) -> list[DependencyHit]:
                 continue
             package = match.group(1).lower()
             version = match.group(2)
-            key = f"{package}@{version}"
-            if key in cves:
-                item = cves[key]
-                hits.append(
-                    DependencyHit(
-                        package=package,
-                        version=version,
-                        cve_id=str(item["cve_id"]),
-                        cvss_score=float(item["cvss_score"]),
-                        fix_version=str(item.get("fix_version") or ""),
-                        severity_hint=Severity.MEDIUM if float(item["cvss_score"]) < 7 else Severity.HIGH,
-                    )
-                )
+            hit = _lookup_cve_hit(cves, package, version)
+            if hit:
+                hits.append(hit)
+
+        if file_name == "pyproject.toml":
+            pyproject_dep = re.search(r'"([a-zA-Z0-9_.\-]+)\s*([<>=!~]{1,2})\s*([0-9][0-9A-Za-z_.\-]*)"', line.content)
+            if not pyproject_dep:
+                continue
+
+            package = pyproject_dep.group(1).lower()
+            operator = pyproject_dep.group(2)
+            version = pyproject_dep.group(3)
+
+            if operator == "==":
+                hit = _lookup_cve_hit(cves, package, version)
+            else:
+                # For ranges (>=, ~=), fall back to the lower bound as a conservative signal.
+                hit = _lookup_cve_hit(cves, package, version)
+
+            if hit:
+                hits.append(hit)
 
     dedup: dict[tuple[str, str, str], DependencyHit] = {}
     for hit in hits:
@@ -403,6 +401,23 @@ def _scan_dependencies(diff_lines: list[DiffLine]) -> list[DependencyHit]:
         if key not in dedup:
             dedup[key] = hit
     return list(dedup.values())
+
+
+def _lookup_cve_hit(cves: dict, package: str, version: str) -> DependencyHit | None:
+    key = f"{package}@{version}"
+    if key not in cves:
+        return None
+
+    item = cves[key]
+    cvss_score = float(item["cvss_score"])
+    return DependencyHit(
+        package=package,
+        version=version,
+        cve_id=str(item["cve_id"]),
+        cvss_score=cvss_score,
+        fix_version=str(item.get("fix_version") or ""),
+        severity_hint=Severity.MEDIUM if cvss_score < 7 else Severity.HIGH,
+    )
 
 
 def _shannon_entropy(value: str) -> float:
