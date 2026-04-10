@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 from pydantic_settings import BaseSettings
 
 
@@ -8,10 +10,15 @@ class Settings(BaseSettings):
     # Github
     github_webhook_secret: str
     github_app_id: str
-    github_app_private_key: str
+    github_private_key_b64: str
 
     # Environment
     env: str = "development"
 
+    # API
+    api_prefix: str = "/api/v1"
 
-settings = Settings()  # type: ignore
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()  # type: ignore
