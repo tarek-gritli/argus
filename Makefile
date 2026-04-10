@@ -38,13 +38,13 @@ install-web: ## Install web dependencies
 # ============================================================
 
 run-gateway: ## Run the gateway service
-	$(UV) run --package gateway gateway
+	$(UV) run --env-file .env --package gateway gateway
 
 run-agents: ## Run the agents service
-	$(UV) run --package agents agents
+	$(UV) run --env-file .env --package agents agents
 
 run-cli: ## Run the CLI
-	$(UV) run --package cli cli
+	$(UV) run --env-file .env --package cli cli
 
 run-web: ## Run the web dev server
 	cd apps/web && $(PNPM) dev
