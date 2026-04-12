@@ -5,7 +5,8 @@
 	build up down logs restart \
 	lint fmt fix typecheck \
 	migrate migrate-up migrate-down \
-	test clean deps-tree
+	test test-debug test-cov \
+	clean deps-tree
 
 PYTHON := python3
 UV     := uv
@@ -125,6 +126,9 @@ migrate-history: ## Show migration history
 
 test: ## Run all tests
 	$(UV) run pytest tests/
+
+test-debug: ## Run all tests with debug logging
+	$(UV) run pytest tests/ --log-cli-level=DEBUG
 
 test-unit: ## Run unit tests only
 	$(UV) run pytest tests/unit/
