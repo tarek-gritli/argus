@@ -1,0 +1,13 @@
+services:
+  redis:
+    image: redis:8-alpine
+    container_name: argus-redis
+    restart: always
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+volumes:
+  redis_data:
+    driver: local

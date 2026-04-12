@@ -1,0 +1,59 @@
+import os
+import sys
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+
+os.environ["GITHUB_APP_ID"] = "12345"
+os.environ["GITHUB_WEBHOOK_SECRET"] = "test-secret"
+os.environ["GITHUB_PRIVATE_KEY_B64"] = "dGVzdF9rZXk="
+os.environ["REDIS_URL"] = "redis://localhost:6379/15"
+os.environ["CELERY_BROKER_URL"] = "redis://localhost:6379/15"
+
+
+@pytest.fixture
+def mock_redis():
+    """Mock Redis client with tracking for assertions."""
+    mock_r = AsyncMock()
+    mock_r.set = AsyncMock(return_value=True)
+    mock_r.delete = AsyncMock(return_value=True)
+    mock_r.aclose = AsyncMock()
+    yield mock_r
+
+
+@pytest.fixture
+def mock_celery():
+    """Mock Celery app with tracking for task assertions."""
+    mock_c = MagicMock()
+    mock_c.send_task = MagicMock(return_value=None)
+    yield mock_c
+
+
+@pytest.fixture
+def patch_gateway_deps(mock_redis, mock_celery):
+    """
+    Patch Redis and Celery, reimport app fresh, and yield with lifespan context.
+
+    Uses FastAPI's TestClient lifespan pattern: the app's lifespan runs when entering
+    the 'with TestClient(app)' context and cleans up when exiting.
+    """
+    # Keep patches active for the entire test duration
+    redis_patcher = patch("redis.asyncio.from_url", return_value=mock_redis)
+    celery_patcher = patch("celery.Celery", return_value=mock_celery)
+
+    redis_patcher.start()
+    celery_patcher.start()
+
+    try:
+        from gateway_main import app
+
+        with TestClient(app) as _:
+            yield app, mock_redis, mock_celery
+    finally:
+        redis_patcher.stop()
+        celery_patcher.stop()
+
+        for mod in ["gateway_main", "api", "api.routes", "api.routes.webhooks"]:
+            if mod in sys.modules:
+                del sys.modules[mod]

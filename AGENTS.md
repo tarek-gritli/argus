@@ -129,7 +129,7 @@ POST /api/v1/webhooks/github
   2. Filter: only pull_request events with action in [opened, synchronize, reopened]
      → Return 200 immediately and do nothing for all other events
   3. Deduplicate on X-GitHub-Delivery header via Redis — discard if already seen
-  4. Extract: repo_full_name, pr_number, head_sha, base_sha, installation_id
+  4. Extract: action, repo_full_name, pr_number, head_sha, base_sha, installation_id
   5. Enqueue Celery task: review_pr(payload)
   6. Return 200 — no further processing in the handler
 ```

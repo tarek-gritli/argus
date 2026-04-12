@@ -3,9 +3,10 @@
 	run-gateway run-agents run-cli run-web \
 	add-dep remove-dep lock upgrade \
 	build up down logs restart \
-	lint fmt fix \
+	lint fmt fix typecheck \
 	migrate migrate-up migrate-down \
-	test clean deps-tree
+	test test-debug test-cov \
+	clean deps-tree
 
 PYTHON := python3
 UV     := uv
@@ -38,13 +39,13 @@ install-web: ## Install web dependencies
 # ============================================================
 
 run-gateway: ## Run the gateway service
-	$(UV) run --package gateway gateway
+	$(UV) run --package gateway --env-file .env uvicorn gateway_main:app --reload
 
 run-agents: ## Run the agents service
-	$(UV) run --package agents agents
+	$(UV) run --env-file .env --package agents agents
 
 run-cli: ## Run the CLI
-	$(UV) run --package cli cli
+	$(UV) run --env-file .env --package cli cli
 
 run-web: ## Run the web dev server
 	cd apps/web && $(PNPM) dev
@@ -125,6 +126,9 @@ migrate-history: ## Show migration history
 
 test: ## Run all tests
 	$(UV) run pytest tests/
+
+test-debug: ## Run all tests with debug logging
+	$(UV) run pytest tests/ --log-cli-level=DEBUG
 
 test-unit: ## Run unit tests only
 	$(UV) run pytest tests/unit/

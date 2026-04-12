@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "Shared Pydantic models, SQLAlchemy DB session, and Celery queue primitives"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.13.1",
+    "celery>=5.6.3",
+]
 
 [build-system]
 requires = ["hatchling"]
