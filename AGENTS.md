@@ -297,8 +297,7 @@ DATABASE_URL=postgresql+asyncpg://argus:argus@localhost:5432/argus
 REDIS_URL=redis://localhost:6379/0
 
 # Celery
-CELERY_BROKER_URL=redis://localhost:6379/0
-CELERY_RESULT_BACKEND=redis://localhost:6379/1
+CELERY_BROKER_URL=redis://localhost:6379/1
 
 # LLM
 ANTHROPIC_API_KEY=

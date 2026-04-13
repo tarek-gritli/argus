@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "GitHub App and GitLab MR clients, Slack and Notion notification adapters"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = ["PyGithub", "shared"]
 
 [build-system]
 requires = ["hatchling"]
