@@ -14,9 +14,9 @@ def run(payload: dict) -> None:
     Args:
         payload: dict matching PullRequestPayload schema
     """
-    pr_payload = PullRequestPayload(**payload)
-
     try:
+        pr_payload = PullRequestPayload(**payload)
+
         pr = get_pr(pr_payload.repo_full_name, pr_payload.pr_number, pr_payload.installation_id)
         files = get_pr_files(pr)
 
@@ -30,7 +30,7 @@ def run(payload: dict) -> None:
         post_issue_comment(pr, comment_body)
 
     except Exception as e:
-        msg = f"Orchestration failed for {pr_payload.repo_full_name}#{pr_payload.pr_number}: {e}"
+        msg = f"Orchestration failed: {e}"
         logger.error(msg)
         raise
 
