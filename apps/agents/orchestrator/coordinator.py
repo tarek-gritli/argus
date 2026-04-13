@@ -2,8 +2,7 @@ import logging
 
 from integrations.github import PullRequestPayload, get_pr, get_pr_files, post_issue_comment
 from shared.schemas import FindingSchema
-
-from ..specialized.security import analyze
+from specialized.security import analyze
 
 logger = logging.getLogger(__name__)
 
