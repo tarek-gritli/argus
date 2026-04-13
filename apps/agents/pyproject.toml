@@ -4,10 +4,10 @@ version = "0.1.0"
 description = "LangGraph orchestrator - fans out to specialized LLM agents in parallel (security, quality, performance, testing, docs, best practices), fix suggestion engine, Celery workers"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = ["celery", "shared", "integrations"]
 
 [project.scripts]
-agents = "main:main"
+agents = "agents_main:main"
 
 [build-system]
 requires = ["hatchling"]

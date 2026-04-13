@@ -241,10 +241,11 @@ packages/integrations/integrations/
 ```
 
 GitHub client rules:
-- Private key loaded ONCE at module level from GITHUB_PRIVATE_KEY_B64 env var (base64 string)
+- Private key loaded lazily via `get_settings()` (lru_cache) from GITHUB_PRIVATE_KEY_B64 env var (base64 string)
 - Installation tokens cached in-memory with TTL — tokens last 3600s, refresh 60s before expiry
 - Never read from .pem file at request time
-- Use Auth.AppAuth + Auth.AppInstallationAuth — NOT the deprecated GithubIntegration
+- Use `Auth.AppAuth(app_id, private_key)` with `GithubIntegration(auth=…)` to get access tokens
+- Never use the deprecated old-style arguments: `GithubIntegration(integration_id=…, private_key=…, …)`
 
 ---
 
@@ -297,8 +298,7 @@ DATABASE_URL=postgresql+asyncpg://argus:argus@localhost:5432/argus
 REDIS_URL=redis://localhost:6379/0
 
 # Celery
-CELERY_BROKER_URL=redis://localhost:6379/0
-CELERY_RESULT_BACKEND=redis://localhost:6379/1
+CELERY_BROKER_URL=redis://localhost:6379/1
 
 # LLM
 ANTHROPIC_API_KEY=
@@ -334,7 +334,7 @@ Stubs are allowed. Implementation is not.
 2. **Agents never handle HTTP** — Celery tasks only, never FastAPI routes
 3. **shared package has no app-specific imports** — no gateway, no agent code
 4. **Every agent outputs FindingSchema** — no exceptions
-5. **Private key never read from file at runtime** — base64 env var, loaded at module level
+5. **Private key never read from file at runtime** — base64 env var, loaded lazily via get_settings()
 6. **No processing inside the webhook handler** — enqueue and return, nothing else
 7. **Middleware stubs do nothing in Phase 1** — do not activate prematurely
 8. **uv only for Python deps** — never suggest pip install
