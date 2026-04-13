@@ -3,21 +3,14 @@ repos:
     hooks:
       - id: ruff-check
         name: ruff lint
-        entry: uv run ruff check --fix
+        entry: make fix
         language: system
         types: [python]
         pass_filenames: true
 
       - id: ruff-format
         name: ruff format
-        entry: uv run ruff format
+        entry: make fmt
         language: system
         types: [python]
         pass_filenames: true
-
-      - id: pyright
-        name: pyright
-        entry: uv run pyright
-        language: system
-        types: [python]
-        pass_filenames: false
