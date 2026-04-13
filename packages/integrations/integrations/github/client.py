@@ -4,11 +4,6 @@ import time
 from github import Auth, Github, GithubIntegration
 from shared.config import get_settings
 
-settings = get_settings()
-
-GITHUB_APP_ID = int(settings.github_app_id)
-GITHUB_PRIVATE_KEY = base64.b64decode(settings.github_private_key_b64).decode()
-
 _token_cache: dict[int, tuple[str, float]] = {}
 
 
@@ -21,7 +16,11 @@ def get_installation_token(installation_id: int) -> str:
         if now < expires_at - 60:
             return token
 
-    auth = Auth.AppAuth(GITHUB_APP_ID, GITHUB_PRIVATE_KEY)
+    settings = get_settings()
+    app_id = int(settings.github_app_id)
+    private_key = base64.b64decode(settings.github_private_key_b64).decode()
+
+    auth = Auth.AppAuth(app_id, private_key)
     integration = GithubIntegration(auth=auth)
     access_token = integration.get_access_token(installation_id)
 
