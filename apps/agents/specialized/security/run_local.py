@@ -4,9 +4,8 @@ import argparse
 import json
 from pathlib import Path
 
-from packages.shared.schemas import AgentTask
-
 from .agent import run_security_agent
+from .schemas import AgentTask, RepoConfig
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -40,10 +39,10 @@ def main() -> None:
         diff=diff_text,
         pr_number=args.pr,
         repo_id=args.repo,
-        repo_config={
-            "exempt_paths": args.exempt,
-            "severity_overrides": {},
-        },
+        repo_config=RepoConfig(
+            exempt_paths=args.exempt,
+            severity_overrides={},
+        ),
     )
 
     result = run_security_agent(task)

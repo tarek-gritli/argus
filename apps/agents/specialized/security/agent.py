@@ -8,7 +8,7 @@ from collections import Counter
 from pathlib import Path
 from random import randint
 
-from packages.shared.schemas import (
+from .schemas import (
     AgentTask,
     DependencyHit,
     DiffLine,
@@ -25,13 +25,13 @@ from packages.shared.schemas import (
 )
 
 SYSTEM_PROMPT = (
-    "You are a security-focused code reviewer. Analyze only provided diff and return JSON findings only. "
-    "Always cite OWASP categories and never report style issues."
+    "You are a security-focused code reviewer. Analyze the diff and return JSON findings. "
+    "Cite OWASP categories. Never report style issues."
 )
 
 REFLECTION_PROMPT = (
-    "You are a skeptical senior security reviewer. Keep, drop, or downgrade findings based on exploit realism, "
-    "severity proportionality, and confidence threshold >= 0.6."
+    "Review findings on exploit realism, severity proportionality, and confidence >= 0.6. "
+    "Keep, drop, or downgrade each."
 )
 
 
@@ -77,18 +77,21 @@ async def _run_scanners(diff_lines: list[DiffLine]) -> ScannerHits:
 def _build_generation_prompt(diff: str, hits: ScannerHits, ctx: SecurityContext) -> str:
     lines: list[str] = []
     for hit in hits.sast:
-        lines.append(f"[SAST] {hit.file}:{hit.line} {hit.rule_id} {hit.owasp_id} {hit.severity_hint.value}")
+        lines.append(
+            f"[SAST] {hit.file}:{hit.line} {hit.rule_id} {hit.owasp_id} {hit.severity_hint.value}"
+        )
     for hit in hits.secrets:
         lines.append(f"[SECRET] {hit.file}:{hit.line} {hit.pattern_name} {hit.severity_hint.value}")
     for hit in hits.dependencies:
         lines.append(f"[DEP] {hit.package}@{hit.version} {hit.cve_id} {hit.cvss_score}")
 
+    schema = "file, line, category, owasp_id, severity, exploit_path, message, suggested_fix, conf"
     return (
         f"[SYSTEM]\n{ctx.system_prompt}\n\n"
         f"OWASP:\n{json.dumps(ctx.owasp_rules)}\n\n"
         f"Language rules:\n{json.dumps(ctx.lang_rules)}\n\n"
         "[USER]\n"
-        "Schema: {file, line, category, owasp_id, severity, exploit_path, message, suggested_fix, confidence}\n\n"
+        f"Schema: {{{schema}}}\n\n"
         f"Diff:\n{diff}\n\n"
         f"Scanner hits:\n{chr(10).join(lines)}"
     )
@@ -279,7 +282,11 @@ def _scan_secrets(diff_lines: list[DiffLine]) -> list[SecretHit]:
         ("aws_access_key", re.compile(r"\bAKIA[0-9A-Z]{16}\b"), Severity.HIGH),
         ("github_pat", re.compile(r"\bghp_[A-Za-z0-9]{20,}\b"), Severity.HIGH),
         ("rsa_private_key", re.compile(r"-----BEGIN RSA PRIVATE KEY-----"), Severity.CRITICAL),
-        ("hardcoded_password", re.compile(r"password\s*=\s*['\"][^'\"]+['\"]", re.IGNORECASE), Severity.MEDIUM),
+        (
+            "hardcoded_password",
+            re.compile(r"password\s*=\s*['\"][^'\"]+['\"]", re.IGNORECASE),
+            Severity.MEDIUM,
+        ),
     ]
 
     hits: list[SecretHit] = []
@@ -323,10 +330,22 @@ def _scan_secrets(diff_lines: list[DiffLine]) -> list[SecretHit]:
 
 def _scan_sast(diff_lines: list[DiffLine]) -> list[SastHit]:
     rules_py = [
-        ("SQL_FORMAT_STRING", re.compile(r"(?i)(f\"[^\"]*(select|insert|update|delete)|select\s+.*\{[a-zA-Z0-9_]+\})"), "A03:2021", Severity.HIGH),
+        (
+            "SQL_FORMAT_STRING",
+            re.compile(
+                r"(?i)(f\"[^\"]*(select|insert|update|delete)|select\s+.*\{[a-zA-Z0-9_]+\})"
+            ),
+            "A03:2021",
+            Severity.HIGH,
+        ),
         ("DANGEROUS_EVAL", re.compile(r"\beval\s*\("), "A03:2021", Severity.HIGH),
         ("DANGEROUS_EXEC", re.compile(r"\bexec\s*\("), "A03:2021", Severity.HIGH),
-        ("SUBPROCESS_SHELL_TRUE", re.compile(r"subprocess\.[a-z_]+\(.*shell\s*=\s*True"), "A03:2021", Severity.HIGH),
+        (
+            "SUBPROCESS_SHELL_TRUE",
+            re.compile(r"subprocess\.[a-z_]+\(.*shell\s*=\s*True"),
+            "A03:2021",
+            Severity.HIGH,
+        ),
     ]
     rules_js = [
         ("INNER_HTML_ASSIGNMENT", re.compile(r"\.innerHTML\s*="), "A03:2021", Severity.MEDIUM),
@@ -335,12 +354,26 @@ def _scan_sast(diff_lines: list[DiffLine]) -> list[SastHit]:
 
     hits: list[SastHit] = []
     for line in diff_lines:
-        language = "python" if line.file.endswith(".py") else "javascript" if line.file.endswith(".js") or line.file.endswith(".ts") else "unknown"
+        language = (
+            "python"
+            if line.file.endswith(".py")
+            else "javascript"
+            if line.file.endswith(".js") or line.file.endswith(".ts")
+            else "unknown"
+        )
         active = rules_py if language == "python" else rules_js if language == "javascript" else []
 
         for rule_id, pattern, owasp, severity in active:
             if pattern.search(line.content):
-                hits.append(SastHit(file=line.file, line=line.line, rule_id=rule_id, owasp_id=owasp, severity_hint=severity))
+                hits.append(
+                    SastHit(
+                        file=line.file,
+                        line=line.line,
+                        rule_id=rule_id,
+                        owasp_id=owasp,
+                        severity_hint=severity,
+                    )
+                )
 
     dedup: dict[tuple[str, int, str], SastHit] = {}
     for hit in hits:
@@ -378,7 +411,9 @@ def _scan_dependencies(diff_lines: list[DiffLine]) -> list[DependencyHit]:
                 hits.append(hit)
 
         if file_name == "pyproject.toml":
-            pyproject_dep = re.search(r'"([a-zA-Z0-9_.\-]+)\s*([<>=!~]{1,2})\s*([0-9][0-9A-Za-z_.\-]*)"', line.content)
+            pyproject_dep = re.search(
+                r'"([a-zA-Z0-9_.\-]+)\s*([<>=!~]{1,2})\s*([0-9][0-9A-Za-z_.\-]*)"', line.content
+            )
             if not pyproject_dep:
                 continue
 
