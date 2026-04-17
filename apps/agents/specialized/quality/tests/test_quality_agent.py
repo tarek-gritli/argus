@@ -7,6 +7,9 @@ Run with:
 
 from __future__ import annotations
 
+import os
+
+import anthropic
 import pytest
 
 from ..schemas import AgentInput
@@ -226,6 +229,10 @@ class TestValidator:
 
 
 @pytest.mark.integration
+@pytest.mark.skipif(
+    not os.getenv("ANTHROPIC_API_KEY"),
+    reason="Requires ANTHROPIC_API_KEY to call Claude",
+)
 def test_agent_end_to_end():
     """Smoke test: runs the full agent pipeline on a synthetic diff."""
     from ..agent import run_quality_agent
@@ -275,7 +282,24 @@ index 0000000..1111111 100644
         pr_title="Add service module",
     )
 
-    findings = run_quality_agent(agent_input)
+    try:
+        findings = run_quality_agent(agent_input)
+    except anthropic.APIConnectionError as exc:
+        pytest.skip(f"Skipping integration test: Anthropic API not reachable ({exc})")
+    except anthropic.APIStatusError as exc:
+        message = str(exc).lower()
+        skippable_markers = (
+            "credit balance is too low",
+            "billing",
+            "invalid api key",
+            "authentication",
+            "rate limit",
+        )
+        if exc.status_code in {400, 401, 402, 403, 429} or any(
+            marker in message for marker in skippable_markers
+        ):
+            pytest.skip(f"Skipping integration test due to Anthropic account/API status: {exc}")
+        raise
 
     # We just check it ran without error and returned something reasonable
     assert isinstance(findings, list)
