@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import math
 import re
 from collections import Counter
 from pathlib import Path
 from random import randint
+from typing import cast
+
+from pydantic import BaseModel, Field
+from shared.config import get_settings
 
 from .schemas import (
     AgentTask,
@@ -24,6 +29,8 @@ from .schemas import (
     Severity,
 )
 
+logger = logging.getLogger(__name__)
+
 SYSTEM_PROMPT = (
     "You are a security-focused code reviewer. Analyze the diff and return JSON findings. "
     "Cite OWASP categories. Never report style issues."
@@ -34,15 +41,23 @@ REFLECTION_PROMPT = (
     "Keep, drop, or downgrade each."
 )
 
+_MODEL = "claude-sonnet-4-6"
+
+
+class _GeneratedFindings(BaseModel):
+    findings: list[RawFinding] = Field(default_factory=list)
+
+
+class _ReflectionDecisions(BaseModel):
+    decisions: list[ReflectionDecision] = Field(default_factory=list)
+
 
 def run_security_agent(task: AgentTask) -> ReviewResult:
     ctx = _build_context(task)
     diff_lines = _extract_added_lines(task.diff, task.repo_config.exempt_paths)
     hits = asyncio.run(_run_scanners(diff_lines))
-    _ = _build_generation_prompt(task.diff, hits, ctx)
-    raw_findings = _generate_findings(hits)
-    _ = _build_reflection_prompt(raw_findings)
-    findings = _reflect_findings(raw_findings)
+    raw_findings = _generate_findings_llm(task.diff, hits, ctx)
+    findings = _reflect_findings_llm(raw_findings)
     return _format_output(findings, task)
 
 
@@ -105,7 +120,99 @@ def _build_reflection_prompt(raw_findings: list[RawFinding]) -> str:
     )
 
 
-def _generate_findings(hits: ScannerHits) -> list[RawFinding]:
+def _generate_findings_llm(diff: str, hits: ScannerHits, ctx: SecurityContext) -> list[RawFinding]:
+    """Call Claude to produce structured findings; fall back to rule-based output on failure."""
+    settings = get_settings()
+    if not settings.anthropic_api_key:
+        logger.info("ANTHROPIC_API_KEY not set; using rule-based findings")
+        return _fallback_generate_findings(hits)
+
+    if not (hits.sast or hits.secrets or hits.dependencies):
+        return []
+
+    from anthropic import Anthropic
+
+    client = Anthropic(api_key=settings.anthropic_api_key)
+    user_prompt = _build_generation_prompt(diff, hits, ctx)
+
+    try:
+        response = client.messages.parse(
+            model=_MODEL,
+            max_tokens=4096,
+            system=[
+                {
+                    "type": "text",
+                    "text": ctx.system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+            messages=[{"role": "user", "content": user_prompt}],
+            output_format=_GeneratedFindings,
+        )
+        return cast(_GeneratedFindings, getattr(response, "parsed")).findings
+    except Exception as exc:
+        logger.warning("LLM generation failed (%s); falling back to rule-based", exc)
+        return _fallback_generate_findings(hits)
+
+
+def _reflect_findings_llm(raw_findings: list[RawFinding]) -> list[Finding]:
+    """Call Claude to reflect on findings; fall back to rule-based filtering on failure."""
+    if not raw_findings:
+        return []
+
+    settings = get_settings()
+    if not settings.anthropic_api_key:
+        return _fallback_reflect_findings(raw_findings)
+
+    from anthropic import Anthropic
+
+    client = Anthropic(api_key=settings.anthropic_api_key)
+    user_prompt = _build_reflection_prompt(raw_findings)
+
+    try:
+        response = client.messages.parse(
+            model=_MODEL,
+            max_tokens=2048,
+            system=REFLECTION_PROMPT,
+            messages=[{"role": "user", "content": user_prompt}],
+            output_format=_ReflectionDecisions,
+        )
+        parsed = cast(_ReflectionDecisions, getattr(response, "parsed"))
+        return _apply_decisions(raw_findings, parsed.decisions)
+    except Exception as exc:
+        logger.warning("LLM reflection failed (%s); falling back to rule-based", exc)
+        return _fallback_reflect_findings(raw_findings)
+
+
+def _apply_decisions(
+    raw_findings: list[RawFinding], decisions: list[ReflectionDecision]
+) -> list[Finding]:
+    findings: list[Finding] = []
+    for decision in decisions:
+        if decision.finding_index < 0 or decision.finding_index >= len(raw_findings):
+            continue
+        candidate = raw_findings[decision.finding_index]
+        if decision.action == ReflectionAction.DROP:
+            continue
+        severity = candidate.severity
+        if decision.action == ReflectionAction.DOWNGRADE and decision.revised_severity:
+            severity = decision.revised_severity
+        findings.append(
+            Finding(
+                file=candidate.file,
+                line=candidate.line,
+                severity=severity,
+                owasp_id=candidate.owasp_id,
+                category=candidate.category,
+                message=candidate.message,
+                suggested_fix=candidate.suggested_fix,
+                confidence=candidate.confidence,
+            )
+        )
+    return findings
+
+
+def _fallback_generate_findings(hits: ScannerHits) -> list[RawFinding]:
     findings: list[RawFinding] = []
 
     for hit in hits.sast:
@@ -156,7 +263,7 @@ def _generate_findings(hits: ScannerHits) -> list[RawFinding]:
     return findings
 
 
-def _reflect_findings(raw_findings: list[RawFinding]) -> list[Finding]:
+def _fallback_reflect_findings(raw_findings: list[RawFinding]) -> list[Finding]:
     decisions: list[ReflectionDecision] = []
 
     for index, finding in enumerate(raw_findings):
@@ -189,30 +296,7 @@ def _reflect_findings(raw_findings: list[RawFinding]) -> list[Finding]:
             )
         )
 
-    findings: list[Finding] = []
-    for decision in decisions:
-        candidate = raw_findings[decision.finding_index]
-        if decision.action == ReflectionAction.DROP:
-            continue
-
-        severity = candidate.severity
-        if decision.action == ReflectionAction.DOWNGRADE and decision.revised_severity:
-            severity = decision.revised_severity
-
-        findings.append(
-            Finding(
-                file=candidate.file,
-                line=candidate.line,
-                severity=severity,
-                owasp_id=candidate.owasp_id,
-                category=candidate.category,
-                message=candidate.message,
-                suggested_fix=candidate.suggested_fix,
-                confidence=candidate.confidence,
-            )
-        )
-
-    return findings
+    return _apply_decisions(raw_findings, decisions)
 
 
 def _format_output(findings: list[Finding], task: AgentTask) -> ReviewResult:
