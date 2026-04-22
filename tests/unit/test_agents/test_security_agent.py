@@ -46,15 +46,14 @@ def _make_task(diff: str) -> AgentTask:
 
 
 def _make_parsed_response(findings: list, model_cls):
-    """Build a fake ParsedMessage returned by messages.parse()."""
     mock_response = MagicMock()
-    mock_response.parsed = model_cls(findings=findings)
+    mock_response.parsed_output = model_cls(findings=findings)
     return mock_response
 
 
 def _make_reflection_response(decisions: list, model_cls):
     mock_response = MagicMock()
-    mock_response.parsed = model_cls(decisions=decisions)
+    mock_response.parsed_output = model_cls(decisions=decisions)
     return mock_response
 
 
@@ -122,10 +121,10 @@ def test_llm_path_uses_claude_response():
     )
 
     gen_response = MagicMock()
-    gen_response.parsed = _GeneratedFindings(findings=[llm_finding])
+    gen_response.parsed_output = _GeneratedFindings(findings=[llm_finding])
 
     ref_response = MagicMock()
-    ref_response.parsed = _ReflectionDecisions(decisions=[llm_decision])
+    ref_response.parsed_output = _ReflectionDecisions(decisions=[llm_decision])
 
     mock_client = MagicMock()
     mock_client.messages.parse.side_effect = [gen_response, ref_response]

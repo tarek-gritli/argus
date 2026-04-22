@@ -149,7 +149,7 @@ def _generate_findings_llm(diff: str, hits: ScannerHits, ctx: SecurityContext) -
             messages=[{"role": "user", "content": user_prompt}],
             output_format=_GeneratedFindings,
         )
-        return cast(_GeneratedFindings, getattr(response, "parsed")).findings
+        return cast(_GeneratedFindings, response.parsed_output).findings
     except Exception as exc:
         logger.warning("LLM generation failed (%s); falling back to rule-based", exc)
         return _fallback_generate_findings(hits)
@@ -177,7 +177,7 @@ def _reflect_findings_llm(raw_findings: list[RawFinding]) -> list[Finding]:
             messages=[{"role": "user", "content": user_prompt}],
             output_format=_ReflectionDecisions,
         )
-        parsed = cast(_ReflectionDecisions, getattr(response, "parsed"))
+        parsed = cast(_ReflectionDecisions, response.parsed_output)
         return _apply_decisions(raw_findings, parsed.decisions)
     except Exception as exc:
         logger.warning("LLM reflection failed (%s); falling back to rule-based", exc)
