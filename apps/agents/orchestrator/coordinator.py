@@ -2,7 +2,8 @@ import logging
 
 from integrations.github import PullRequestPayload, get_pr, get_pr_files, post_issue_comment
 from shared.schemas import FindingSchema
-from specialized.security import analyze
+
+from .graph import run_review
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ def run(payload: dict) -> None:
             post_issue_comment(pr, "⚠️ No changes detected in this PR.")
             return
 
-        findings = analyze(files, pr_payload)
+        findings = run_review(files, pr_payload)
 
         comment_body = _format_findings(findings)
         post_issue_comment(pr, comment_body)

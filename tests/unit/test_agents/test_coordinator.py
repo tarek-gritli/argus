@@ -48,7 +48,7 @@ def test_run_happy_path_posts_findings():
     with (
         patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
         patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
-        patch("orchestrator.coordinator.analyze", return_value=[SAMPLE_FINDING]),
+        patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]),
         patch("orchestrator.coordinator.post_issue_comment") as mock_post,
     ):
         from orchestrator.coordinator import run
@@ -68,7 +68,7 @@ def test_run_no_files_posts_warning():
     with (
         patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
         patch("orchestrator.coordinator.get_pr_files", return_value=[]),
-        patch("orchestrator.coordinator.analyze") as mock_analyze,
+        patch("orchestrator.coordinator.run_review") as mock_analyze,
         patch("orchestrator.coordinator.post_issue_comment") as mock_post,
     ):
         from orchestrator.coordinator import run
@@ -88,7 +88,7 @@ def test_run_no_findings_posts_clean_message():
     with (
         patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
         patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
-        patch("orchestrator.coordinator.analyze", return_value=[]),
+        patch("orchestrator.coordinator.run_review", return_value=[]),
         patch("orchestrator.coordinator.post_issue_comment") as mock_post,
     ):
         from orchestrator.coordinator import run

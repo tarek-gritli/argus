@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     # API
     api_prefix: str = "/api/v1"
 
+    # LLM
+    anthropic_api_key: str | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:
