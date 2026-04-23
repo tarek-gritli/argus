@@ -410,7 +410,7 @@ index 0000000..2222222 100644
         ):
             pytest.skip(f"Skipping integration test due to Anthropic account/API status: {exc}")
         raise
-
+    print(findings)
     assert isinstance(findings, list)
     # Should flag missing tests for negative amounts, empty user_id, apply_discount
     assert len(findings) >= 1
