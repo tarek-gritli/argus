@@ -47,3 +47,4 @@ Agents synthesize findings into actionable feedback and post results as PR comme
 - **gateway** - FastAPI API gateway, webhook handling, auth, rate limiting
 - **agents** - LangGraph orchestrator, specialized agents, fix suggestion engine
 - **cli** - Typer CLI for local pre-commit review
+- **web** - Web dashboard 
