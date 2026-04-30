@@ -23,7 +23,7 @@ integrations = { workspace = true }
 
 
 [tool.ruff]
-line-length = 100
+line-length = 300
 target-version = "py312"
 
 [tool.ruff.lint]

@@ -1,0 +1,57 @@
+{
+  "language": "csharp",
+  "extensions": [
+    ".cs"
+  ],
+  "rules": [
+    {
+      "rule_id": "CSHARP_SQL_CONCAT",
+      "description": "SqlCommand built with string concatenation enables SQL injection",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "new\\s+SqlCommand\\s*\\(\\s*[^)]*\\+"
+    },
+    {
+      "rule_id": "PROCESS_START_CSHARP",
+      "description": "Process.Start() with user-controlled arguments enables command injection",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "Process\\.Start\\s*\\("
+    },
+    {
+      "rule_id": "WEAK_CRYPTO_CSHARP",
+      "description": "MD5 and SHA1 are cryptographically broken — use SHA256Managed or better",
+      "owasp": "A04:2025",
+      "severity": "MEDIUM",
+      "pattern": "(?:MD5|SHA1)\\.Create\\s*\\(\\s*\\)"
+    },
+    {
+      "rule_id": "INSECURE_RANDOM_CSHARP",
+      "description": "System.Random is not cryptographically secure — use RNGCryptoServiceProvider",
+      "owasp": "A04:2025",
+      "severity": "MEDIUM",
+      "pattern": "new\\s+Random\\s*\\("
+    },
+    {
+      "rule_id": "BINARY_FORMATTER_DESERIALIZE",
+      "description": "BinaryFormatter deserialization of untrusted data leads to remote code execution",
+      "owasp": "A08:2025",
+      "severity": "HIGH",
+      "pattern": "BinaryFormatter\\s*\\(\\s*\\)"
+    },
+    {
+      "rule_id": "XPATH_INJECTION_CSHARP",
+      "description": "XPath expression built with string concatenation enables XPath injection",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "\\.SelectNodes\\s*\\(\\s*[^)]*\\+"
+    },
+    {
+      "rule_id": "DEBUG_ASSEMBLY_CSHARP",
+      "description": "Assembly compiled in Debug mode may expose sensitive information",
+      "owasp": "A02:2025",
+      "severity": "MEDIUM",
+      "pattern": "\\[assembly:\\s*AssemblyConfiguration\\s*\\(\\s*[\"']Debug[\"']"
+    }
+  ]
+}

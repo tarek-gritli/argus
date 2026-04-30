@@ -6,9 +6,10 @@ import logging
 import math
 import re
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
-from random import randint
 from typing import cast
+from uuid import uuid4
 
 from pydantic import BaseModel, Field
 from shared.config import get_settings
@@ -31,17 +32,177 @@ from .schemas import (
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = (
-    "You are a security-focused code reviewer. Analyze the diff and return JSON findings. "
-    "Cite OWASP categories. Never report style issues."
-)
+SYSTEM_PROMPT = """\
+You are an expert application security engineer embedded in an automated code review pipeline. \
+You reason like a penetration tester combined with a secure code reviewer, and you produce \
+structured, actionable security findings from git diffs.
 
-REFLECTION_PROMPT = (
-    "Review findings on exploit realism, severity proportionality, and confidence >= 0.6. "
-    "Keep, drop, or downgrade each."
-)
+## Your Expertise
+You understand OWASP Top 10:2025 categories, CWE classification, and real-world exploitation \
+techniques across Python, JavaScript/TypeScript, Java, Go, PHP, Ruby, C/C++, C#, Kotlin, and Dart. \
+You distinguish between theoretical vulnerability patterns and realistic exploits \
+given the visible code context.
+
+## Input You Receive
+1. A unified git diff containing only the added lines (+) from a pull request.
+2. Pre-computed scanner hits from three automated engines:
+   - [SAST]   Regex-matched code patterns mapped to OWASP IDs and severity hints.
+   - [SECRET] Detected credentials, tokens, and high-entropy strings.
+   - [DEP]    Known-vulnerable dependency versions (CVE ID + CVSS score).
+3. OWASP Top 10:2025 category definitions for classification reference.
+4. Language-specific SAST rule descriptions (without regex) for context.
+
+## Your Task
+For each scanner hit and for any additional vulnerabilities you identify directly in the diff:
+1. Determine whether it represents a real, exploitable security issue.
+2. Classify it by the correct OWASP 2025 category.
+3. Describe a concrete, step-by-step exploit path an adversary could realistically execute.
+4. Rate severity using the guidelines below.
+5. Assign a confidence score (0.0–1.0) reflecting certainty this is a real issue.
+6. Suggest a specific, implementable remediation.
+
+## Severity Rating Guidelines
+CRITICAL (confidence >= 0.85): Unauthenticated remote code execution, authentication bypass, \
+SQL injection with full data exfiltration, exposed private keys. CVSS base >= 9.0.
+
+HIGH (confidence >= 0.75): SQL injection with limited scope, stored XSS, IDOR exposing other \
+users' data, hardcoded credentials, insecure deserialization, SSRF, JWT none-algorithm bypass. \
+CVSS base 7.0–8.9.
+
+MEDIUM (confidence >= 0.65): Reflected XSS, open redirect, weak cryptography, missing rate \
+limiting on sensitive endpoints, IDOR with low-value data, verbose error messages leaking \
+internals, dependency with CVSS 4.0–6.9. CVSS base 4.0–6.9.
+
+LOW (confidence >= 0.55): Missing security headers, non-sensitive info disclosure, deprecated \
+function with no immediate exploit path, dependency with CVSS < 4.0. CVSS base < 4.0.
+
+## Confidence Scoring
+0.90–1.00  Pattern unmistakably vulnerable; no plausible safe interpretation; high-value target \
+           (authentication, payment, admin).
+0.75–0.89  Pattern very likely vulnerable; minor possibility of defensive code elsewhere in the \
+           call chain.
+0.60–0.74  Pattern suspicious; depends on calling context — user input may or may not reach sink.
+0.40–0.59  Possible but requires taint-flow confirmation — do NOT include in output.
+< 0.40     Theoretical only — omit entirely.
+
+## What to Look For Beyond Scanner Hits
+- Logic flaws in access control: IDOR, privilege escalation on new routes or controller methods.
+- Missing input validation at new API entry points (no sanitization, no allow-listing).
+- User-controlled data flowing into database queries, shell commands, file paths, or redirect URLs.
+- Secrets, tokens, or private keys hardcoded in source or committed config files.
+- Cryptographic misuse: ECB mode, MD5/SHA-1 for security purposes, fixed IVs, predictable salts.
+- Insecure session or JWT handling: none algorithm, missing expiry, weak or default secret.
+- Missing authorization decorators/middleware on new routes.
+- Race conditions in file or shared-resource operations.
+- Mass assignment / parameter binding without allow-list (ORM `.update()`, form binding).
+- Insecure deserialization of user-supplied data (pickle, YAML.load, Java ObjectInputStream).
+
+## What NOT to Report
+- Style, formatting, naming, or code quality issues.
+- Performance problems unrelated to security.
+- Missing documentation or comments.
+- Issues in commented-out code.
+- Findings with no realistic exploit path given the visible code context.
+- Test/fixture files (exempt paths are pre-filtered from the diff).
+- False positives from demonstrably safe usage (e.g., subprocess.run(['ls'], shell=False) is safe).
+
+## Output Format
+Return ONLY a JSON object — no prose, no markdown fences — matching this exact schema:
+{
+  "findings": [
+    {
+      "file": "path/to/file.ext",
+      "line": 42,
+      "category": "Injection",
+      "owasp_id": "A05:2025",
+      "severity": "HIGH",
+      "exploit_path": "The `username` parameter from the HTTP request flows unsanitized into \
+rawQuery() at line 42. An attacker sends `' OR '1'='1` as the username to bypass authentication \
+and retrieve all user records, or appends `; DROP TABLE users;--` to destroy data.",
+      "message": "SQL injection via string concatenation in rawQuery() call",
+      "suggested_fix": "Use a parameterized query: db.rawQuery('SELECT * FROM users WHERE \
+username = ?', [username]). Never interpolate user-controlled strings into raw SQL.",
+      "confidence": 0.92
+    }
+  ]
+}
+Order findings by severity (CRITICAL → HIGH → MEDIUM → LOW). \
+Use exact file paths and line numbers from the diff. \
+The exploit_path must describe a realistic, end-to-end attack scenario — not just \
+"user input flows to dangerous sink."\
+"""
+
+REFLECTION_PROMPT = """\
+You are a senior security engineer performing adversarial quality review of automated security \
+findings before they reach developers. Your job is precise calibration — not additional discovery.
+
+## Your Task
+For each finding (indexed 0-based in the provided list), decide exactly one of:
+  KEEP       — Finding is accurate; severity is proportionate; exploit path is realistic.
+  DROP       — Finding is a false positive, theoretical, or not exploitable given visible context.
+  DOWNGRADE  — Finding is real but severity is overstated; reduce it to the correct level.
+
+## Drop Criteria — Drop if ANY of the following is true
+- The flagged pattern is used safely (e.g., shell=True but input is a hardcoded constant).
+- The "secret" is clearly a placeholder or example ("YOUR_TOKEN_HERE", "changeme", "example").
+- The high-entropy token is a UUID, hash digest, base64 public data, or test fixture value.
+- The CVE affects a version range that does not include the declared version.
+- The SAST rule fired on a comment, docstring, or string literal unrelated to execution.
+- Exploitation requires unrealistic attacker preconditions (e.g., physical server access for a \
+  remote web vulnerability).
+- Confidence is below 0.60.
+
+## Downgrade Criteria — Downgrade if ANY of the following is true
+- Severity is CRITICAL but exploitation requires prior authentication → downgrade to HIGH.
+- Severity is HIGH but attack surface is internal-only or affected data has low sensitivity \
+  → downgrade to MEDIUM.
+- Severity is HIGH but confidence is below 0.80 → downgrade to MEDIUM.
+- CVSS score maps to MEDIUM (4.0–6.9) but severity was reported as HIGH → downgrade to MEDIUM.
+- Severity is CRITICAL but confidence is below 0.85 → downgrade to HIGH.
+
+## Keep Criteria — Keep if ALL of the following hold
+- The exploit path is concrete, realistic, and end-to-end exploitable.
+- The severity matches the actual impact and exploitability.
+- Confidence is >= 0.60.
+- The vulnerability is in production code, not tests or commented code.
+
+## Output Format
+Return ONLY a JSON object — no prose, no markdown fences:
+{
+  "decisions": [
+    {
+      "finding_index": 0,
+      "action": "KEEP",
+      "reason": "Direct SQL injection via unsanitized query string; high-value auth endpoint.",
+      "revised_severity": null
+    },
+    {
+      "finding_index": 1,
+      "action": "DOWNGRADE",
+      "reason": "Requires authenticated session; reduces exploitability to HIGH.",
+      "revised_severity": "HIGH"
+    },
+    {
+      "finding_index": 2,
+      "action": "DROP",
+      "reason": "Token value is a placeholder string, not a real credential."
+    }
+  ]
+}
+Every finding must have a decision. Be decisive — false positives erode developer trust more \
+than missed low-confidence issues.\
+"""
 
 _MODEL = "claude-sonnet-4-6"
+_RULES_DIR = Path(__file__).resolve().parent / "rules"
+
+
+@dataclass
+class CompiledSastRule:
+    rule_id: str
+    pattern: re.Pattern[str]
+    owasp_id: str
+    severity: Severity
 
 
 class _GeneratedFindings(BaseModel):
@@ -53,24 +214,67 @@ class _ReflectionDecisions(BaseModel):
 
 
 def run_security_agent(task: AgentTask) -> ReviewResult:
-    ctx = _build_context(task)
+    compiled_rules, ext_map = _load_sast_rules(_RULES_DIR)
+    ctx = _build_context(task, _RULES_DIR, ext_map)
     diff_lines = _extract_added_lines(task.diff, task.repo_config.exempt_paths)
-    hits = asyncio.run(_run_scanners(diff_lines))
+    hits = asyncio.run(_run_scanners(diff_lines, compiled_rules, ext_map))
     raw_findings = _generate_findings_llm(task.diff, hits, ctx)
     findings = _reflect_findings_llm(raw_findings)
     return _format_output(findings, task)
 
 
-def _build_context(task: AgentTask) -> SecurityContext:
-    rules_dir = Path(__file__).resolve().parent / "rules"
-    owasp_rules = _load_json(rules_dir / "owasp_top10_2021.json")
+def _load_sast_rules(
+    rules_dir: Path,
+) -> tuple[dict[str, list[CompiledSastRule]], dict[str, str]]:
+    """Scan sast_rules_*.json files and return (language→compiled_rules, extension→language)."""
+    compiled: dict[str, list[CompiledSastRule]] = {}
+    ext_map: dict[str, str] = {}
 
-    lang_rules = {}
-    languages = _detect_languages(task.diff)
-    if "python" in languages:
-        lang_rules["python"] = _load_json(rules_dir / "sast_rules_python.json")
-    if "javascript" in languages:
-        lang_rules["javascript"] = _load_json(rules_dir / "sast_rules_javascript.json")
+    for path in sorted((rules_dir / "sast").glob("sast_rules_*.json")):
+        data = _load_json(path)
+        lang = data.get("language")
+        if not lang:
+            continue
+
+        for ext in data.get("extensions", []):
+            ext_map[ext] = lang
+
+        rules: list[CompiledSastRule] = []
+        for rule in data.get("rules", []):
+            try:
+                rules.append(
+                    CompiledSastRule(
+                        rule_id=rule["rule_id"],
+                        pattern=re.compile(rule["pattern"]),
+                        owasp_id=rule["owasp"],
+                        severity=Severity(rule["severity"]),
+                    )
+                )
+            except (KeyError, re.error, ValueError) as exc:
+                logger.warning(
+                    "Skipping invalid SAST rule %s in %s: %s",
+                    rule.get("rule_id"),
+                    path.name,
+                    exc,
+                )
+        compiled[lang] = rules
+
+    return compiled, ext_map
+
+
+def _build_context(task: AgentTask, rules_dir: Path, ext_map: dict[str, str]) -> SecurityContext:
+    owasp_data = _load_json(rules_dir / "owasp_top10.json")
+    owasp_rules = {k: v for k, v in owasp_data.items() if k != "meta"}
+
+    languages = _detect_languages(task.diff, ext_map)
+    lang_rules: dict[str, dict] = {}
+    for lang in languages:
+        data = _load_json(rules_dir / "sast" / f"sast_rules_{lang}.json")
+        if data:
+            lang_rules[lang] = {
+                "language": data.get("language", lang),
+                "rules": [{k: v for k, v in rule.items() if k != "pattern"} for rule in data.get("rules", [])],
+            }
 
     return SecurityContext(
         system_prompt=SYSTEM_PROMPT,
@@ -81,43 +285,49 @@ def _build_context(task: AgentTask) -> SecurityContext:
     )
 
 
-async def _run_scanners(diff_lines: list[DiffLine]) -> ScannerHits:
+async def _run_scanners(
+    diff_lines: list[DiffLine],
+    compiled_rules: dict[str, list[CompiledSastRule]],
+    ext_map: dict[str, str],
+) -> ScannerHits:
     secrets_task = asyncio.to_thread(_scan_secrets, diff_lines)
-    sast_task = asyncio.to_thread(_scan_sast, diff_lines)
+    sast_task = asyncio.to_thread(_scan_sast, diff_lines, compiled_rules, ext_map)
     deps_task = asyncio.to_thread(_scan_dependencies, diff_lines)
     secrets, sast, dependencies = await asyncio.gather(secrets_task, sast_task, deps_task)
     return ScannerHits(secrets=secrets, sast=sast, dependencies=dependencies)
 
 
 def _build_generation_prompt(diff: str, hits: ScannerHits, ctx: SecurityContext) -> str:
-    lines: list[str] = []
+    scanner_lines: list[str] = []
     for hit in hits.sast:
-        lines.append(
-            f"[SAST] {hit.file}:{hit.line} {hit.rule_id} {hit.owasp_id} {hit.severity_hint.value}"
-        )
+        scanner_lines.append(f"[SAST]   {hit.file}:{hit.line}  rule={hit.rule_id}  owasp={hit.owasp_id}  severity={hit.severity_hint.value}")
     for hit in hits.secrets:
-        lines.append(f"[SECRET] {hit.file}:{hit.line} {hit.pattern_name} {hit.severity_hint.value}")
+        entropy = f"{hit.entropy:.2f}" if hit.entropy is not None else "n/a"
+        scanner_lines.append(f"[SECRET] {hit.file}:{hit.line}  pattern={hit.pattern_name}  entropy={entropy}  severity={hit.severity_hint.value}")
     for hit in hits.dependencies:
-        lines.append(f"[DEP] {hit.package}@{hit.version} {hit.cve_id} {hit.cvss_score}")
+        scanner_lines.append(f"[DEP]    {hit.package}@{hit.version}  cve={hit.cve_id}  cvss={hit.cvss_score}  fix={hit.fix_version or 'unknown'}")
 
-    schema = "file, line, category, owasp_id, severity, exploit_path, message, suggested_fix, conf"
+    scanner_block = "\n".join(scanner_lines) if scanner_lines else "(none)"
+
     return (
-        f"[SYSTEM]\n{ctx.system_prompt}\n\n"
-        f"OWASP:\n{json.dumps(ctx.owasp_rules)}\n\n"
-        f"Language rules:\n{json.dumps(ctx.lang_rules)}\n\n"
-        "[USER]\n"
-        f"Schema: {{{schema}}}\n\n"
-        f"Diff:\n{diff}\n\n"
-        f"Scanner hits:\n{chr(10).join(lines)}"
+        "## OWASP Top 10:2025 Reference\n"
+        f"{json.dumps(ctx.owasp_rules, indent=2)}\n\n"
+        "## Language-Specific Rule Descriptions\n"
+        f"{json.dumps(ctx.lang_rules, indent=2)}\n\n"
+        "## Pre-computed Scanner Hits\n"
+        f"{scanner_block}\n\n"
+        "## Git Diff (added lines only)\n"
+        f"{diff}\n\n"
+        "## Task\n"
+        "Analyze the diff and scanner hits above. Return a JSON object with a `findings` array. "
+        "Each finding must include: file, line, category, owasp_id, severity, exploit_path, "
+        "message, suggested_fix, confidence."
     )
 
 
 def _build_reflection_prompt(raw_findings: list[RawFinding]) -> str:
-    return (
-        f"[SYSTEM]\n{REFLECTION_PROMPT}\n\n"
-        "[USER]\nReturn decisions: {finding_index, action, reason, revised_severity?}\n\n"
-        f"Findings:\n{json.dumps([f.model_dump(mode='json') for f in raw_findings])}"
-    )
+    findings_json = json.dumps([f.model_dump(mode="json") for f in raw_findings], indent=2)
+    return f"## Findings to Review\n{findings_json}\n\n## Task\nFor each finding (0-indexed), decide KEEP, DROP, or DOWNGRADE. Return a JSON object with a `decisions` array. Each decision must include: finding_index, action, reason, and revised_severity (only when action is DOWNGRADE)."
 
 
 def _generate_findings_llm(diff: str, hits: ScannerHits, ctx: SecurityContext) -> list[RawFinding]:
@@ -184,9 +394,7 @@ def _reflect_findings_llm(raw_findings: list[RawFinding]) -> list[Finding]:
         return _fallback_reflect_findings(raw_findings)
 
 
-def _apply_decisions(
-    raw_findings: list[RawFinding], decisions: list[ReflectionDecision]
-) -> list[Finding]:
+def _apply_decisions(raw_findings: list[RawFinding], decisions: list[ReflectionDecision]) -> list[Finding]:
     findings: list[Finding] = []
     for decision in decisions:
         if decision.finding_index < 0 or decision.finding_index >= len(raw_findings):
@@ -236,9 +444,9 @@ def _fallback_generate_findings(hits: ScannerHits) -> list[RawFinding]:
                 file=hit.file,
                 line=hit.line,
                 category="Hardcoded Secret",
-                owasp_id="A02:2021",
+                owasp_id="A04:2025",
                 severity=hit.severity_hint,
-                exploit_path="Hardcoded secret could be extracted and abused.",
+                exploit_path="Hardcoded secret could be extracted from the repository and abused.",
                 message=f"Potential secret detected by pattern {hit.pattern_name}.",
                 suggested_fix="Move secret to environment variable or secret manager.",
                 confidence=0.93 if hit.pattern_name != "high_entropy_token" else 0.67,
@@ -250,11 +458,11 @@ def _fallback_generate_findings(hits: ScannerHits) -> list[RawFinding]:
             RawFinding(
                 file="dependency-manifest",
                 line=1,
-                category="Vulnerable Components",
-                owasp_id="A06:2021",
+                category="Vulnerable Dependency",
+                owasp_id="A03:2025",
                 severity=hit.severity_hint,
-                exploit_path=f"Dependency {hit.package} is affected by {hit.cve_id}.",
-                message=f"Dependency {hit.package}@{hit.version} is vulnerable ({hit.cve_id}).",
+                exploit_path=(f"Dependency {hit.package}@{hit.version} is affected by {hit.cve_id} (CVSS {hit.cvss_score}). An attacker can exploit this known vulnerability."),
+                message=f"{hit.package}@{hit.version} is vulnerable — {hit.cve_id}.",
                 suggested_fix=f"Upgrade {hit.package} to {hit.fix_version or 'a patched version'}.",
                 confidence=0.88,
             )
@@ -277,7 +485,7 @@ def _fallback_reflect_findings(raw_findings: list[RawFinding]) -> list[Finding]:
             )
             continue
 
-        if finding.severity == Severity.CRITICAL and finding.confidence < 0.8:
+        if finding.severity == Severity.CRITICAL and finding.confidence < 0.85:
             decisions.append(
                 ReflectionDecision(
                     finding_index=index,
@@ -301,7 +509,7 @@ def _fallback_reflect_findings(raw_findings: list[RawFinding]) -> list[Finding]:
 
 def _format_output(findings: list[Finding], task: AgentTask) -> ReviewResult:
     return ReviewResult(
-        review_id=f"rev-{randint(100000, 999999)}",
+        review_id=f"rev-{uuid4().hex[:12]}",
         pr_number=task.pr_number,
         repo=task.repo_id,
         findings=findings,
@@ -314,14 +522,24 @@ def _load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _detect_languages(diff: str) -> set[str]:
+def _detect_languages(diff: str, ext_map: dict[str, str]) -> set[str]:
     found: set[str] = set()
     for line in diff.splitlines():
-        if line.startswith("+++ ") and line.endswith(".py"):
-            found.add("python")
-        if line.startswith("+++ ") and (line.endswith(".js") or line.endswith(".ts")):
-            found.add("javascript")
+        if not line.startswith("+++ "):
+            continue
+        stripped = line.rstrip()
+        for ext, lang in ext_map.items():
+            if stripped.endswith(ext):
+                found.add(lang)
+                break
     return found
+
+
+def _get_language_for_file(file_path: str, ext_map: dict[str, str]) -> str | None:
+    for ext, lang in ext_map.items():
+        if file_path.endswith(ext):
+            return lang
+    return None
 
 
 def _extract_added_lines(diff: str, exempt_paths: list[str]) -> list[DiffLine]:
@@ -335,8 +553,11 @@ def _extract_added_lines(diff: str, exempt_paths: list[str]) -> list[DiffLine]:
             continue
 
         if raw.startswith("@@"):
-            plus = raw.split("+", 1)[1].split(" ", 1)[0]
-            new_line = int(plus.split(",", 1)[0])
+            try:
+                plus = raw.split("+", 1)[1].split(" ", 1)[0]
+                new_line = int(plus.split(",", 1)[0])
+            except (IndexError, ValueError):
+                pass
             continue
 
         if not current_file:
@@ -412,50 +633,25 @@ def _scan_secrets(diff_lines: list[DiffLine]) -> list[SecretHit]:
     return list(dedup.values())
 
 
-def _scan_sast(diff_lines: list[DiffLine]) -> list[SastHit]:
-    rules_py = [
-        (
-            "SQL_FORMAT_STRING",
-            re.compile(
-                r"(?i)(f\"[^\"]*(select|insert|update|delete)|select\s+.*\{[a-zA-Z0-9_]+\})"
-            ),
-            "A03:2021",
-            Severity.HIGH,
-        ),
-        ("DANGEROUS_EVAL", re.compile(r"\beval\s*\("), "A03:2021", Severity.HIGH),
-        ("DANGEROUS_EXEC", re.compile(r"\bexec\s*\("), "A03:2021", Severity.HIGH),
-        (
-            "SUBPROCESS_SHELL_TRUE",
-            re.compile(r"subprocess\.[a-z_]+\(.*shell\s*=\s*True"),
-            "A03:2021",
-            Severity.HIGH,
-        ),
-    ]
-    rules_js = [
-        ("INNER_HTML_ASSIGNMENT", re.compile(r"\.innerHTML\s*="), "A03:2021", Severity.MEDIUM),
-        ("JS_EVAL", re.compile(r"\beval\s*\("), "A03:2021", Severity.HIGH),
-    ]
-
+def _scan_sast(
+    diff_lines: list[DiffLine],
+    compiled_rules: dict[str, list[CompiledSastRule]],
+    ext_map: dict[str, str],
+) -> list[SastHit]:
     hits: list[SastHit] = []
     for line in diff_lines:
-        language = (
-            "python"
-            if line.file.endswith(".py")
-            else "javascript"
-            if line.file.endswith(".js") or line.file.endswith(".ts")
-            else "unknown"
-        )
-        active = rules_py if language == "python" else rules_js if language == "javascript" else []
-
-        for rule_id, pattern, owasp, severity in active:
-            if pattern.search(line.content):
+        lang = _get_language_for_file(line.file, ext_map)
+        if lang is None:
+            continue
+        for rule in compiled_rules.get(lang, []):
+            if rule.pattern.search(line.content):
                 hits.append(
                     SastHit(
                         file=line.file,
                         line=line.line,
-                        rule_id=rule_id,
-                        owasp_id=owasp,
-                        severity_hint=severity,
+                        rule_id=rule.rule_id,
+                        owasp_id=rule.owasp_id,
+                        severity_hint=rule.severity,
                     )
                 )
 
@@ -468,75 +664,112 @@ def _scan_sast(diff_lines: list[DiffLine]) -> list[SastHit]:
 
 
 def _scan_dependencies(diff_lines: list[DiffLine]) -> list[DependencyHit]:
-    cves = _load_json(Path(__file__).resolve().parent / "rules" / "dependency_cves.json")
-    hits: list[DependencyHit] = []
+    from . import osv_client as _osv
 
+    static_cves = _load_json(Path(__file__).resolve().parent / "rules" / "dependency_cves.json")
+    osv_cache_file = Path(__file__).resolve().parent / "rules" / "osv_cache.json"
+
+    # Pass 1: parse all manifest lines into (package, version, ecosystem) tuples.
+    parsed: list[tuple[str, str, str]] = []
     for line in diff_lines:
         file_name = line.file.rsplit("/", 1)[-1]
+        ecosystem = _osv.ECOSYSTEM_MAP.get(file_name)
+        if not ecosystem:
+            continue
+        pkg_ver = _parse_manifest_line(file_name, line.content)
+        if pkg_ver:
+            parsed.append((pkg_ver[0], pkg_ver[1], ecosystem))
 
-        if file_name == "requirements.txt":
-            req = re.match(r"^\s*([a-zA-Z0-9_.\-]+)\s*==\s*([a-zA-Z0-9_.\-]+)", line.content)
-            if not req:
-                continue
-            package = req.group(1).lower()
-            version = req.group(2)
-            hit = _lookup_cve_hit(cves, package, version)
-            if hit:
-                hits.append(hit)
+    if not parsed:
+        return []
 
-        if file_name == "package.json":
-            match = re.search(r'"([@a-zA-Z0-9_./\-]+)"\s*:\s*"\^?([0-9][^"]*)"', line.content)
-            if not match:
-                continue
-            package = match.group(1).lower()
-            version = match.group(2)
-            hit = _lookup_cve_hit(cves, package, version)
-            if hit:
-                hits.append(hit)
+    # Pass 2: batch OSV lookup (one HTTP call for all packages; cached per-entry).
+    try:
+        osv_results = _osv.query(parsed, osv_cache_file)
+    except Exception as exc:
+        logger.warning("OSV query error: %s — using static CVE database.", exc)
+        osv_results = {}
 
-        if file_name == "pyproject.toml":
-            pyproject_dep = re.search(
-                r'"([a-zA-Z0-9_.\-]+)\s*([<>=!~]{1,2})\s*([0-9][0-9A-Za-z_.\-]*)"', line.content
-            )
-            if not pyproject_dep:
-                continue
-
-            package = pyproject_dep.group(1).lower()
-            operator = pyproject_dep.group(2)
-            version = pyproject_dep.group(3)
-
-            if operator == "==":
-                hit = _lookup_cve_hit(cves, package, version)
-            else:
-                # For ranges (>=, ~=), fall back to the lower bound as a conservative signal.
-                hit = _lookup_cve_hit(cves, package, version)
-
-            if hit:
-                hits.append(hit)
+    # Pass 3: merge static + OSV hits (OSV wins on CVE-ID conflict), then global dedup.
+    all_hits: list[DependencyHit] = []
+    for package, version, ecosystem in parsed:
+        static = {h.cve_id: h for h in _lookup_cve_hits(static_cves, package, version)}
+        osv = {h.cve_id: h for h in osv_results.get(_osv._cache_key(package, version, ecosystem), [])}
+        all_hits.extend({**static, **osv}.values())
 
     dedup: dict[tuple[str, str, str], DependencyHit] = {}
-    for hit in hits:
+    for hit in all_hits:
         key = (hit.package, hit.version, hit.cve_id)
         if key not in dedup:
             dedup[key] = hit
     return list(dedup.values())
 
 
-def _lookup_cve_hit(cves: dict, package: str, version: str) -> DependencyHit | None:
-    key = f"{package}@{version}"
-    if key not in cves:
-        return None
+def _parse_manifest_line(file_name: str, content: str) -> tuple[str, str] | None:
+    """Parse one line from a dependency manifest and return (package, version) or None."""
+    if file_name == "requirements.txt":
+        m = re.match(r"^\s*([a-zA-Z0-9_.\-]+)\s*==\s*([a-zA-Z0-9_.\-]+)", content)
+        if m:
+            return m.group(1).lower(), m.group(2)
+    elif file_name == "package.json":
+        m = re.search(r'"([@a-zA-Z0-9_./\-]+)"\s*:\s*"\^?([0-9][^"]*)"', content)
+        if m:
+            return m.group(1).lower(), m.group(2)
+    elif file_name in ("pyproject.toml", "setup.cfg"):
+        m = re.search(r'"([a-zA-Z0-9_.\-]+)\s*[<>=!~]{1,2}\s*([0-9][0-9A-Za-z_.\-]*)"', content)
+        if m:
+            return m.group(1).lower(), m.group(2)
+    return None
 
-    item = cves[key]
-    cvss_score = float(item["cvss_score"])
-    return DependencyHit(
-        package=package,
-        version=version,
-        cve_id=str(item["cve_id"]),
-        cvss_score=cvss_score,
-        fix_version=str(item.get("fix_version") or ""),
-        severity_hint=Severity.MEDIUM if cvss_score < 7 else Severity.HIGH,
-    )
+
+def _lookup_cve_hits(cves: dict, package: str, version: str) -> list[DependencyHit]:
+    """Return all CVE hits for package@version against the range-aware CVE database."""
+    hits: list[DependencyHit] = []
+    for entry in cves.get(package, []):
+        affected_below = entry.get("affected_below", "")
+        if affected_below:
+            try:
+                if not _version_below(version, affected_below):
+                    continue  # version >= fix boundary — not affected
+            except Exception:
+                continue
+        cvss_score = float(entry["cvss_score"])
+        hits.append(
+            DependencyHit(
+                package=package,
+                version=version,
+                cve_id=str(entry["cve_id"]),
+                cvss_score=cvss_score,
+                fix_version=str(entry.get("fix_version") or ""),
+                severity_hint=_cvss_to_severity(cvss_score),
+            )
+        )
+    return hits
+
+
+def _parse_version(v: str) -> tuple[int, ...]:
+    """Parse a dotted version string into a comparable integer tuple."""
+    parts = []
+    for segment in v.split("."):
+        m = re.match(r"(\d+)", segment)
+        if m:
+            parts.append(int(m.group(1)))
+    return tuple(parts) if parts else (0,)
+
+
+def _version_below(version: str, upper_exclusive: str) -> bool:
+    """Return True if version < upper_exclusive using numeric tuple comparison."""
+    return _parse_version(version) < _parse_version(upper_exclusive)
+
+
+def _cvss_to_severity(score: float) -> Severity:
+    if score >= 9.0:
+        return Severity.CRITICAL
+    if score >= 7.0:
+        return Severity.HIGH
+    if score >= 4.0:
+        return Severity.MEDIUM
+    return Severity.LOW
 
 
 def _shannon_entropy(value: str) -> float:

@@ -1,0 +1,64 @@
+{
+  "language": "ruby",
+  "extensions": [
+    ".rb"
+  ],
+  "rules": [
+    {
+      "rule_id": "EVAL_RUBY",
+      "description": "eval() executes arbitrary Ruby code",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "\\beval\\s*\\("
+    },
+    {
+      "rule_id": "SYSTEM_EXEC_RUBY",
+      "description": "Shell command execution with user input enables command injection",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "\\b(?:system|exec|spawn|IO\\.popen|Open3\\.popen(?:2|3|2e)?)\\s*\\("
+    },
+    {
+      "rule_id": "YAML_UNSAFE_LOAD_RUBY",
+      "description": "YAML.load() without Psych::VERSION >= 4 deserializes arbitrary Ruby objects",
+      "owasp": "A08:2025",
+      "severity": "HIGH",
+      "pattern": "YAML\\.load\\s*\\("
+    },
+    {
+      "rule_id": "SQL_INTERPOLATION_RUBY",
+      "description": "String interpolation inside where() or find_by_sql() enables SQL injection",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "\\.(?:where|find_by_sql|select)\\s*\\(\\s*[\"'][^\"']*#\\{"
+    },
+    {
+      "rule_id": "REDIRECT_PARAMS_RUBY",
+      "description": "redirect_to with params enables open redirect",
+      "owasp": "A01:2025",
+      "severity": "MEDIUM",
+      "pattern": "redirect_to\\s+params\\["
+    },
+    {
+      "rule_id": "MASS_ASSIGNMENT_RUBY",
+      "description": "update/create with unfiltered params enables mass assignment",
+      "owasp": "A01:2025",
+      "severity": "MEDIUM",
+      "pattern": "\\.(?:update|create|update_attributes)\\s*\\(\\s*params\\b"
+    },
+    {
+      "rule_id": "MD5_RUBY",
+      "description": "Digest::MD5 is cryptographically broken — use SHA-256 or Bcrypt for passwords",
+      "owasp": "A04:2025",
+      "severity": "MEDIUM",
+      "pattern": "Digest::MD5"
+    },
+    {
+      "rule_id": "SEND_WITH_PARAMS",
+      "description": "send() with user-controlled method name enables arbitrary method invocation",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "\\.send\\s*\\(\\s*params"
+    }
+  ]
+}
