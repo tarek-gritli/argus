@@ -1,0 +1,51 @@
+{
+  "language": "kotlin",
+  "extensions": [
+    ".kt",
+    ".kts"
+  ],
+  "rules": [
+    {
+      "rule_id": "SQL_STRING_TEMPLATE_KOTLIN",
+      "description": "SQL query built with Kotlin string template enables injection",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "(?i)(?:executeQuery|executeUpdate|execute)\\s*\\(\\s*[\"'][^\"']*\\$[a-zA-Z]"
+    },
+    {
+      "rule_id": "RUNTIME_EXEC_KOTLIN",
+      "description": "Runtime.getRuntime().exec() enables command injection",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "Runtime\\.getRuntime\\s*\\(\\s*\\)\\s*\\.exec\\s*\\("
+    },
+    {
+      "rule_id": "WEAK_CRYPTO_KOTLIN",
+      "description": "MD5 and SHA-1 are cryptographically broken — use SHA-256 or better",
+      "owasp": "A04:2025",
+      "severity": "MEDIUM",
+      "pattern": "MessageDigest\\.getInstance\\s*\\(\\s*[\"'](MD5|SHA-1)[\"']"
+    },
+    {
+      "rule_id": "INSECURE_RANDOM_KOTLIN",
+      "description": "kotlin.random.Random is not cryptographically secure — use java.security.SecureRandom",
+      "owasp": "A04:2025",
+      "severity": "MEDIUM",
+      "pattern": "\\bRandom\\.Default\\b|\\bRandom\\s*\\(\\s*[0-9]"
+    },
+    {
+      "rule_id": "TLS_INSECURE_KOTLIN",
+      "description": "Custom HostnameVerifier that returns true disables hostname verification",
+      "owasp": "A04:2025",
+      "severity": "HIGH",
+      "pattern": "HostnameVerifier|hostnameVerifier\\s*=.*\\{.*true"
+    },
+    {
+      "rule_id": "OBJECT_DESERIALIZATION_KOTLIN",
+      "description": "ObjectInputStream on untrusted data can execute arbitrary code",
+      "owasp": "A08:2025",
+      "severity": "HIGH",
+      "pattern": "ObjectInputStream\\s*\\("
+    }
+  ]
+}

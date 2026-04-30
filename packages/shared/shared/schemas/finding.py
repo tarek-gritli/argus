@@ -2,9 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-AgentType = Literal[
-    "security", "quality", "performance", "testing", "documentation", "best_practices"
-]
+AgentType = Literal["security", "quality", "performance", "testing", "documentation", "best_practices"]
 SeverityType = Literal["critical", "high", "medium", "low", "info"]
 
 

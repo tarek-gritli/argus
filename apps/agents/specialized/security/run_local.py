@@ -26,12 +26,7 @@ def main() -> None:
     args = build_parser().parse_args()
     diff_path = Path(args.diff)
     if not diff_path.exists():
-        raise SystemExit(
-            "Diff file not found: "
-            f"{diff_path}. "
-            "Create it first (example: git diff > sample.diff) "
-            "or pass an existing file via --diff."
-        )
+        raise SystemExit(f"Diff file not found: {diff_path}. Create it first (example: git diff > sample.diff) or pass an existing file via --diff.")
 
     diff_text = diff_path.read_text(encoding="utf-8")
 

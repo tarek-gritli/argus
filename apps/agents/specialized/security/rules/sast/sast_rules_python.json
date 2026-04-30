@@ -1,0 +1,92 @@
+{
+  "language": "python",
+  "extensions": [
+    ".py"
+  ],
+  "rules": [
+    {
+      "rule_id": "SQL_FORMAT_STRING",
+      "description": "SQL query built with f-string or string formatting — injection risk",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "(?i)(f[\"'][^\"']*(?:select|insert|update|delete)|(?:select|insert|update|delete)\\s+[^\"']*\\{[a-zA-Z0-9_]+\\})"
+    },
+    {
+      "rule_id": "DANGEROUS_EVAL",
+      "description": "Use of eval() executes arbitrary code",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "\\beval\\s*\\("
+    },
+    {
+      "rule_id": "DANGEROUS_EXEC",
+      "description": "Use of exec() executes arbitrary code",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "\\bexec\\s*\\("
+    },
+    {
+      "rule_id": "SUBPROCESS_SHELL_TRUE",
+      "description": "subprocess called with shell=True enables shell injection",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "subprocess\\.[a-zA-Z_]+\\(.*shell\\s*=\\s*True"
+    },
+    {
+      "rule_id": "OS_SYSTEM",
+      "description": "os.system() passes command to shell — injection risk",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "\\bos\\.system\\s*\\("
+    },
+    {
+      "rule_id": "PICKLE_LOADS",
+      "description": "pickle.loads() on untrusted data leads to arbitrary code execution",
+      "owasp": "A08:2025",
+      "severity": "HIGH",
+      "pattern": "\\bpickle\\.loads?\\s*\\("
+    },
+    {
+      "rule_id": "YAML_LOAD_UNSAFE",
+      "description": "yaml.load() without SafeLoader deserializes arbitrary Python objects",
+      "owasp": "A08:2025",
+      "severity": "MEDIUM",
+      "pattern": "\\byaml\\.load\\s*\\("
+    },
+    {
+      "rule_id": "WEAK_HASH_ALGO",
+      "description": "MD5 or SHA-1 are cryptographically broken — do not use for security",
+      "owasp": "A04:2025",
+      "severity": "MEDIUM",
+      "pattern": "\\bhashlib\\.(md5|sha1)\\s*\\("
+    },
+    {
+      "rule_id": "HARDCODED_DEBUG",
+      "description": "DEBUG=True in production exposes sensitive information",
+      "owasp": "A02:2025",
+      "severity": "MEDIUM",
+      "pattern": "(?i)\\bDEBUG\\s*=\\s*True"
+    },
+    {
+      "rule_id": "BIND_ALL_INTERFACES",
+      "description": "Binding to 0.0.0.0 exposes service on all network interfaces",
+      "owasp": "A02:2025",
+      "severity": "MEDIUM",
+      "pattern": "(?i)(?:host|bind)\\s*=\\s*[\"']0\\.0\\.0\\.0[\"']"
+    },
+    {
+      "rule_id": "TEMPFILE_MKTEMP",
+      "description": "tempfile.mktemp() is insecure due to race condition (TOCTOU)",
+      "owasp": "A01:2025",
+      "severity": "MEDIUM",
+      "pattern": "\\btempfile\\.mktemp\\s*\\("
+    },
+    {
+      "rule_id": "JINJA2_AUTOESCAPE_OFF",
+      "description": "Disabling Jinja2 autoescape enables XSS and template injection",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "autoescape\\s*=\\s*False"
+    }
+  ]
+}

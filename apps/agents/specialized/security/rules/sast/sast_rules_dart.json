@@ -1,0 +1,78 @@
+{
+  "language": "dart",
+  "extensions": [
+    ".dart"
+  ],
+  "rules": [
+    {
+      "rule_id": "INSECURE_RANDOM_DART",
+      "description": "Random() is not cryptographically secure — use Random.secure()",
+      "owasp": "A04:2025",
+      "severity": "MEDIUM",
+      "pattern": "\\bRandom(?!\\.secure)\\s*\\(\\s*\\)"
+    },
+    {
+      "rule_id": "BAD_CERTIFICATE_CALLBACK",
+      "description": "badCertificateCallback returning true disables TLS certificate validation entirely",
+      "owasp": "A04:2025",
+      "severity": "HIGH",
+      "pattern": "badCertificateCallback\\s*(?:=|:)\\s*\\([^)]*\\)\\s*(?:=>|\\{)\\s*true"
+    },
+    {
+      "rule_id": "SQL_STRING_INTERPOLATION_DART",
+      "description": "SQL query built with Dart string interpolation enables injection",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "(?i)(?:rawQuery|rawInsert|rawUpdate|rawDelete|execute)\\s*\\(\\s*['\"][^'\"]*\\$"
+    },
+    {
+      "rule_id": "HTTP_NO_TLS_DART",
+      "description": "Plain HTTP URL transmits data without encryption",
+      "owasp": "A04:2025",
+      "severity": "MEDIUM",
+      "pattern": "Uri\\.parse\\s*\\(\\s*['\"]http://(?!localhost|127\\.)"
+    },
+    {
+      "rule_id": "SHARED_PREFS_SENSITIVE",
+      "description": "Sensitive data stored in SharedPreferences is unencrypted on the device",
+      "owasp": "A04:2025",
+      "severity": "MEDIUM",
+      "pattern": "\\.setString\\s*\\(\\s*['\"][^'\"]*(?:password|token|secret|key)['\"]\\s*,"
+    },
+    {
+      "rule_id": "DART_MIRRORS_REFLECTION",
+      "description": "dart:mirrors enables deep reflective access — avoid in production code",
+      "owasp": "A08:2025",
+      "severity": "MEDIUM",
+      "pattern": "import\\s+['\"]dart:mirrors['\"]"
+    },
+    {
+      "rule_id": "PATH_TRAVERSAL_DART",
+      "description": "File path built with user-controlled string interpolation enables path traversal",
+      "owasp": "A01:2025",
+      "severity": "MEDIUM",
+      "pattern": "File\\s*\\(\\s*['\"][^'\"]*\\$"
+    },
+    {
+      "rule_id": "HTTP_OVERRIDES_GLOBAL",
+      "description": "Replacing HttpOverrides.global can silently disable TLS checks application-wide",
+      "owasp": "A04:2025",
+      "severity": "HIGH",
+      "pattern": "HttpOverrides\\.global\\s*="
+    },
+    {
+      "rule_id": "HARDCODED_CREDENTIAL_DART",
+      "description": "Hardcoded API key or secret in Dart source code",
+      "owasp": "A04:2025",
+      "severity": "HIGH",
+      "pattern": "(?:apiKey|api_key|secretKey|secret_key|accessToken|access_token)\\s*=\\s*['\"][A-Za-z0-9+/]{20,}['\"]"
+    },
+    {
+      "rule_id": "DART_ISOLATE_SPAWN_URI",
+      "description": "Isolate.spawnUri with a user-controlled URI can load and execute arbitrary code",
+      "owasp": "A08:2025",
+      "severity": "HIGH",
+      "pattern": "Isolate\\.spawnUri\\s*\\("
+    }
+  ]
+}
