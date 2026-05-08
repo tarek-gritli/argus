@@ -63,13 +63,7 @@ class StaticAnalysisResult:
             if fm.functions:
                 lines.append("  Functions:")
                 for fn in fm.functions:
-                    lines.append(
-                        f"    {fn.name} (lines {fn.line_start}-{fn.line_end}): "
-                        f"complexity={fn.cyclomatic_complexity}, "
-                        f"nesting={fn.max_nesting_depth}, "
-                        f"length={fn.line_count}L, "
-                        f"args={fn.arg_count}"
-                    )
+                    lines.append(f"    {fn.name} (lines {fn.line_start}-{fn.line_end}): complexity={fn.cyclomatic_complexity}, nesting={fn.max_nesting_depth}, length={fn.line_count}L, args={fn.arg_count}")
 
             if fm.unused_imports:
                 lines.append(f"  Unused imports: {', '.join(fm.unused_imports)}")
@@ -79,9 +73,7 @@ class StaticAnalysisResult:
                 lines.append(f"  Magic numbers: {nums}")
 
             if fm.duplicate_block_hashes:
-                lines.append(
-                    f"  Potential duplicate blocks detected: {len(fm.duplicate_block_hashes)}"
-                )
+                lines.append(f"  Potential duplicate blocks detected: {len(fm.duplicate_block_hashes)}")
 
         return "\n".join(lines)
 
@@ -109,9 +101,6 @@ def _cyclomatic_complexity(node: ast.AST) -> int:
     for child in ast.walk(node):
         if isinstance(child, _COMPLEXITY_NODES):
             count += 1
-        # Each `elif` is an extra branch
-        if isinstance(child, ast.If):
-            count += len([x for x in child.orelse if isinstance(x, ast.If)])
     return count
 
 
@@ -216,9 +205,7 @@ def analyze_file(file_path: str, source: str) -> FileMetrics:
         return metrics
 
     # Imports
-    metrics.import_count = sum(
-        1 for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))
-    )
+    metrics.import_count = sum(1 for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom)))
     metrics.unused_imports = _find_unused_imports(tree, source)
 
     # Magic numbers

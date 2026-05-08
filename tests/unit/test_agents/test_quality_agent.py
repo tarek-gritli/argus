@@ -2,7 +2,7 @@
 Tests for the quality agent.
 
 Run with:
-    uv run pytest tests/unit/agents/quality/ -v
+    uv run pytest tests/unit/test_agents/test_quality_agent.py -v
 """
 
 from __future__ import annotations
@@ -11,11 +11,10 @@ import os
 
 import anthropic
 import pytest
-
-from ..schemas import AgentInput
-from ..tools.ast_analyzer import analyze_file, run_static_analysis
-from ..tools.grep_patterns import scan_diff_patterns
-from ..validator import validate_findings
+from specialized.quality.schemas import AgentInput
+from specialized.quality.tools.ast_analyzer import analyze_file, run_static_analysis
+from specialized.quality.tools.grep_patterns import scan_diff_patterns
+from specialized.quality.validator import validate_findings
 
 # ---------------------------------------------------------------------------
 # AST analyzer tests
@@ -153,6 +152,24 @@ class TestGrepPatterns:
         ctx = result.to_prompt_context()
         assert "no hits" in ctx
 
+    def test_mutable_default_arg_detects_list(self):
+        diff = "@@ -1 +1 @@\n+def fn(x=[]):\n    pass\n"
+        result = scan_diff_patterns(diff, "f.py")
+        names = [h.pattern_name for h in result.hits]
+        assert "mutable_default_arg" in names
+
+    def test_mutable_default_arg_detects_dict(self):
+        diff = "@@ -1 +1 @@\n+def fn(x={}):\n    pass\n"
+        result = scan_diff_patterns(diff, "f.py")
+        names = [h.pattern_name for h in result.hits]
+        assert "mutable_default_arg" in names
+
+    def test_mutable_default_arg_no_false_positive_on_tuple(self):
+        diff = "@@ -1 +1 @@\n+def fn(x=()):\n    pass\n"
+        result = scan_diff_patterns(diff, "f.py")
+        names = [h.pattern_name for h in result.hits]
+        assert "mutable_default_arg" not in names
+
 
 # ---------------------------------------------------------------------------
 # Validator tests
@@ -224,6 +241,50 @@ class TestValidator:
 
 
 # ---------------------------------------------------------------------------
+# _extract_file_diff
+# ---------------------------------------------------------------------------
+
+
+class TestExtractFileDiff:
+    _MULTI_FILE_DIFF = """\
+diff --git a/foo.py b/foo.py
+index 0000000..1111111 100644
+--- a/foo.py
++++ b/foo.py
+@@ -1,1 +1,2 @@
++x = 1
+diff --git a/bar.py b/bar.py
+index 0000000..2222222 100644
+--- a/bar.py
++++ b/bar.py
+@@ -1,1 +1,2 @@
++y = 2
+"""
+
+    def test_extracts_first_file(self):
+        from specialized.quality.agent import _extract_file_diff
+
+        result = _extract_file_diff(self._MULTI_FILE_DIFF, "foo.py")
+        assert "foo.py" in result
+        assert "bar.py" not in result
+        assert "+x = 1" in result
+
+    def test_extracts_second_file(self):
+        from specialized.quality.agent import _extract_file_diff
+
+        result = _extract_file_diff(self._MULTI_FILE_DIFF, "bar.py")
+        assert "bar.py" in result
+        assert "foo.py" not in result
+        assert "+y = 2" in result
+
+    def test_missing_file_returns_empty(self):
+        from specialized.quality.agent import _extract_file_diff
+
+        result = _extract_file_diff(self._MULTI_FILE_DIFF, "missing.py")
+        assert result == ""
+
+
+# ---------------------------------------------------------------------------
 # Integration smoke test (requires ANTHROPIC_API_KEY — skip in CI)
 # ---------------------------------------------------------------------------
 
@@ -235,7 +296,7 @@ class TestValidator:
 )
 def test_agent_end_to_end():
     """Smoke test: runs the full agent pipeline on a synthetic diff."""
-    from ..agent import run_quality_agent
+    from specialized.quality.agent import run_quality_agent
 
     messy_source = """\
 import os
@@ -295,13 +356,8 @@ index 0000000..1111111 100644
             "authentication",
             "rate limit",
         )
-        if exc.status_code in {400, 401, 402, 403, 429} or any(
-            marker in message for marker in skippable_markers
-        ):
+        if exc.status_code in {400, 401, 402, 403, 429} or any(marker in message for marker in skippable_markers):
             pytest.skip(f"Skipping integration test due to Anthropic account/API status: {exc}")
         raise
-    print(findings)
-    # We just check it ran without error and returned something reasonable
     assert isinstance(findings, list)
-    # The messy code above should produce at least a few findings
     assert len(findings) >= 1

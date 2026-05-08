@@ -38,10 +38,7 @@ def run_dead_code_checks(context: dict[str, Any]) -> list[FindingSchema]:
                     "line_start": line_anchor,
                     "line_end": line_anchor,
                     "title": "Likely unused imports add noise",
-                    "description": (
-                        "Static analysis indicates imports that are never referenced "
-                        f"in this file (for example: {imports_preview})."
-                    ),
+                    "description": (f"Static analysis indicates imports that are never referenced in this file (for example: {imports_preview})."),
                     "suggestion": "Remove unused imports to reduce noise and import overhead.",
                     "confidence": unused_import_confidence,
                     "fix": None,
@@ -65,13 +62,8 @@ def run_dead_code_checks(context: dict[str, Any]) -> list[FindingSchema]:
                     "line_start": hit.line,
                     "line_end": hit.line,
                     "title": "Commented-out code detected",
-                    "description": (
-                        "Commented executable code is likely stale and can confuse future "
-                        "maintainers about the intended code path."
-                    ),
-                    "suggestion": (
-                        "Delete dead commented code and rely on VCS history for retrieval."
-                    ),
+                    "description": ("Commented executable code is likely stale and can confuse future maintainers about the intended code path."),
+                    "suggestion": ("Delete dead commented code and rely on VCS history for retrieval."),
                     "confidence": commented_code_confidence,
                     "fix": None,
                 }

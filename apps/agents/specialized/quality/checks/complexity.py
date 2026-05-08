@@ -66,15 +66,8 @@ def run_complexity_checks(context: dict[str, Any]) -> list[FindingSchema]:
                         line_end=fn.line_end,
                         severity="medium",
                         title=f"Function '{fn.name}' is hard to reason about",
-                        description=(
-                            f"{fn.name} has many decision paths "
-                            f"(complexity={fn.cyclomatic_complexity}), which raises "
-                            "the risk of hidden branching bugs and difficult changes."
-                        ),
-                        suggestion=(
-                            "Split the function into smaller helpers by responsibility "
-                            "and isolate branch-heavy sections behind descriptive names."
-                        ),
+                        description=(f"{fn.name} has many decision paths (complexity={fn.cyclomatic_complexity}), which raises the risk of hidden branching bugs and difficult changes."),
+                        suggestion=("Split the function into smaller helpers by responsibility and isolate branch-heavy sections behind descriptive names."),
                         confidence=complexity_confidence,
                     )
                 )
@@ -109,14 +102,8 @@ def run_complexity_checks(context: dict[str, Any]) -> list[FindingSchema]:
                         line_end=fn.line_end,
                         severity="medium",
                         title=f"Function '{fn.name}' has deeply nested control flow",
-                        description=(
-                            f"{fn.name} reaches nesting depth {fn.max_nesting_depth}, "
-                            "making the execution path harder to trace and maintain."
-                        ),
-                        suggestion=(
-                            "Use guard clauses and early returns to flatten control flow, "
-                            "or extract inner branches into dedicated helpers."
-                        ),
+                        description=(f"{fn.name} reaches nesting depth {fn.max_nesting_depth}, making the execution path harder to trace and maintain."),
+                        suggestion=("Use guard clauses and early returns to flatten control flow, or extract inner branches into dedicated helpers."),
                         confidence=nesting_confidence,
                     )
                 )

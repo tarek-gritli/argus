@@ -45,7 +45,7 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("commented_code", re.compile(r"^\+\s*#\s*(def |class |import |return |if |for )")),
     ("long_line", re.compile(r"^\+.{121,}")),  # >120 chars added lines
     ("bare_except", re.compile(r"^\+\s*except\s*:")),
-    ("mutable_default_arg", re.compile(r"^\+\s*def .+\(.*(=\s*\[\]|=\s*\{\}|=\s*\(\))")),
+    ("mutable_default_arg", re.compile(r"^\+\s*def .+\(.*(=\s*\[\]|=\s*\{\})")),
 ]
 
 

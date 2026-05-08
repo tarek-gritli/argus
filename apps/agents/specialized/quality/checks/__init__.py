@@ -44,11 +44,7 @@ def to_prompt_context(findings: list[FindingSchema], max_items: int = 25) -> str
 
     lines = ["=== Deterministic Check Candidates ==="]
     for finding in findings[:max_items]:
-        lines.append(
-            "  "
-            f"{finding.get('file')}:{finding.get('line_start')} "
-            f"[{finding.get('severity')}] {finding.get('title')}"
-        )
+        lines.append(f"  {finding.get('file')}:{finding.get('line_start')} [{finding.get('severity')}] {finding.get('title')}")
 
     if len(findings) > max_items:
         lines.append(f"  ... and {len(findings) - max_items} more")

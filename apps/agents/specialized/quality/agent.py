@@ -1,5 +1,5 @@
 """
-Quality agent — LangGraph node.
+Quality agent — invoked as a LangGraph node by the orchestrator.
 
 Pipeline (matches AGENTS.md spec exactly):
   1. Input          — receive AgentInput
@@ -17,6 +17,8 @@ import re
 from typing import Any
 
 import anthropic
+from shared.config import get_settings
+from shared.schemas.finding import FindingSchema
 
 from .checks import run_all_checks
 from .checks import to_prompt_context as checks_to_prompt_context
@@ -81,7 +83,8 @@ def _build_user_prompt(
 
 
 def _call_claude(system: str, user: str) -> str:
-    client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from env
+    settings = get_settings()
+    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     message = client.messages.create(
         model=_MODEL,
         max_tokens=_MAX_TOKENS,
@@ -128,14 +131,7 @@ def _parse_findings(raw: str) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-def _to_finding_schemas(validated: list[dict[str, Any]]) -> list[Any]:
-    try:
-        from shared.schemas.finding import FindingSchema  # type: ignore[import]
-    except ImportError:
-        # Fallback for local dev / testing without the full monorepo installed
-        logger.warning("shared.schemas.finding not available — returning raw dicts")
-        return validated  # type: ignore[return-value]
-
+def _to_finding_schemas(validated: list[dict[str, Any]]) -> list[FindingSchema]:
     schemas = []
     for f in validated:
         try:
@@ -150,7 +146,7 @@ def _to_finding_schemas(validated: list[dict[str, Any]]) -> list[Any]:
 # ---------------------------------------------------------------------------
 
 
-def run_quality_agent(input: AgentInput) -> list[Any]:
+def run_quality_agent(input: AgentInput) -> list[FindingSchema]:
     """
     Run the quality agent on a PR diff.
 
@@ -222,12 +218,12 @@ def _extract_file_diff(full_diff: str, file_path: str) -> str:
 
     for line in lines:
         if line.startswith("diff --git"):
-            in_file = file_path in line
             if in_file:
+                break  # reached the next file — stop
+            if file_path in line:
+                in_file = True
                 result = [line]
         elif in_file:
-            if line.startswith("diff --git") and file_path not in line:
-                break
             result.append(line)
 
     return "".join(result)

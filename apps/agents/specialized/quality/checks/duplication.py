@@ -40,14 +40,8 @@ def run_duplication_checks(context: dict[str, Any]) -> list[FindingSchema]:
                 "line_start": line_anchor,
                 "line_end": line_anchor,
                 "title": "Potential copy-pasted logic detected",
-                "description": (
-                    f"Detected {duplicate_count} repeated code block patterns in "
-                    "this file, which increases maintenance cost and bug propagation risk."
-                ),
-                "suggestion": (
-                    "Extract repeated blocks into a shared helper or utility "
-                    "with a single source of truth."
-                ),
+                "description": (f"Detected {duplicate_count} repeated code block patterns in this file, which increases maintenance cost and bug propagation risk."),
+                "suggestion": ("Extract repeated blocks into a shared helper or utility with a single source of truth."),
                 "confidence": confidence,
                 "fix": None,
             }

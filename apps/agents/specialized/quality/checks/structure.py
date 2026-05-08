@@ -51,15 +51,8 @@ def run_structure_checks(context: dict[str, Any]) -> list[FindingSchema]:
                         "line_start": first_line,
                         "line_end": first_line,
                         "title": "Multiple unexplained numeric constants",
-                        "description": (
-                            f"Found {len(file_metrics.magic_numbers)} non-trivial numeric "
-                            "literals, which can obscure domain intent and make future "
-                            "changes error-prone."
-                        ),
-                        "suggestion": (
-                            "Replace repeated literals with named constants that encode "
-                            "business meaning."
-                        ),
+                        "description": (f"Found {len(file_metrics.magic_numbers)} non-trivial numeric literals, which can obscure domain intent and make future changes error-prone."),
+                        "suggestion": ("Replace repeated literals with named constants that encode business meaning."),
                         "confidence": magic_number_confidence,
                         "fix": None,
                     }
@@ -98,14 +91,8 @@ def run_structure_checks(context: dict[str, Any]) -> list[FindingSchema]:
                         "line_start": fn.line_start,
                         "line_end": fn.line_end,
                         "title": f"Function '{fn.name}' is too long",
-                        "description": (
-                            f"{fn.name} spans {fn.line_count} lines, making it harder to "
-                            "understand and test in isolation."
-                        ),
-                        "suggestion": (
-                            "Split this function into smaller units grouped by single "
-                            "responsibility, keeping orchestration at the top level."
-                        ),
+                        "description": (f"{fn.name} spans {fn.line_count} lines, making it harder to understand and test in isolation."),
+                        "suggestion": ("Split this function into smaller units grouped by single responsibility, keeping orchestration at the top level."),
                         "confidence": length_confidence,
                         "fix": None,
                     }
@@ -129,13 +116,8 @@ def run_structure_checks(context: dict[str, Any]) -> list[FindingSchema]:
                         "line_start": hit.line,
                         "line_end": hit.line,
                         "title": "Overly long added line",
-                        "description": (
-                            "The added line exceeds the configured readability threshold "
-                            "and may be hard to review and maintain."
-                        ),
-                        "suggestion": (
-                            "Wrap the statement or extract sub-expressions into named variables."
-                        ),
+                        "description": ("The added line exceeds the configured readability threshold and may be hard to review and maintain."),
+                        "suggestion": ("Wrap the statement or extract sub-expressions into named variables."),
                         "confidence": line_length_confidence,
                         "fix": None,
                     }
@@ -155,14 +137,8 @@ def run_structure_checks(context: dict[str, Any]) -> list[FindingSchema]:
                         "line_start": line_anchor,
                         "line_end": line_anchor,
                         "title": "Mutable default argument in function signature",
-                        "description": (
-                            "Using a mutable default like [] or {} can leak state across "
-                            "calls and produce surprising behavior."
-                        ),
-                        "suggestion": (
-                            "Use None as the default and initialize the mutable value inside "
-                            "the function body."
-                        ),
+                        "description": ("Using a mutable default like [] or {} can leak state across calls and produce surprising behavior."),
+                        "suggestion": ("Use None as the default and initialize the mutable value inside the function body."),
                         "confidence": mutable_default_confidence,
                         "fix": None,
                     }
