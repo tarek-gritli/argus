@@ -300,7 +300,7 @@ index 0000000..1111111 100644
         ):
             pytest.skip(f"Skipping integration test due to Anthropic account/API status: {exc}")
         raise
-
+    print(findings)
     # We just check it ran without error and returned something reasonable
     assert isinstance(findings, list)
     # The messy code above should produce at least a few findings

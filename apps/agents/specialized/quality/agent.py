@@ -28,7 +28,7 @@ from .validator import validate_findings
 
 logger = logging.getLogger(__name__)
 
-_MODEL = "claude-opus-4-5"
+_MODEL = "claude-haiku-4-5"
 _MAX_TOKENS = 4096
 
 
