@@ -316,7 +316,7 @@ def _build_generation_prompt(diff: str, hits: ScannerHits, ctx: SecurityContext)
         f"{json.dumps(ctx.lang_rules, indent=2)}\n\n"
         "## Pre-computed Scanner Hits\n"
         f"{scanner_block}\n\n"
-        "## Git Diff (added lines only)\n"
+        "## Git Diff\n"
         f"{diff}\n\n"
         "## Task\n"
         "Analyze the diff and scanner hits above. Return a JSON object with a `findings` array. "
