@@ -53,9 +53,7 @@ def _format_findings(findings: list[FindingSchema]) -> str:
 
         lines.append(f"### {severity.upper()}\n")
         for finding in by_severity[severity]:
-            lines.append(
-                f"**{finding.title}** ({finding.file}:{finding.line_start}-{finding.line_end})\n"
-            )
+            lines.append(f"**{finding.title}** ({finding.file}:{finding.line_start}-{finding.line_end})\n")
             lines.append(f"{finding.description}\n")
             if finding.suggestion:
                 lines.append(f"> Suggestion: {finding.suggestion}\n")

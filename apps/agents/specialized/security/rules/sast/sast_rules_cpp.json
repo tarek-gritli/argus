@@ -1,0 +1,76 @@
+{
+  "language": "cpp",
+  "extensions": [
+    ".c",
+    ".cpp",
+    ".cc",
+    ".cxx",
+    ".h",
+    ".hpp"
+  ],
+  "rules": [
+    {
+      "rule_id": "GETS_UNSAFE",
+      "description": "gets() has no bounds checking and always causes a buffer overflow risk",
+      "owasp": "A05:2025",
+      "severity": "CRITICAL",
+      "pattern": "\\bgets\\s*\\("
+    },
+    {
+      "rule_id": "STRCPY_OVERFLOW",
+      "description": "strcpy() does not check destination buffer size — use strncpy() or strlcpy()",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "\\bstrcpy\\s*\\("
+    },
+    {
+      "rule_id": "STRCAT_OVERFLOW",
+      "description": "strcat() does not check destination buffer size — use strncat() or strlcat()",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "\\bstrcat\\s*\\("
+    },
+    {
+      "rule_id": "SPRINTF_UNBOUNDED",
+      "description": "sprintf() does not check destination buffer size — use snprintf()",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "\\bsprintf\\s*\\("
+    },
+    {
+      "rule_id": "SYSTEM_CALL_C",
+      "description": "system() passes the argument to a shell — command injection risk",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "\\bsystem\\s*\\("
+    },
+    {
+      "rule_id": "SCANF_UNBOUNDED",
+      "description": "scanf with %s reads unbounded input — specify maximum field width",
+      "owasp": "A05:2025",
+      "severity": "MEDIUM",
+      "pattern": "\\bscanf\\s*\\(\\s*[\"'][^\"']*%s"
+    },
+    {
+      "rule_id": "PRINTF_FORMAT_STRING",
+      "description": "printf with a non-literal format string enables format string attacks",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "\\bprintf\\s*\\(\\s*(?![\"'])[a-zA-Z_$]"
+    },
+    {
+      "rule_id": "RAND_WEAK_C",
+      "description": "rand() is not cryptographically secure — use /dev/urandom or platform CSPRNG",
+      "owasp": "A04:2025",
+      "severity": "MEDIUM",
+      "pattern": "\\brand\\s*\\(\\s*\\)"
+    },
+    {
+      "rule_id": "FIXED_SEED",
+      "description": "srand() with a hardcoded seed makes output predictable",
+      "owasp": "A04:2025",
+      "severity": "MEDIUM",
+      "pattern": "\\bsrand\\s*\\(\\s*[0-9]"
+    }
+  ]
+}

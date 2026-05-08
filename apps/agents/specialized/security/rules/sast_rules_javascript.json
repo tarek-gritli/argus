@@ -1,6 +1,0 @@
-{
-  "rules": [
-    {"rule_id": "INNER_HTML_ASSIGNMENT", "description": "Dangerous innerHTML sink", "owasp": "A03:2021"},
-    {"rule_id": "JS_EVAL", "description": "Use of eval()", "owasp": "A03:2021"}
-  ]
-}

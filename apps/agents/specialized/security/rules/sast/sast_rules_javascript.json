@@ -1,0 +1,83 @@
+{
+  "language": "javascript",
+  "extensions": [
+    ".js",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".mjs",
+    ".cjs"
+  ],
+  "rules": [
+    {
+      "rule_id": "INNER_HTML_ASSIGNMENT",
+      "description": "innerHTML assignment is a dangerous XSS sink",
+      "owasp": "A05:2025",
+      "severity": "MEDIUM",
+      "pattern": "\\.innerHTML\\s*="
+    },
+    {
+      "rule_id": "JS_EVAL",
+      "description": "eval() executes arbitrary code and is an injection sink",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "\\beval\\s*\\("
+    },
+    {
+      "rule_id": "DOCUMENT_WRITE",
+      "description": "document.write() with user input causes XSS",
+      "owasp": "A05:2025",
+      "severity": "MEDIUM",
+      "pattern": "document\\.write\\s*\\("
+    },
+    {
+      "rule_id": "OUTER_HTML_ASSIGNMENT",
+      "description": "outerHTML assignment is a dangerous XSS sink",
+      "owasp": "A05:2025",
+      "severity": "MEDIUM",
+      "pattern": "\\.outerHTML\\s*="
+    },
+    {
+      "rule_id": "DANGEROUSLY_SET_INNER_HTML",
+      "description": "React dangerouslySetInnerHTML bypasses XSS protection",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "dangerouslySetInnerHTML"
+    },
+    {
+      "rule_id": "MATH_RANDOM_CRYPTO",
+      "description": "Math.random() is not cryptographically secure — use crypto.getRandomValues()",
+      "owasp": "A04:2025",
+      "severity": "MEDIUM",
+      "pattern": "Math\\.random\\s*\\("
+    },
+    {
+      "rule_id": "PROTOTYPE_POLLUTION",
+      "description": "Direct __proto__ or constructor.prototype access enables prototype pollution",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "__proto__|constructor\\[[\"']prototype[\"']\\]"
+    },
+    {
+      "rule_id": "TLS_CERT_VERIFY_DISABLED",
+      "description": "rejectUnauthorized: false disables TLS certificate validation",
+      "owasp": "A04:2025",
+      "severity": "HIGH",
+      "pattern": "rejectUnauthorized\\s*:\\s*false"
+    },
+    {
+      "rule_id": "LOCALSTORAGE_SENSITIVE",
+      "description": "Sensitive data (token/password/secret/key) stored in localStorage is accessible to XSS",
+      "owasp": "A04:2025",
+      "severity": "MEDIUM",
+      "pattern": "localStorage\\.setItem\\s*\\(\\s*[\"'][^\"']*(?:token|password|secret|key)[\"']\\s*,"
+    },
+    {
+      "rule_id": "INSECURE_HTTP_URL",
+      "description": "Plain HTTP URL transmits data without encryption",
+      "owasp": "A04:2025",
+      "severity": "LOW",
+      "pattern": "http://(?!localhost|127\\.\\d+\\.\\d+\\.\\d+|0\\.0\\.0\\.0)"
+    }
+  ]
+}

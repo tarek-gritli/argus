@@ -1,0 +1,71 @@
+{
+  "language": "java",
+  "extensions": [
+    ".java"
+  ],
+  "rules": [
+    {
+      "rule_id": "SQL_STRING_CONCAT",
+      "description": "SQL query built via string concatenation — injection risk",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "(?i)(?:executeQuery|executeUpdate|execute)\\s*\\(\\s*[^;]*\\+"
+    },
+    {
+      "rule_id": "RUNTIME_EXEC",
+      "description": "Runtime.getRuntime().exec() enables command injection",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "Runtime\\.getRuntime\\s*\\(\\s*\\)\\s*\\.exec\\s*\\("
+    },
+    {
+      "rule_id": "OBJECT_DESERIALIZATION",
+      "description": "ObjectInputStream.readObject() on untrusted data can execute arbitrary code",
+      "owasp": "A08:2025",
+      "severity": "HIGH",
+      "pattern": "new\\s+ObjectInputStream\\s*\\("
+    },
+    {
+      "rule_id": "WEAK_CRYPTO_ALGO",
+      "description": "MD5 and SHA-1 are cryptographically broken — use SHA-256 or better",
+      "owasp": "A04:2025",
+      "severity": "MEDIUM",
+      "pattern": "MessageDigest\\.getInstance\\s*\\(\\s*[\"'](MD5|SHA-1)[\"']"
+    },
+    {
+      "rule_id": "JAVA_INSECURE_RANDOM",
+      "description": "java.util.Random is not cryptographically secure — use SecureRandom",
+      "owasp": "A04:2025",
+      "severity": "MEDIUM",
+      "pattern": "new\\s+Random\\s*\\("
+    },
+    {
+      "rule_id": "XXE_DOCUMENT_BUILDER",
+      "description": "DocumentBuilderFactory without disabling external entities enables XXE",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "DocumentBuilderFactory\\.newInstance\\s*\\("
+    },
+    {
+      "rule_id": "PATH_TRAVERSAL_JAVA",
+      "description": "File constructed from request parameter enables path traversal",
+      "owasp": "A01:2025",
+      "severity": "HIGH",
+      "pattern": "new\\s+File\\s*\\(\\s*.*request\\.getParameter"
+    },
+    {
+      "rule_id": "SQL_CREATE_STATEMENT",
+      "description": "createStatement() creates a non-parameterized SQL statement — prefer PreparedStatement",
+      "owasp": "A05:2025",
+      "severity": "MEDIUM",
+      "pattern": "\\.createStatement\\s*\\(\\s*\\)"
+    },
+    {
+      "rule_id": "LDAP_INJECTION",
+      "description": "LDAP search filter built with string concatenation enables LDAP injection",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "\\.search\\s*\\([^;]*\\+[^;]*[\"']"
+    }
+  ]
+}

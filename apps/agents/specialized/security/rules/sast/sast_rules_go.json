@@ -1,0 +1,57 @@
+{
+  "language": "go",
+  "extensions": [
+    ".go"
+  ],
+  "rules": [
+    {
+      "rule_id": "SQL_SPRINTF_INJECT",
+      "description": "SQL query built with fmt.Sprintf enables injection",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "(?:db|tx|conn)\\s*\\.\\s*(?:Query|Exec|QueryRow|QueryContext|ExecContext)\\s*\\(\\s*fmt\\.Sprintf"
+    },
+    {
+      "rule_id": "COMMAND_EXEC_GO",
+      "description": "exec.Command with user-controlled input enables command injection",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "exec\\.Command\\s*\\("
+    },
+    {
+      "rule_id": "TLS_INSECURE_SKIP_VERIFY",
+      "description": "InsecureSkipVerify: true disables TLS certificate validation",
+      "owasp": "A04:2025",
+      "severity": "HIGH",
+      "pattern": "InsecureSkipVerify\\s*:\\s*true"
+    },
+    {
+      "rule_id": "WEAK_RAND_GO",
+      "description": "math/rand is not cryptographically secure — use crypto/rand",
+      "owasp": "A04:2025",
+      "severity": "MEDIUM",
+      "pattern": "\\\"math/rand\\\"|rand\\.Intn\\s*\\(|rand\\.Int63\\s*\\(|rand\\.Float"
+    },
+    {
+      "rule_id": "HTTP_NO_TLS",
+      "description": "http.ListenAndServe exposes service over plain HTTP — use ListenAndServeTLS",
+      "owasp": "A04:2025",
+      "severity": "MEDIUM",
+      "pattern": "http\\.ListenAndServe\\s*\\("
+    },
+    {
+      "rule_id": "SSRF_HTTP_GET",
+      "description": "http.Get with user-controlled URL enables SSRF",
+      "owasp": "A05:2025",
+      "severity": "MEDIUM",
+      "pattern": "http\\.Get\\s*\\(\\s*(?:r\\.|req\\.|request\\.|string\\(|fmt\\.Sprintf)"
+    },
+    {
+      "rule_id": "PATH_TRAVERSAL_GO",
+      "description": "filepath.Join with user input may enable path traversal",
+      "owasp": "A01:2025",
+      "severity": "MEDIUM",
+      "pattern": "filepath\\.Join\\s*\\(\\s*.*(?:r\\.URL\\.Path|r\\.FormValue|r\\.URL\\.Query)"
+    }
+  ]
+}

@@ -1,0 +1,136 @@
+{
+  "meta": {
+    "version": "2025",
+    "title": "OWASP Top 10:2025",
+    "source_url": "https://owasp.org/Top10/2025/",
+    "fetched_at": "2026-04-24T15:24:45.179746+00:00",
+    "schema_version": "1.0"
+  },
+  "A01:2025": {
+    "name": "Broken Access Control",
+    "severity_range": "HIGH-CRITICAL",
+    "description": "Restrictions on authenticated users are not properly enforced. Attackers exploit these flaws to access unauthorized functionality and data, including viewing others' records, elevating privileges, or acting as other users.",
+    "examples": [
+      "IDOR (Insecure Direct Object Reference)",
+      "path traversal",
+      "privilege escalation",
+      "CORS misconfiguration",
+      "missing function-level access control",
+      "JWT with role manipulation"
+    ]
+  },
+  "A02:2025": {
+    "name": "Security Misconfiguration",
+    "severity_range": "MEDIUM-HIGH",
+    "description": "Missing appropriate security hardening across the application stack. Unnecessary features are enabled, default accounts remain unchanged, or overly permissive settings expose attack surface.",
+    "examples": [
+      "DEBUG=True in production",
+      "open cloud storage buckets",
+      "default credentials in place",
+      "directory listing enabled",
+      "unnecessary HTTP methods allowed",
+      "verbose error messages leaking internals"
+    ]
+  },
+  "A03:2025": {
+    "name": "Software Supply Chain Failures",
+    "severity_range": "HIGH-CRITICAL",
+    "description": "NEW in 2025. Risks introduced through third-party components, open-source libraries, build pipelines, and software delivery processes. Includes compromised packages, typosquatting, and CI/CD pipeline tampering.",
+    "examples": [
+      "malicious npm/PyPI packages",
+      "compromised build pipeline",
+      "typosquatting of popular libraries",
+      "unsigned or tampered artifacts",
+      "SolarWinds-style supply chain attack",
+      "missing SBOM verification"
+    ]
+  },
+  "A04:2025": {
+    "name": "Cryptographic Failures",
+    "severity_range": "HIGH-CRITICAL",
+    "description": "Failures related to cryptography that lead to sensitive data exposure or system compromise. Includes weak algorithms, poor key management, and cleartext transmission of sensitive data.",
+    "examples": [
+      "MD5/SHA1 for passwords",
+      "hardcoded cryptographic keys",
+      "weak TLS configuration",
+      "no HTTPS enforcement",
+      "unencrypted sensitive data at rest",
+      "use of ECB mode or CBC without integrity"
+    ]
+  },
+  "A05:2025": {
+    "name": "Injection",
+    "severity_range": "HIGH-CRITICAL",
+    "description": "User-supplied data is not validated, filtered, or sanitized. The interpreter executes hostile commands or queries, leading to data theft, corruption, or remote code execution.",
+    "examples": [
+      "SQL injection",
+      "OS command injection",
+      "Cross-Site Scripting (XSS)",
+      "eval() with user input",
+      "server-side template injection",
+      "LDAP/XML/NoSQL injection"
+    ]
+  },
+  "A06:2025": {
+    "name": "Insecure Design",
+    "severity_range": "HIGH-CRITICAL",
+    "description": "Missing or ineffective security controls arising from design and architecture flaws. Cannot be fixed by a correct implementation alone — the design must be changed.",
+    "examples": [
+      "credential recovery via secret questions",
+      "bot-vulnerable checkout flows",
+      "business logic bypasses",
+      "missing rate limiting by design",
+      "no separation of duties in sensitive operations"
+    ]
+  },
+  "A07:2025": {
+    "name": "Authentication Failures",
+    "severity_range": "HIGH-CRITICAL",
+    "description": "Authentication and session management flaws allow attackers to compromise passwords, keys, or session tokens, or exploit implementation weaknesses to assume users' identities.",
+    "examples": [
+      "weak or no brute-force protection",
+      "default credentials accepted",
+      "insecure session ID generation",
+      "missing or bypassable MFA",
+      "credentials exposed in URLs or logs",
+      "JWT with none algorithm accepted"
+    ]
+  },
+  "A08:2025": {
+    "name": "Software or Data Integrity Failures",
+    "severity_range": "HIGH-CRITICAL",
+    "description": "Code and infrastructure that does not protect against integrity violations. Includes insecure deserialization, untrusted plugin or update mechanisms, and reliance on unsigned data.",
+    "examples": [
+      "pickle.loads() with untrusted data",
+      "Java native deserialization",
+      "unsigned auto-update mechanism",
+      "missing subresource integrity (SRI)",
+      "deserialization of YAML/XML without schema validation"
+    ]
+  },
+  "A09:2025": {
+    "name": "Security Logging and Alerting Failures",
+    "severity_range": "MEDIUM-HIGH",
+    "description": "Insufficient logging, detection, and response capabilities allow attackers to maintain persistence, pivot to more systems, and exfiltrate or destroy data without timely detection.",
+    "examples": [
+      "login failures not logged",
+      "no alerting on repeated failures",
+      "logs stored only locally without integrity protection",
+      "no audit trail for sensitive operations",
+      "monitoring dashboards not acted upon"
+    ]
+  },
+  "A10:2025": {
+    "name": "Mishandling of Exceptional Conditions",
+    "severity_range": "MEDIUM-HIGH",
+    "description": "NEW in 2025. Applications that fail to properly handle errors, exceptions, or unexpected states expose internal details, enter inconsistent states, or can be crashed by attackers — enabling information disclosure, denial of service, or logic bypass.",
+    "examples": [
+      "unhandled exceptions revealing stack traces",
+      "null pointer dereference without graceful handling",
+      "uncaught async errors crashing the server",
+      "silent catch blocks swallowing errors",
+      "resource leaks on exception paths",
+      "integer overflow without bounds checking"
+    ]
+  }
+}

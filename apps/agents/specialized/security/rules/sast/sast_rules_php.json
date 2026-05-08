@@ -1,0 +1,71 @@
+{
+  "language": "php",
+  "extensions": [
+    ".php"
+  ],
+  "rules": [
+    {
+      "rule_id": "PHP_EVAL",
+      "description": "eval() executes arbitrary PHP code",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "\\beval\\s*\\("
+    },
+    {
+      "rule_id": "PHP_SHELL_EXEC",
+      "description": "Shell execution functions with user input enable command injection",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "\\b(?:shell_exec|exec|system|passthru|popen|proc_open)\\s*\\("
+    },
+    {
+      "rule_id": "PHP_SQL_INJECT",
+      "description": "SQL query built with superglobal input enables SQL injection",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "(?:mysql_query|mysqli_query|pg_query)\\s*\\([^;]*\\$_(?:GET|POST|REQUEST|COOKIE)"
+    },
+    {
+      "rule_id": "PHP_FILE_INCLUDE",
+      "description": "Dynamic file inclusion with user input enables remote/local file inclusion (RFI/LFI)",
+      "owasp": "A01:2025",
+      "severity": "HIGH",
+      "pattern": "\\b(?:include|require|include_once|require_once)\\s*\\(\\s*\\$_(?:GET|POST|REQUEST)"
+    },
+    {
+      "rule_id": "PHP_UNSERIALIZE_USER",
+      "description": "unserialize() on user input can lead to arbitrary code execution",
+      "owasp": "A08:2025",
+      "severity": "HIGH",
+      "pattern": "\\bunserialize\\s*\\(\\s*\\$_(?:GET|POST|REQUEST|COOKIE)"
+    },
+    {
+      "rule_id": "PHP_XSS_ECHO",
+      "description": "Echoing superglobal directly enables reflected XSS",
+      "owasp": "A05:2025",
+      "severity": "HIGH",
+      "pattern": "\\becho\\s+\\$_(?:GET|POST|REQUEST|COOKIE)"
+    },
+    {
+      "rule_id": "PHPINFO_DISCLOSURE",
+      "description": "phpinfo() exposes sensitive server configuration",
+      "owasp": "A02:2025",
+      "severity": "MEDIUM",
+      "pattern": "\\bphpinfo\\s*\\(\\s*\\)"
+    },
+    {
+      "rule_id": "PHP_EXTRACT_USER",
+      "description": "extract() on superglobals enables variable injection",
+      "owasp": "A01:2025",
+      "severity": "HIGH",
+      "pattern": "\\bextract\\s*\\(\\s*\\$_(?:GET|POST|REQUEST)"
+    },
+    {
+      "rule_id": "PHP_MD5_PASSWORD",
+      "description": "md5() is not suitable for password hashing — use password_hash()",
+      "owasp": "A04:2025",
+      "severity": "MEDIUM",
+      "pattern": "\\bmd5\\s*\\(\\s*\\$"
+    }
+  ]
+}
