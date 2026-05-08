@@ -719,6 +719,37 @@ def _parse_manifest_line(file_name: str, content: str) -> tuple[str, str] | None
         m = re.search(r'"([a-zA-Z0-9_.\-]+)\s*[<>=!~]{1,2}\s*([0-9][0-9A-Za-z_.\-]*)"', content)
         if m:
             return m.group(1).lower(), m.group(2)
+    elif file_name == "yarn.lock":
+        # "package-name@^1.2.3":  (resolved block has exact version on next line, but
+        # diff lines are independent — match the header line which pins a semver range)
+        m = re.match(r'^"?([@a-zA-Z0-9_./\-]+)@[^"]*"?:$', content.strip())
+        if m:
+            # version line immediately follows in the lockfile: "  version \"1.2.3\""
+            # We don't have the next line here, so skip — caller sees None and moves on.
+            return None
+        # resolved/version lines: '  version "1.2.3"'
+        # yarn.lock pairs a package header with its pinned version; since we process
+        # line-by-line we can't correlate them here. Skip for now.
+        return None
+    elif file_name in ("Gemfile", "Gemfile.lock"):
+        # Gemfile:      gem 'rails', '~> 7.0.4'  or  gem "rails", ">= 6"
+        m = re.search(r"""gem\s+['"]([a-zA-Z0-9_.\-]+)['"]\s*,\s*['"][=~><]{0,2}\s*([0-9][a-zA-Z0-9._\-]*)['"]""", content)
+        if m:
+            return m.group(1).lower(), m.group(2)
+        # Gemfile.lock: "    rails (7.0.4)"
+        m = re.match(r"^\s{4}([a-zA-Z0-9_.\-]+)\s+\(([0-9][a-zA-Z0-9._\-]*)\)$", content)
+        if m:
+            return m.group(1).lower(), m.group(2)
+    elif file_name == "go.mod":
+        # require github.com/foo/bar v1.2.3
+        m = re.match(r"^\s*(?:require\s+)?([a-zA-Z0-9_.\-/]+)\s+v([0-9][a-zA-Z0-9._\-]*)", content)
+        if m:
+            return m.group(1).lower(), m.group(2)
+    elif file_name == "go.sum":
+        # github.com/foo/bar v1.2.3 h1:...
+        m = re.match(r"^([a-zA-Z0-9_.\-/]+)\s+v([0-9][a-zA-Z0-9._\-]*)\s+h1:", content)
+        if m:
+            return m.group(1).lower(), m.group(2)
     return None
 
 
