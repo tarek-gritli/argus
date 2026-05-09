@@ -138,6 +138,28 @@ class TestFormatFindings:
         result = _format_findings(findings)
         assert result.index("Critical") < result.index("Low")
 
+    def test_format_unknown_agent_findings_are_not_dropped(self):
+        from orchestrator.coordinator import _format_findings
+        from shared.schemas.finding import FindingSchema
+
+        findings = [
+            FindingSchema(
+                agent="performance",
+                severity="medium",
+                file="f.py",
+                line_start=1,
+                line_end=1,
+                title="Slow query",
+                description="N+1 detected",
+                suggestion=None,
+                confidence=0.7,
+                fix=None,
+            ),
+        ]
+        result = _format_findings(findings)
+        assert "Slow query" in result
+        assert "Performance" in result
+
 
 class TestPatchToSource:
     def test_strips_hunk_headers(self):

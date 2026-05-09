@@ -45,9 +45,11 @@ def _format_findings(findings: list[FindingSchema]) -> str:
 
     lines = ["## Argus Code Review\n"]
 
-    for agent_key in ("security", "quality", "testing"):
-        if agent_key not in by_agent:
-            continue
+    _AGENT_ORDER = ("security", "quality", "testing")
+    ordered = [k for k in _AGENT_ORDER if k in by_agent]
+    ordered += [k for k in by_agent if k not in _AGENT_ORDER]
+
+    for agent_key in ordered:
         label = _AGENT_LABELS.get(agent_key, agent_key.title())
         lines.append(f"### {label} Review\n")
         for severity in _SEVERITY_ORDER:
