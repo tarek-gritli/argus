@@ -30,8 +30,8 @@ def run(payload: dict) -> None:
         findings = run_review(files=files, diff=diff, pr_payload=pr_payload)
         post_issue_comment(pr, _format_findings(findings))
 
-    except Exception as e:
-        logger.error("Orchestration failed: %s", e)
+    except Exception:
+        logger.exception("Orchestration failed")
         raise
 
 
