@@ -58,6 +58,46 @@ def test_post_issue_comment_calls_create():
     mock_pr.create_issue_comment.assert_called_once_with("## Review\nAll good.")
 
 
+def test_get_pr_diff_concatenates_patches():
+    from unittest.mock import MagicMock
+
+    from integrations.github.pr import get_pr_diff
+
+    file1 = MagicMock()
+    file1.filename = "src/foo.py"
+    file1.patch = "@@ -1,3 +1,4 @@\n+new line\n context"
+
+    file2 = MagicMock()
+    file2.filename = "src/bar.py"
+    file2.patch = "@@ -0,0 +1 @@\n+hello"
+
+    pr = MagicMock()
+    pr.get_files.return_value = [file1, file2]
+
+    diff = get_pr_diff(pr)
+    assert "--- a/src/foo.py" in diff
+    assert "+++ b/src/foo.py" in diff
+    assert "+new line" in diff
+    assert "--- a/src/bar.py" in diff
+    assert "+hello" in diff
+
+
+def test_get_pr_diff_skips_files_without_patch():
+    from unittest.mock import MagicMock
+
+    from integrations.github.pr import get_pr_diff
+
+    file1 = MagicMock()
+    file1.filename = "image.png"
+    file1.patch = None
+
+    pr = MagicMock()
+    pr.get_files.return_value = [file1]
+
+    diff = get_pr_diff(pr)
+    assert diff == ""
+
+
 def test_post_review_comment_calls_create_review_comment():
     """post_review_comment posts inline comment on correct file and line."""
     mock_pr = _make_mock_pr()
