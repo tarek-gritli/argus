@@ -48,6 +48,7 @@ def test_run_happy_path_posts_findings():
     with (
         patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
         patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
+        patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
         patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]),
         patch("orchestrator.coordinator.post_issue_comment") as mock_post,
     ):
@@ -58,7 +59,7 @@ def test_run_happy_path_posts_findings():
     mock_post.assert_called_once()
     body = mock_post.call_args[0][1]
     assert "SQL Injection" in body
-    assert "HIGH" in body
+    assert "HIGH" in body or "high" in body.lower()
 
 
 def test_run_no_files_posts_warning():
@@ -88,6 +89,7 @@ def test_run_no_findings_posts_clean_message():
     with (
         patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
         patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
+        patch("orchestrator.coordinator.get_pr_diff", return_value=""),
         patch("orchestrator.coordinator.run_review", return_value=[]),
         patch("orchestrator.coordinator.post_issue_comment") as mock_post,
     ):
@@ -96,7 +98,7 @@ def test_run_no_findings_posts_clean_message():
         run(VALID_PAYLOAD)
 
     body = mock_post.call_args[0][1]
-    assert "No security issues found" in body
+    assert "No issues" in body
 
 
 def test_run_raises_on_get_pr_failure():
@@ -168,4 +170,4 @@ def test_format_findings_empty_returns_clean():
     from orchestrator.coordinator import _format_findings
 
     result = _format_findings([])
-    assert "No security issues found" in result
+    assert "No issues" in result

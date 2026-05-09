@@ -1,23 +1,24 @@
 import logging
 
-from integrations.github import PullRequestPayload, get_pr, get_pr_files, post_issue_comment
+from integrations.github import PullRequestPayload, get_pr, get_pr_diff, get_pr_files, post_issue_comment
 from shared.schemas import FindingSchema
 
 from .graph import run_review
 
 logger = logging.getLogger(__name__)
 
+_AGENT_LABELS = {
+    "security": "Security",
+    "quality": "Quality",
+    "testing": "Testing",
+}
+
+_SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"]
+
 
 def run(payload: dict) -> None:
-    """
-    Orchestrate the review pipeline: fetch PR files → analyze → post findings.
-
-    Args:
-        payload: dict matching PullRequestPayload schema
-    """
     try:
         pr_payload = PullRequestPayload(**payload)
-
         pr = get_pr(pr_payload.repo_full_name, pr_payload.pr_number, pr_payload.installation_id)
         files = get_pr_files(pr)
 
@@ -25,38 +26,40 @@ def run(payload: dict) -> None:
             post_issue_comment(pr, "⚠️ No changes detected in this PR.")
             return
 
-        findings = run_review(files, pr_payload)
-
-        comment_body = _format_findings(findings)
-        post_issue_comment(pr, comment_body)
+        diff = get_pr_diff(pr)
+        findings = run_review(files=files, diff=diff, pr_payload=pr_payload)
+        post_issue_comment(pr, _format_findings(findings))
 
     except Exception as e:
-        msg = f"Orchestration failed: {e}"
-        logger.error(msg)
+        logger.error("Orchestration failed: %s", e)
         raise
 
 
 def _format_findings(findings: list[FindingSchema]) -> str:
-    """Format findings as a Markdown comment."""
     if not findings:
-        return "✅ No security issues found."
+        return "✅ No issues found across all review agents."
 
-    lines = ["## 🔒 Security Review\n"]
+    by_agent: dict[str, dict[str, list[FindingSchema]]] = {}
+    for f in findings:
+        by_agent.setdefault(f.agent, {}).setdefault(f.severity, []).append(f)
 
-    by_severity: dict[str, list[FindingSchema]] = {}
-    for finding in findings:
-        by_severity.setdefault(finding.severity, []).append(finding)
+    lines = ["## Argus Code Review\n"]
 
-    for severity in ["critical", "high", "medium", "low", "info"]:
-        if severity not in by_severity:
+    for agent_key in ("security", "quality", "testing"):
+        if agent_key not in by_agent:
             continue
-
-        lines.append(f"### {severity.upper()}\n")
-        for finding in by_severity[severity]:
-            lines.append(f"**{finding.title}** ({finding.file}:{finding.line_start}-{finding.line_end})\n")
-            lines.append(f"{finding.description}\n")
-            if finding.suggestion:
-                lines.append(f"> Suggestion: {finding.suggestion}\n")
-            lines.append("")
+        label = _AGENT_LABELS.get(agent_key, agent_key.title())
+        lines.append(f"### {label} Review\n")
+        for severity in _SEVERITY_ORDER:
+            bucket = by_agent[agent_key].get(severity, [])
+            if not bucket:
+                continue
+            lines.append(f"#### {severity.upper()}\n")
+            for finding in bucket:
+                lines.append(f"**{finding.title}** (`{finding.file}:{finding.line_start}-{finding.line_end}`)\n")
+                lines.append(f"{finding.description}\n")
+                if finding.suggestion:
+                    lines.append(f"> Suggestion: {finding.suggestion}\n")
+                lines.append("")
 
     return "\n".join(lines)
