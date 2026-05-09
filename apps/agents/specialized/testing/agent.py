@@ -28,7 +28,7 @@ from shared.schemas.finding import FindingSchema
 from .prompts.system import TESTING_SYSTEM_PROMPT
 from .schemas import AgentInput
 from .tools.coverage_analyzer import run_coverage_analysis
-from .tools.test_patterns import TestPatternResult, scan_test_patterns
+from .tools.test_patterns import TestPatternHit, TestPatternResult, scan_test_patterns
 from .validator import validate_findings
 
 logger = logging.getLogger(__name__)
@@ -169,7 +169,7 @@ def run_testing_agent(input: AgentInput) -> list[FindingSchema]:
     )
 
     # Step 2b: Anti-pattern scan (test files only)
-    all_pattern_hits: list[Any] = []
+    all_pattern_hits: list[TestPatternHit] = []
     for file_path, source in input.changed_files.items():
         if not _is_test_file(file_path):
             continue
@@ -181,10 +181,11 @@ def run_testing_agent(input: AgentInput) -> list[FindingSchema]:
     pattern_context = combined_patterns.to_prompt_context()
 
     # Step 3: LLM analysis
+    system_prompt = TESTING_SYSTEM_PROMPT
     user_prompt = _build_user_prompt(input, coverage_context, pattern_context)
 
     logger.info("Calling Claude for testing review...")
-    raw_response = _call_claude(TESTING_SYSTEM_PROMPT, user_prompt)
+    raw_response = _call_claude(system_prompt, user_prompt)
     logger.debug("Raw LLM response length: %d chars", len(raw_response))
 
     # Step 4: Parse + self-validate
