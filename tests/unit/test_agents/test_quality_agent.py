@@ -7,10 +7,8 @@ Run with:
 
 from __future__ import annotations
 
-import os
+from unittest.mock import patch
 
-import anthropic
-import pytest
 from specialized.quality.schemas import AgentInput
 from specialized.quality.tools.ast_analyzer import analyze_file, run_static_analysis
 from specialized.quality.tools.grep_patterns import scan_diff_patterns
@@ -285,17 +283,41 @@ index 0000000..2222222 100644
 
 
 # ---------------------------------------------------------------------------
-# Integration smoke test (requires ANTHROPIC_API_KEY — skip in CI)
+# Full pipeline test (LLM mocked)
 # ---------------------------------------------------------------------------
 
+_MOCK_LLM_RESPONSE = """
+[
+  {
+    "agent": "quality",
+    "severity": "high",
+    "file": "src/service.py",
+    "line_start": 8,
+    "line_end": 20,
+    "title": "Function does too many things",
+    "description": "do_everything handles data fetching, filtering, and result building in one deeply nested block.",
+    "suggestion": "Extract filtering and result building into dedicated helpers.",
+    "confidence": 0.88,
+    "fix": null
+  },
+  {
+    "agent": "quality",
+    "severity": "low",
+    "file": "src/service.py",
+    "line_start": 22,
+    "line_end": 22,
+    "title": "Debug print left in code",
+    "description": "print() call in process() will produce output in production.",
+    "suggestion": "Replace with a logger call or remove.",
+    "confidence": 0.95,
+    "fix": null
+  }
+]
+"""
 
-@pytest.mark.integration
-@pytest.mark.skipif(
-    not os.getenv("ANTHROPIC_API_KEY"),
-    reason="Requires ANTHROPIC_API_KEY to call Claude",
-)
-def test_agent_end_to_end():
-    """Smoke test: runs the full agent pipeline on a synthetic diff."""
+
+def test_agent_pipeline():
+    """Exercises the full agent pipeline with a mocked LLM — no API calls."""
     from specialized.quality.agent import run_quality_agent
 
     messy_source = """\
@@ -325,13 +347,7 @@ def process(x):
     return x * 3600
 """
 
-    diff = f"""\
-diff --git a/src/service.py b/src/service.py
-index 0000000..1111111 100644
---- /dev/null
-+++ b/src/service.py
-@@ -0,0 +1,{len(messy_source.splitlines())} @@
-""" + "\n".join(f"+{line}" for line in messy_source.splitlines())
+    diff = f"diff --git a/src/service.py b/src/service.py\nindex 0000000..1111111 100644\n--- /dev/null\n+++ b/src/service.py\n@@ -0,0 +1,{len(messy_source.splitlines())} @@\n" + "\n".join(f"+{line}" for line in messy_source.splitlines())
 
     agent_input = AgentInput(
         diff=diff,
@@ -343,21 +359,12 @@ index 0000000..1111111 100644
         pr_title="Add service module",
     )
 
-    try:
+    with patch("specialized.quality.agent._call_claude", return_value=_MOCK_LLM_RESPONSE):
         findings = run_quality_agent(agent_input)
-    except anthropic.APIConnectionError as exc:
-        pytest.skip(f"Skipping integration test: Anthropic API not reachable ({exc})")
-    except anthropic.APIStatusError as exc:
-        message = str(exc).lower()
-        skippable_markers = (
-            "credit balance is too low",
-            "billing",
-            "invalid api key",
-            "authentication",
-            "rate limit",
-        )
-        if exc.status_code in {400, 401, 402, 403, 429} or any(marker in message for marker in skippable_markers):
-            pytest.skip(f"Skipping integration test due to Anthropic account/API status: {exc}")
-        raise
+
     assert isinstance(findings, list)
     assert len(findings) >= 1
+    assert all(f.agent == "quality" for f in findings)
+    assert all(f.confidence >= 0.5 for f in findings)
+    severities = {f.severity for f in findings}
+    assert severities <= {"critical", "high", "medium", "low", "info"}
