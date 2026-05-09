@@ -157,12 +157,9 @@ def _find_unused_imports(tree: ast.AST, source: str) -> list[str]:
                 name = alias.asname or alias.name
                 imported_names[name] = f"{node.module}.{alias.name}"
 
-    used = set(re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\b", source))
-    return [
-        full
-        for local, full in imported_names.items()
-        if local not in used or source.count(local) <= 1  # only in import line
-    ]
+    non_import_lines = "\n".join(ln for ln in source.splitlines() if not re.match(r"^\s*(import |from )", ln))
+    used = set(re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\b", non_import_lines))
+    return [full for local, full in imported_names.items() if local not in used]
 
 
 # ---------------------------------------------------------------------------

@@ -19,10 +19,10 @@ def run_duplication_checks(context: dict[str, Any]) -> list[FindingSchema]:
 
     for file_metrics in static_result.files:
         duplicate_count = len(file_metrics.duplicate_block_hashes)
-        if duplicate_count == 0 or file_metrics.parse_error:
+        if file_metrics.parse_error or duplicate_count == 0:
             continue
 
-        line_anchor = file_metrics.functions[0].line_start if file_metrics.functions else 1
+        line_anchor = 1
         severity = "high" if duplicate_count >= 3 else "medium"
         confidence = score_from_count(
             count=duplicate_count,

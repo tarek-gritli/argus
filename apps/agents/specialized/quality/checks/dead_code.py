@@ -18,10 +18,10 @@ def run_dead_code_checks(context: dict[str, Any]) -> list[FindingSchema]:
 
     if isinstance(static_result, StaticAnalysisResult):
         for file_metrics in static_result.files:
-            if not file_metrics.unused_imports or file_metrics.parse_error:
+            if file_metrics.parse_error or not file_metrics.unused_imports:
                 continue
 
-            line_anchor = file_metrics.functions[0].line_start if file_metrics.functions else 1
+            line_anchor = 1
             imports_preview = ", ".join(file_metrics.unused_imports[:3])
             unused_import_confidence = score_from_count(
                 count=len(file_metrics.unused_imports),
