@@ -2,20 +2,17 @@
 Tests for the testing agent.
 
 Run with:
-    uv run pytest tests/unit/agents/testing/ -v
+    uv run pytest tests/unit/test_agents/test_testing_agent.py -v
 """
 
 from __future__ import annotations
 
-import os
+from unittest.mock import patch
 
-import anthropic
-import pytest
-
-from ..schemas import AgentInput
-from ..tools.coverage_analyzer import analyze_file, run_coverage_analysis
-from ..tools.test_patterns import scan_test_patterns
-from ..validator import validate_findings
+from specialized.testing.schemas import AgentInput
+from specialized.testing.tools.coverage_analyzer import analyze_file, run_coverage_analysis
+from specialized.testing.tools.test_patterns import scan_test_patterns
+from specialized.testing.validator import validate_findings
 
 # ---------------------------------------------------------------------------
 # Coverage analyzer tests
@@ -41,7 +38,6 @@ class PaymentService:
         assert "process_payment" in names
         assert "PaymentService" in names
         assert "charge" in names
-        # Private helper should still be collected (agent filters it later)
         assert "_internal_helper" in names
 
     def test_skips_dunder_methods(self):
@@ -125,12 +121,8 @@ def test_endpoint(client):
         assert metrics.parse_error is not None
 
     def test_untested_symbols_detects_gap(self):
-        source_files = {
-            "src/service.py": "def process_payment(amount): pass",
-        }
-        result = run_coverage_analysis(source_files)
+        result = run_coverage_analysis({"src/service.py": "def process_payment(amount): pass"})
         untested = result.untested_symbols
-        # No test file in diff → everything is untested
         assert any(s.name == "process_payment" for s, _ in untested)
 
     def test_untested_symbols_clears_when_referenced(self):
@@ -144,7 +136,6 @@ def test_process_payment():
         }
         result = run_coverage_analysis(files)
         untested = result.untested_symbols
-        # process_payment is referenced in the test body
         assert not any(s.name == "process_payment" for s, _ in untested)
 
     def test_prompt_context_warns_no_test_files(self):
@@ -153,9 +144,7 @@ def test_process_payment():
         assert "NONE" in context or "no test files" in context.lower()
 
     def test_prompt_context_includes_symbol_names(self):
-        result = run_coverage_analysis(
-            {"src/foo.py": "def my_function(): pass\ndef another(): pass"}
-        )
+        result = run_coverage_analysis({"src/foo.py": "def my_function(): pass\ndef another(): pass"})
         context = result.to_prompt_context()
         assert "my_function" in context
 
@@ -185,13 +174,23 @@ class TestPatternScanner:
         assert "sleep_in_test" in names
 
     def test_detects_bare_except_in_test(self):
-        diff = (
-            "@@ -1,3 +1,5 @@\n def test_x():\n+    try:\n"
-            "+        do_thing()\n+    except Exception:\n+        pass\n"
-        )
+        diff = "@@ -1,3 +1,5 @@\n def test_x():\n+    try:\n+        do_thing()\n+    except Exception:\n+        pass\n"
         result = scan_test_patterns(diff, "tests/test_x.py")
         names = [h.pattern_name for h in result.hits]
         assert "bare_except_in_test" in names
+
+    def test_detects_bare_except_no_type(self):
+        diff = "@@ -1,3 +1,4 @@\n def test_x():\n+    try:\n+        do_thing()\n+    except:\n"
+        result = scan_test_patterns(diff, "tests/test_x.py")
+        names = [h.pattern_name for h in result.hits]
+        assert "bare_except_in_test" in names
+
+    def test_no_false_positive_on_specific_except(self):
+        diff = "@@ -1,3 +1,4 @@\n def test_x():\n+    try:\n+        do_thing()\n+    except ValueError:\n"
+        result = scan_test_patterns(diff, "tests/test_x.py")
+        names = [h.pattern_name for h in result.hits]
+        assert "bare_except_in_test" not in names
+        assert "silent_except_pass" not in names
 
     def test_detects_todo_in_test(self):
         diff = "@@ -1,2 +1,3 @@\n def test_x():\n+    # TODO: add real assertion\n+    pass\n"
@@ -224,7 +223,6 @@ class TestPatternScanner:
     def test_no_false_positive_on_context_lines(self):
         diff = "@@ -1,2 +1,2 @@\n time.sleep(1)\n assert True\n"
         result = scan_test_patterns(diff, "tests/test_x.py")
-        # These are context lines (no leading +), should not be flagged
         assert result.hits == []
 
     def test_prompt_context_renders_empty(self):
@@ -248,10 +246,7 @@ class TestValidator:
             "line_end": 30,
             "title": "process_payment has no test for negative amount",
             "description": "The function accepts negative amounts without raising an error.",
-            "suggestion": (
-                "Add test_process_payment_raises_on_negative_amount that calls "
-                "process_payment(-1) and asserts ValueError is raised."
-            ),
+            "suggestion": ("Add test_process_payment_raises_on_negative_amount that calls process_payment(-1) and asserts ValueError is raised."),
             "confidence": 0.9,
             "fix": None,
         }
@@ -285,7 +280,6 @@ class TestValidator:
         assert result == []
 
     def test_speculative_finding_penalized_when_tests_exist(self):
-        # "no test coverage" type claim with test files in diff → confidence penalized
         finding = self._make_finding(
             title="No test coverage for this module",
             description="There is no test coverage for this module",
@@ -324,23 +318,90 @@ class TestValidator:
         result = validate_findings([self._make_finding(severity="BLOCKER")])
         assert result[0]["severity"] == "medium"
 
+    def test_non_dict_item_dropped_without_crash(self):
+        result = validate_findings(["not a dict", 42, None, self._make_finding()])  # type: ignore[list-item]
+        assert len(result) == 1
+
+    def test_string_line_numbers_coerced(self):
+        result = validate_findings([self._make_finding(line_start="10", line_end="30")])
+        assert len(result) == 1
+
+    def test_non_numeric_confidence_dropped_without_crash(self):
+        result = validate_findings([self._make_finding(confidence="high")])
+        assert result == []
+
+    def test_none_confidence_dropped_without_crash(self):
+        result = validate_findings([self._make_finding(confidence=None)])
+        assert result == []
+
 
 # ---------------------------------------------------------------------------
-# Integration smoke test (requires ANTHROPIC_API_KEY)
+# _extract_file_diff tests
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
-@pytest.mark.skipif(
-    not os.getenv("ANTHROPIC_API_KEY"),
-    reason="Requires ANTHROPIC_API_KEY to call Claude",
-)
-def test_agent_end_to_end():
-    from ..agent import run_testing_agent
+class TestExtractFileDiff:
+    _MULTI_FILE_DIFF = """\
+diff --git a/src/payments.py b/src/payments.py
+index 0000000..1111111 100644
+--- a/src/payments.py
++++ b/src/payments.py
+@@ -1,1 +1,2 @@
++x = 1
+diff --git a/tests/test_payments.py b/tests/test_payments.py
+index 0000000..2222222 100644
+--- a/tests/test_payments.py
++++ b/tests/test_payments.py
+@@ -1,1 +1,2 @@
++def test_x(): pass
+"""
 
-    source = '''\
+    def test_extracts_first_file(self):
+        from specialized.testing.agent import _extract_file_diff
+
+        result = _extract_file_diff(self._MULTI_FILE_DIFF, "src/payments.py")
+        assert "src/payments.py" in result
+        assert "test_payments.py" not in result
+        assert "+x = 1" in result
+
+    def test_extracts_second_file(self):
+        from specialized.testing.agent import _extract_file_diff
+
+        result = _extract_file_diff(self._MULTI_FILE_DIFF, "tests/test_payments.py")
+        assert "test_payments.py" in result
+        assert "src/payments.py" not in result
+        assert "+def test_x(): pass" in result
+
+    def test_missing_file_returns_empty(self):
+        from specialized.testing.agent import _extract_file_diff
+
+        result = _extract_file_diff(self._MULTI_FILE_DIFF, "missing.py")
+        assert result == ""
+
+
+# ---------------------------------------------------------------------------
+# Full pipeline test (LLM mocked)
+# ---------------------------------------------------------------------------
+
+_MOCK_LLM_RESPONSE = """
+[
+  {
+    "agent": "testing",
+    "severity": "high",
+    "file": "src/payments.py",
+    "line_start": 1,
+    "line_end": 10,
+    "title": "apply_discount has no test for out-of-range discount",
+    "description": "The function raises ValueError for discounts outside 0-100, but no test covers this edge case.",
+    "suggestion": "Add test_apply_discount_raises_on_invalid_pct that calls apply_discount(100, -1) and asserts ValueError.",
+    "confidence": 0.88,
+    "fix": null
+  }
+]
+"""
+
+_SOURCE = """\
 def process_payment(amount: float, user_id: str) -> dict:
-    """Process a payment for a user."""
     if not user_id:
         raise ValueError("user_id required")
     if amount <= 0:
@@ -348,42 +409,35 @@ def process_payment(amount: float, user_id: str) -> dict:
     return {"status": "ok", "amount": amount, "user_id": user_id}
 
 def apply_discount(price: float, discount_pct: float) -> float:
-    """Apply a percentage discount to a price."""
     if discount_pct < 0 or discount_pct > 100:
         raise ValueError("discount must be 0-100")
     return price * (1 - discount_pct / 100)
-'''
+"""
 
-    test_source = """\
+_TEST_SOURCE = """\
 def test_process_payment_happy_path():
     result = process_payment(100.0, "user_1")
     assert result["status"] == "ok"
 """
 
+
+def test_agent_pipeline():
+    """Exercises the full agent pipeline with a mocked LLM — no API calls."""
+    from specialized.testing.agent import run_testing_agent
+
     diff = (
-        f"""\
-diff --git a/src/payments.py b/src/payments.py
-index 0000000..1111111 100644
---- /dev/null
-+++ b/src/payments.py
-@@ -0,0 +1,{len(source.splitlines())} @@
-"""
-        + "\n".join(f"+{line}" for line in source.splitlines())
-        + f"""
-diff --git a/tests/test_payments.py b/tests/test_payments.py
-index 0000000..2222222 100644
---- /dev/null
-+++ b/tests/test_payments.py
-@@ -0,0 +1,{len(test_source.splitlines())} @@
-"""
-        + "\n".join(f"+{line}" for line in test_source.splitlines())
+        f"diff --git a/src/payments.py b/src/payments.py\n"
+        f"index 0000000..1111111 100644\n--- /dev/null\n+++ b/src/payments.py\n"
+        f"@@ -0,0 +1,{len(_SOURCE.splitlines())} @@\n" + "\n".join(f"+{line}" for line in _SOURCE.splitlines()) + f"\ndiff --git a/tests/test_payments.py b/tests/test_payments.py\n"
+        f"index 0000000..2222222 100644\n--- /dev/null\n+++ b/tests/test_payments.py\n"
+        f"@@ -0,0 +1,{len(_TEST_SOURCE.splitlines())} @@\n" + "\n".join(f"+{line}" for line in _TEST_SOURCE.splitlines())
     )
 
     agent_input = AgentInput(
         diff=diff,
         changed_files={
-            "src/payments.py": source,
-            "tests/test_payments.py": test_source,
+            "src/payments.py": _SOURCE,
+            "tests/test_payments.py": _TEST_SOURCE,
         },
         repo_full_name="test-org/test-repo",
         pr_number=2,
@@ -392,25 +446,12 @@ index 0000000..2222222 100644
         pr_title="Add payment processing",
     )
 
-    try:
+    with patch("specialized.testing.agent._call_claude", return_value=_MOCK_LLM_RESPONSE):
         findings = run_testing_agent(agent_input)
-    except anthropic.APIConnectionError as exc:
-        pytest.skip(f"Skipping integration test: Anthropic API not reachable ({exc})")
-    except anthropic.APIStatusError as exc:
-        message = str(exc).lower()
-        skippable_markers = (
-            "credit balance is too low",
-            "billing",
-            "invalid api key",
-            "authentication",
-            "rate limit",
-        )
-        if exc.status_code in {400, 401, 402, 403, 429} or any(
-            marker in message for marker in skippable_markers
-        ):
-            pytest.skip(f"Skipping integration test due to Anthropic account/API status: {exc}")
-        raise
-    print(findings)
+
     assert isinstance(findings, list)
-    # Should flag missing tests for negative amounts, empty user_id, apply_discount
     assert len(findings) >= 1
+    assert all(f.agent == "testing" for f in findings)
+    assert all(f.confidence >= 0.5 for f in findings)
+    severities = {f.severity for f in findings}
+    assert severities <= {"critical", "high", "medium", "low", "info"}

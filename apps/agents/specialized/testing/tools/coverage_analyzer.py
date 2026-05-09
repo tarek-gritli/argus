@@ -95,10 +95,7 @@ class CoverageAnalysisResult:
                 lines.append(f"  {sf.file}: [parse error] {sf.parse_error}")
                 continue
             sym_names = [s.name for s in sf.public_symbols if not s.name.startswith("_")]
-            lines.append(
-                f"  {sf.file}: {len(sf.public_symbols)} public symbols "
-                f"({', '.join(sym_names[:8])}{'...' if len(sym_names) > 8 else ''})"
-            )
+            lines.append(f"  {sf.file}: {len(sf.public_symbols)} public symbols ({', '.join(sym_names[:8])}{'...' if len(sym_names) > 8 else ''})")
 
         # Test file summary
         lines.append("\nTest files changed:")
@@ -109,16 +106,9 @@ class CoverageAnalysisResult:
                 if tf.parse_error:
                     lines.append(f"  {tf.file}: [parse error] {tf.parse_error}")
                     continue
-                lines.append(
-                    f"  {tf.file}: {len(tf.test_functions)} test functions, "
-                    f"fixtures={'yes' if tf.has_fixtures else 'no'}, "
-                    f"parametrize={'yes' if tf.has_parametrize else 'no'}"
-                )
+                lines.append(f"  {tf.file}: {len(tf.test_functions)} test functions, fixtures={'yes' if tf.has_fixtures else 'no'}, parametrize={'yes' if tf.has_parametrize else 'no'}")
                 for test in tf.test_functions:
-                    lines.append(
-                        f"    {test.name}: {test.assertion_count} assertions "
-                        f"({', '.join(set(test.assertion_types)) or 'none'})"
-                    )
+                    lines.append(f"    {test.name}: {test.assertion_count} assertions ({', '.join(set(test.assertion_types)) or 'none'})")
 
         # Untested symbols
         untested = self.untested_symbols
@@ -207,9 +197,7 @@ _ASSERTION_METHODS = {
 }
 
 
-def _analyze_test_function(
-    node: ast.FunctionDef | ast.AsyncFunctionDef, file_path: str
-) -> TestFunction:
+def _analyze_test_function(node: ast.FunctionDef | ast.AsyncFunctionDef, file_path: str) -> TestFunction:
     assertion_types = []
     referenced_names = set()
 

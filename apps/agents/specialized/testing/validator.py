@@ -73,6 +73,10 @@ def validate_findings(
     }
 
     for finding in raw_findings:
+        if not isinstance(finding, dict):
+            logger.warning("Dropping non-dict finding: %r", finding)
+            continue
+
         # Required fields
         if not required.issubset(finding.keys()):
             missing = required - finding.keys()
@@ -86,14 +90,22 @@ def validate_findings(
         if finding["severity"] not in _VALID_SEVERITIES:
             finding["severity"] = "medium"
 
-        # Line range sanity
-        line_start = finding.get("line_start", 0)
-        line_end = finding.get("line_end", 0)
+        # Line range sanity — coerce to int to handle string values from LLM
+        try:
+            line_start = int(finding.get("line_start", 0))
+            line_end = int(finding.get("line_end", 0))
+        except (TypeError, ValueError):
+            logger.warning("Dropping finding with non-integer line range")
+            continue
         if line_start <= 0 or line_end < line_start:
             logger.warning("Dropping finding with invalid line range: %d-%d", line_start, line_end)
             continue
 
-        confidence = float(finding.get("confidence", 0))
+        try:
+            confidence = float(finding.get("confidence", 0))
+        except (TypeError, ValueError):
+            logger.warning("Dropping finding with non-numeric confidence")
+            continue
 
         # Penalize speculative "no tests anywhere" claims when test files WERE touched
         # (The agent might be right, but confidence should be lower)

@@ -34,10 +34,7 @@ class TestPatternResult:
             return "=== Test Pattern Scan: no anti-patterns detected ==="
         lines = ["=== Test Anti-Pattern Hits ==="]
         for hit in self.hits:
-            lines.append(
-                f"  {hit.file}:{hit.line} [{hit.severity}] [{hit.pattern_name}] "
-                f"{hit.matched_text[:120]}"
-            )
+            lines.append(f"  {hit.file}:{hit.line} [{hit.severity}] [{hit.pattern_name}] {hit.matched_text[:120]}")
         return "\n".join(lines)
 
 
@@ -65,17 +62,11 @@ _PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
         re.compile(r"^\+\s*(time\.sleep|asyncio\.sleep)\s*\("),
         "medium",
     ),
-    # Broad exception catch in test — swallows real failures
+    # Broad/bare exception catch in test — swallows real failures
     (
         "bare_except_in_test",
-        re.compile(r"^\+\s*except\s*(\(Exception\)|Exception|BaseException)?\s*:"),
+        re.compile(r"^\+\s*except\s*(\(Exception\)|Exception|BaseException|)\s*:"),
         "high",
-    ),
-    # pass in except block — silently ignores failures
-    (
-        "silent_except_pass",
-        re.compile(r"^\+\s*except.*:\s*$"),
-        "medium",
     ),
     # Mocking the thing under test itself
     (
@@ -107,9 +98,7 @@ def _find_assertionless_tests(diff: str, file_path: str) -> list[TestPatternHit]
     fn_added_lines: list[str] = []
 
     _fn_re = re.compile(r"^\+\s*(?:async\s+)?def\s+(test\w*)\s*\(")
-    _assert_re = re.compile(
-        r"\b(assert|assertEqual|assertTrue|assertFalse|assertRaises|assertIn|assertIsNone)\b"
-    )
+    _assert_re = re.compile(r"\b(assert|assertEqual|assertTrue|assertFalse|assertRaises|assertIn|assertIsNone)\b")
     _indent_re = re.compile(r"^\+(\s+)")
 
     for raw in lines:
@@ -124,9 +113,7 @@ def _find_assertionless_tests(diff: str, file_path: str) -> list[TestPatternHit]
                             file=file_path,
                             line=fn_start_line,
                             pattern_name="test_without_assertion",
-                            matched_text=(
-                                f"def {in_test_fn}(...) — no assertion found in added lines"
-                            ),
+                            matched_text=(f"def {in_test_fn}(...) — no assertion found in added lines"),
                             severity="high",
                         )
                     )
@@ -148,9 +135,7 @@ def _find_assertionless_tests(diff: str, file_path: str) -> list[TestPatternHit]
                                 file=file_path,
                                 line=fn_start_line,
                                 pattern_name="test_without_assertion",
-                                matched_text=(
-                                    f"def {in_test_fn}(...) — no assertion found in added lines"
-                                ),
+                                matched_text=(f"def {in_test_fn}(...) — no assertion found in added lines"),
                                 severity="high",
                             )
                         )
@@ -171,9 +156,7 @@ def _find_assertionless_tests(diff: str, file_path: str) -> list[TestPatternHit]
                                     file=file_path,
                                     line=fn_start_line,
                                     pattern_name="test_without_assertion",
-                                    matched_text=(
-                                        f"def {in_test_fn}(...) — no assertion found in added lines"
-                                    ),
+                                    matched_text=(f"def {in_test_fn}(...) — no assertion found in added lines"),
                                     severity="high",
                                 )
                             )

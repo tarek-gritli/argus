@@ -22,6 +22,8 @@ import re
 from typing import Any
 
 import anthropic
+from shared.config import get_settings
+from shared.schemas.finding import FindingSchema
 
 from .prompts.system import TESTING_SYSTEM_PROMPT
 from .schemas import AgentInput
@@ -84,7 +86,8 @@ def _build_user_prompt(
 
 
 def _call_claude(system: str, user: str) -> str:
-    client = anthropic.Anthropic()
+    settings = get_settings()
+    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     message = client.messages.create(
         model=_MODEL,
         max_tokens=_MAX_TOKENS,
@@ -123,13 +126,7 @@ def _parse_findings(raw: str) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-def _to_finding_schemas(validated: list[dict[str, Any]]) -> list[Any]:
-    try:
-        from shared.schemas.finding import FindingSchema  # type: ignore[import]
-    except ImportError:
-        logger.warning("shared.schemas.finding not available — returning raw dicts")
-        return validated  # type: ignore[return-value]
-
+def _to_finding_schemas(validated: list[dict[str, Any]]) -> list[FindingSchema]:
     schemas = []
     for f in validated:
         try:
@@ -144,7 +141,7 @@ def _to_finding_schemas(validated: list[dict[str, Any]]) -> list[Any]:
 # ---------------------------------------------------------------------------
 
 
-def run_testing_agent(input: AgentInput) -> list[Any]:
+def run_testing_agent(input: AgentInput) -> list[FindingSchema]:
     """
     Run the testing agent on a PR diff.
 
@@ -218,12 +215,12 @@ def _extract_file_diff(full_diff: str, file_path: str) -> str:
 
     for line in lines:
         if line.startswith("diff --git"):
-            in_file = file_path in line
             if in_file:
+                break
+            if file_path in line:
+                in_file = True
                 result = [line]
         elif in_file:
-            if line.startswith("diff --git") and file_path not in line:
-                break
             result.append(line)
 
     return "".join(result)
