@@ -137,3 +137,49 @@ class TestFormatFindings:
         ]
         result = _format_findings(findings)
         assert result.index("Critical") < result.index("Low")
+
+
+class TestPatchToSource:
+    def test_strips_hunk_headers(self):
+        from specialized.quality import _patch_to_source
+
+        patch = "@@ -1,3 +1,4 @@\n+def foo():\n+    return 1\n context"
+        result = _patch_to_source(patch)
+        assert "@@" not in result
+
+    def test_strips_removed_lines(self):
+        from specialized.quality import _patch_to_source
+
+        patch = "@@ -1,2 +1,2 @@\n-old_line\n+new_line"
+        result = _patch_to_source(patch)
+        assert "old_line" not in result
+        assert "new_line" in result
+
+    def test_keeps_context_lines(self):
+        from specialized.quality import _patch_to_source
+
+        patch = "@@ -1,3 +1,3 @@\n context_line\n+added\n-removed"
+        result = _patch_to_source(patch)
+        assert "context_line" in result
+
+    def test_output_is_parseable_python(self):
+        import ast
+
+        from specialized.quality import _patch_to_source
+
+        patch = "@@ -1,2 +1,3 @@\n x = 1\n+def foo(x):\n+    return x + 1"
+        source = _patch_to_source(patch)
+        ast.parse(source)  # must not raise
+
+    def test_empty_patch_returns_empty_string(self):
+        from specialized.quality import _patch_to_source
+
+        assert _patch_to_source("") == ""
+
+    def test_testing_adapter_has_same_helper(self):
+        from specialized.testing import _patch_to_source
+
+        patch = "@@ -0,0 +1,2 @@\n+def test_foo():\n+    assert True"
+        source = _patch_to_source(patch)
+        assert "def test_foo():" in source
+        assert "@@" not in source
