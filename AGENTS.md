@@ -64,9 +64,9 @@ Multi-agent AI platform that automates code review at the pull-request level.
 Deploys specialized agents in parallel, synthesizes findings into actionable feedback,
 and learns from accepted/rejected suggestions over time.
 
-**Current build phase: Phase 1**
-- API gateway + GitHub webhook handler
-- Orchestrator with one agent (Security) — full loop end-to-end only
+**Current build phase: Phase 2**
+- API gateway + GitHub webhook handler ✅
+- Orchestrator with three parallel agents (Security, Quality, Testing) — full loop end-to-end ✅
 - No auth, no billing, no multi-tenancy, no CLI, no dashboard yet
 
 ---
@@ -198,16 +198,32 @@ Agents never handle HTTP. They receive tasks from Celery only.
 apps/agents/
 ├── main.py                  # Celery worker entrypoint
 ├── orchestrator/
-│   ├── graph.py             # LangGraph graph: nodes, edges, shared state definition
-│   ├── coordinator.py       # Receives Celery task → builds graph → triggers execution
+│   ├── graph.py             # LangGraph graph: parallel fan-out to all three agents
+│   ├── coordinator.py       # Receives Celery task → fetches diff → triggers graph → posts comment
 │   ├── conflict.py          # Conflict resolution when agents disagree (Phase 3)
 │   └── __init__.py
 ├── specialized/
-│   ├── security.py          # Security agent — ONLY active agent in Phase 1
-│   ├── quality.py           # (Phase 3 — stub only)
+│   ├── security/            # Security agent — active (OWASP, secrets, CVE)
+│   │   ├── agent.py
+│   │   ├── schemas.py
+│   │   ├── osv_client.py
+│   │   ├── owasp_fetcher.py
+│   │   └── rules/
+│   ├── quality/             # Quality agent — active (complexity, duplication, dead code)
+│   │   ├── agent.py
+│   │   ├── schemas.py
+│   │   ├── checks/
+│   │   ├── prompts/
+│   │   ├── tools/
+│   │   └── validator.py
+│   ├── testing/             # Testing agent — active (coverage gaps, weak assertions)
+│   │   ├── agent.py
+│   │   ├── schemas.py
+│   │   ├── prompts/
+│   │   ├── tools/
+│   │   └── validator.py
 │   ├── best_practices.py    # (Phase 3 — stub only)
 │   ├── performance.py       # (Phase 3 — stub only)
-│   ├── testing.py           # (Phase 3 — stub only)
 │   ├── documentation.py     # (Phase 3 — stub only)
 │   └── ticket_compliance.py # (Phase 3 — stub only)
 ├── fix_engine/
@@ -226,9 +242,12 @@ apps/agents/
 4. **Self-validation** — agent checks its own output, filters false positives
 5. **Output** — structured FindingSchema JSON, nothing else
 
-### Phase 1 agent scope:
-- Only `security.py` runs
-- `coordinator.py` receives the Celery task, invokes security agent, posts findings to GitHub PR as inline comments
+### Phase 2 agent scope:
+- **Security** (`specialized/security/`) — OWASP analysis, secret detection, dependency CVE scan
+- **Quality** (`specialized/quality/`) — complexity, duplication, dead code, naming
+- **Testing** (`specialized/testing/`) — coverage gaps, weak assertions, test anti-patterns
+- All three run in parallel via LangGraph fan-out; findings are merged by a reducer and posted as a single PR comment grouped by agent, then by severity
+- `coordinator.py` fetches the PR diff via `get_pr_diff()`, builds `AgentInput` for quality and testing adapters, passes `files` + `PullRequestPayload` to the security adapter
 - Fix engine is stubbed — do not implement
 
 ---
@@ -370,7 +389,7 @@ ENV=development
 | Billing / quota enforcement | 3 |
 | GitLab integration | 2 |
 | Fix engine | 2 |
-| Agents beyond Security | 3 |
+| Additional agents (performance, best_practices, documentation, ticket_compliance) | 3 |
 | Qdrant context injection | 5 |
 | Neo4j dependency graph | 5 |
 | CLI commands | 7 |
