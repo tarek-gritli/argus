@@ -193,7 +193,7 @@ Every finding must have a decision. Be decisive — false positives erode develo
 than missed low-confidence issues.\
 """
 
-_MODEL = "claude-sonnet-4-6"
+_MODEL = "claude-haiku-4-5"
 _RULES_DIR = Path(__file__).resolve().parent / "rules"
 
 
