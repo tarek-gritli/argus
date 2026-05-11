@@ -1,8 +1,10 @@
 """
 End-to-end pipeline test: real diff → real security scanners → coordinator formats comment.
 
-GitHub API calls (get_pr, get_pr_files, post_issue_comment) are mocked so this runs
-without credentials. Everything else — scanner, reflection, adapter, formatter — is real.
+GitHub API calls (get_pr, get_pr_files, post_issue_comment, get_pr_diff) are mocked so
+this runs without credentials. Quality and testing LLM calls are also mocked — those
+agents are covered by their own unit tests. Only the security agent runs for real (its
+scanners are purely regex-based and need no credentials).
 """
 
 from unittest.mock import MagicMock, patch
@@ -78,6 +80,9 @@ def test_pipeline_detects_findings_and_posts_comment():
     with (
         patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
         patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
+        patch("orchestrator.coordinator.get_pr_diff", return_value=DIFF_WITH_FINDINGS),
+        patch("specialized.quality.agent._call_claude", return_value="[]"),
+        patch("specialized.testing.agent._call_claude", return_value="[]"),
         patch("orchestrator.coordinator.post_issue_comment") as mock_post,
     ):
         from orchestrator.coordinator import run
@@ -88,19 +93,22 @@ def test_pipeline_detects_findings_and_posts_comment():
     body: str = mock_post.call_args[0][1]
 
     assert "Security Review" in body
-    assert "No security issues found" not in body
+    assert "No issues found" not in body
     assert "Hardcoded Secret" in body
     assert any(term in body for term in ["Injection", "SUBPROCESS", "SQL"])
 
 
 def test_pipeline_clean_diff_posts_no_issues():
-    """A diff with no security issues produces the all-clear comment."""
+    """A diff with no security issues and no LLM findings produces the all-clear comment."""
     mock_pr = MagicMock()
     mock_files = _make_mock_files(DIFF_CLEAN)
 
     with (
         patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
         patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
+        patch("orchestrator.coordinator.get_pr_diff", return_value=DIFF_CLEAN),
+        patch("specialized.quality.agent._call_claude", return_value="[]"),
+        patch("specialized.testing.agent._call_claude", return_value="[]"),
         patch("orchestrator.coordinator.post_issue_comment") as mock_post,
     ):
         from orchestrator.coordinator import run
@@ -109,7 +117,7 @@ def test_pipeline_clean_diff_posts_no_issues():
 
     mock_post.assert_called_once()
     body: str = mock_post.call_args[0][1]
-    assert "No security issues found" in body
+    assert "No issues found" in body
 
 
 def test_pipeline_comment_severity_ordering():
@@ -120,6 +128,9 @@ def test_pipeline_comment_severity_ordering():
     with (
         patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
         patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
+        patch("orchestrator.coordinator.get_pr_diff", return_value=DIFF_WITH_FINDINGS),
+        patch("specialized.quality.agent._call_claude", return_value="[]"),
+        patch("specialized.testing.agent._call_claude", return_value="[]"),
         patch("orchestrator.coordinator.post_issue_comment") as mock_post,
     ):
         from orchestrator.coordinator import run
@@ -129,7 +140,7 @@ def test_pipeline_comment_severity_ordering():
     body: str = mock_post.call_args[0][1]
 
     severity_order = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
-    positions = {s: body.find(f"### {s}") for s in severity_order if f"### {s}" in body}
+    positions = {s: body.find(f"#### {s}") for s in severity_order if f"#### {s}" in body}
     found_sevs = [s for s in severity_order if s in positions]
 
     assert found_sevs == sorted(found_sevs, key=lambda s: severity_order.index(s))

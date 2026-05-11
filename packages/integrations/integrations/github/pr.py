@@ -16,6 +16,18 @@ def get_pr_files(pr: PullRequest) -> list[File]:
     return list(pr.get_files())
 
 
+def get_pr_diff(pr: PullRequest) -> str:
+    """Return the full unified diff for a PR as a single string."""
+    parts: list[str] = []
+    for f in pr.get_files():
+        if not f.patch:
+            continue
+        parts.append(f"--- a/{f.filename}")
+        parts.append(f"+++ b/{f.filename}")
+        parts.append(f.patch)
+    return "\n".join(parts)
+
+
 def post_issue_comment(pr: PullRequest, body: str) -> None:
     """Post a comment on a PR."""
     pr.create_issue_comment(body)

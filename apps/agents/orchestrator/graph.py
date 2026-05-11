@@ -1,44 +1,54 @@
 from __future__ import annotations
 
-from typing import Any, TypedDict
+import operator
+from typing import Annotated, Any, TypedDict
 
 from integrations.github import PullRequestPayload
 from langgraph.graph import END, START, StateGraph
 from shared.schemas import FindingSchema
+from specialized.quality import analyze as quality_analyze
 from specialized.security import analyze as security_analyze
+from specialized.testing import analyze as testing_analyze
 
 
-class _ReviewStateRequired(TypedDict):
+class ReviewState(TypedDict):
     files: list[Any]
+    diff: str
     pr_payload: PullRequestPayload
+    findings: Annotated[list[FindingSchema], operator.add]
 
 
-class ReviewState(_ReviewStateRequired, total=False):
-    """Shared state flowing through the graph."""
-
-    findings: list[FindingSchema]
+def _security_node(state: ReviewState) -> dict:
+    return {"findings": security_analyze(state["files"], state["pr_payload"])}
 
 
-def _security_node(state: ReviewState) -> ReviewState:
-    findings = security_analyze(state["files"], state["pr_payload"])
-    return {
-        "files": state["files"],
-        "pr_payload": state["pr_payload"],
-        "findings": list(state.get("findings", [])) + findings,
-    }
+def _quality_node(state: ReviewState) -> dict:
+    return {"findings": quality_analyze(state["files"], state["diff"], state["pr_payload"])}
+
+
+def _testing_node(state: ReviewState) -> dict:
+    return {"findings": testing_analyze(state["files"], state["diff"], state["pr_payload"])}
 
 
 def build_review_graph():
-    """Build and compile the review graph."""
     graph = StateGraph(ReviewState)
     graph.add_node("security", _security_node)
+    graph.add_node("quality", _quality_node)
+    graph.add_node("testing", _testing_node)
     graph.add_edge(START, "security")
+    graph.add_edge(START, "quality")
+    graph.add_edge(START, "testing")
     graph.add_edge("security", END)
+    graph.add_edge("quality", END)
+    graph.add_edge("testing", END)
     return graph.compile()
 
 
-def run_review(files: list[Any], pr_payload: PullRequestPayload) -> list[FindingSchema]:
-    """Execute the compiled graph and return aggregated findings."""
+def run_review(
+    files: list[Any],
+    diff: str,
+    pr_payload: PullRequestPayload,
+) -> list[FindingSchema]:
     app = build_review_graph()
-    result = app.invoke({"files": files, "pr_payload": pr_payload, "findings": []})
+    result = app.invoke({"files": files, "diff": diff, "pr_payload": pr_payload, "findings": []})
     return result.get("findings", [])

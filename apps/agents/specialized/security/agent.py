@@ -193,7 +193,7 @@ Every finding must have a decision. Be decisive — false positives erode develo
 than missed low-confidence issues.\
 """
 
-_MODEL = "claude-sonnet-4-6"
+_MODEL = "claude-haiku-4-5"
 _RULES_DIR = Path(__file__).resolve().parent / "rules"
 
 
@@ -316,7 +316,7 @@ def _build_generation_prompt(diff: str, hits: ScannerHits, ctx: SecurityContext)
         f"{json.dumps(ctx.lang_rules, indent=2)}\n\n"
         "## Pre-computed Scanner Hits\n"
         f"{scanner_block}\n\n"
-        "## Git Diff (added lines only)\n"
+        "## Git Diff\n"
         f"{diff}\n\n"
         "## Task\n"
         "Analyze the diff and scanner hits above. Return a JSON object with a `findings` array. "
@@ -717,6 +717,37 @@ def _parse_manifest_line(file_name: str, content: str) -> tuple[str, str] | None
             return m.group(1).lower(), m.group(2)
     elif file_name in ("pyproject.toml", "setup.cfg"):
         m = re.search(r'"([a-zA-Z0-9_.\-]+)\s*[<>=!~]{1,2}\s*([0-9][0-9A-Za-z_.\-]*)"', content)
+        if m:
+            return m.group(1).lower(), m.group(2)
+    elif file_name == "yarn.lock":
+        # "package-name@^1.2.3":  (resolved block has exact version on next line, but
+        # diff lines are independent — match the header line which pins a semver range)
+        m = re.match(r'^"?([@a-zA-Z0-9_./\-]+)@[^"]*"?:$', content.strip())
+        if m:
+            # version line immediately follows in the lockfile: "  version \"1.2.3\""
+            # We don't have the next line here, so skip — caller sees None and moves on.
+            return None
+        # resolved/version lines: '  version "1.2.3"'
+        # yarn.lock pairs a package header with its pinned version; since we process
+        # line-by-line we can't correlate them here. Skip for now.
+        return None
+    elif file_name in ("Gemfile", "Gemfile.lock"):
+        # Gemfile:      gem 'rails', '~> 7.0.4'  or  gem "rails", ">= 6"
+        m = re.search(r"""gem\s+['"]([a-zA-Z0-9_.\-]+)['"]\s*,\s*['"][=~><]{0,2}\s*([0-9][a-zA-Z0-9._\-]*)['"]""", content)
+        if m:
+            return m.group(1).lower(), m.group(2)
+        # Gemfile.lock: "    rails (7.0.4)"
+        m = re.match(r"^\s{4}([a-zA-Z0-9_.\-]+)\s+\(([0-9][a-zA-Z0-9._\-]*)\)$", content)
+        if m:
+            return m.group(1).lower(), m.group(2)
+    elif file_name == "go.mod":
+        # require github.com/foo/bar v1.2.3
+        m = re.match(r"^\s*(?:require\s+)?([a-zA-Z0-9_.\-/]+)\s+v([0-9][a-zA-Z0-9._\-]*)", content)
+        if m:
+            return m.group(1).lower(), m.group(2)
+    elif file_name == "go.sum":
+        # github.com/foo/bar v1.2.3 h1:...
+        m = re.match(r"^([a-zA-Z0-9_.\-/]+)\s+v([0-9][a-zA-Z0-9._\-]*)\s+h1:", content)
         if m:
             return m.group(1).lower(), m.group(2)
     return None
