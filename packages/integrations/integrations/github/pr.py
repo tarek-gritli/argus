@@ -16,6 +16,19 @@ def get_pr_files(pr: PullRequest) -> list[File]:
     return list(pr.get_files())
 
 
+def get_pr_file_content(pr: PullRequest, filename: str) -> str | None:
+    """Fetch the full content of a file at the PR's head commit."""
+    try:
+        content_file = pr.head.repo.get_contents(filename, ref=pr.head.sha)
+        # In PyGithub, if it's a single file, it returns a ContentFile.
+        # If it's a list (which happens if it's a dir, but we pass a filename), it returns list.
+        if isinstance(content_file, list):
+            return None
+        return content_file.decoded_content.decode("utf-8")
+    except Exception:
+        return None
+
+
 def get_pr_diff(pr: PullRequest) -> str:
     """Return the full unified diff for a PR as a single string."""
     parts: list[str] = []

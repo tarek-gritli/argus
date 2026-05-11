@@ -81,10 +81,23 @@ def test_pipeline_detects_findings_and_posts_comment():
         patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
         patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
         patch("orchestrator.coordinator.get_pr_diff", return_value=DIFF_WITH_FINDINGS),
+        patch("orchestrator.coordinator.get_pr_file_content", return_value="mock file content"),
         patch("specialized.quality.agent._call_claude", return_value="[]"),
         patch("specialized.testing.agent._call_claude", return_value="[]"),
+        patch("orchestrator.coordinator.run_fix_pipeline") as mock_fix,
         patch("orchestrator.coordinator.post_issue_comment") as mock_post,
     ):
+
+        def fake_run_fix(findings, files_content):
+            from shared.schemas.finding import FixSchema
+
+            for f in findings:
+                if "Injection" in f.title:
+                    f.fix = FixSchema(diff="safe code", description="Fixed injection")
+            return findings
+
+        mock_fix.side_effect = fake_run_fix
+
         from orchestrator.coordinator import run
 
         run(VALID_PAYLOAD)
@@ -97,6 +110,11 @@ def test_pipeline_detects_findings_and_posts_comment():
     assert "Hardcoded Secret" in body
     assert any(term in body for term in ["Injection", "SUBPROCESS", "SQL"])
 
+    # Assert fix formatting
+    assert "<details>" in body
+    assert "💡 Suggested Fix: <i>Fixed injection</i>" in body
+    assert "```\nsafe code\n```" in body
+
 
 def test_pipeline_clean_diff_posts_no_issues():
     """A diff with no security issues and no LLM findings produces the all-clear comment."""
@@ -107,6 +125,7 @@ def test_pipeline_clean_diff_posts_no_issues():
         patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
         patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
         patch("orchestrator.coordinator.get_pr_diff", return_value=DIFF_CLEAN),
+        patch("orchestrator.coordinator.get_pr_file_content", return_value="mock file content"),
         patch("specialized.quality.agent._call_claude", return_value="[]"),
         patch("specialized.testing.agent._call_claude", return_value="[]"),
         patch("orchestrator.coordinator.post_issue_comment") as mock_post,
@@ -129,8 +148,10 @@ def test_pipeline_comment_severity_ordering():
         patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
         patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
         patch("orchestrator.coordinator.get_pr_diff", return_value=DIFF_WITH_FINDINGS),
+        patch("orchestrator.coordinator.get_pr_file_content", return_value="mock file content"),
         patch("specialized.quality.agent._call_claude", return_value="[]"),
         patch("specialized.testing.agent._call_claude", return_value="[]"),
+        patch("orchestrator.coordinator.run_fix_pipeline", side_effect=lambda f, _: f),
         patch("orchestrator.coordinator.post_issue_comment") as mock_post,
     ):
         from orchestrator.coordinator import run

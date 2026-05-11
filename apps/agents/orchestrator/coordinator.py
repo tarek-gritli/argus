@@ -1,6 +1,7 @@
 import logging
 
-from integrations.github import PullRequestPayload, get_pr, get_pr_diff, get_pr_files, post_issue_comment
+from fix_engine.pipeline import run_fix_pipeline
+from integrations.github import PullRequestPayload, get_pr, get_pr_diff, get_pr_file_content, get_pr_files, post_issue_comment
 from shared.schemas import FindingSchema
 
 from .graph import run_review
@@ -28,6 +29,17 @@ def run(payload: dict) -> None:
 
         diff = get_pr_diff(pr)
         findings = run_review(files=files, diff=diff, pr_payload=pr_payload)
+
+        # Build the files_content mapping for the fix engine
+        files_content: dict[str, str] = {}
+        for finding in findings:
+            if finding.file not in files_content:
+                content = get_pr_file_content(pr, finding.file)
+                if content is not None:
+                    files_content[finding.file] = content
+
+        # Run the fix engine to attempt to generate patches
+        findings = run_fix_pipeline(findings, files_content)
         post_issue_comment(pr, _format_findings(findings))
 
     except Exception:
@@ -62,6 +74,9 @@ def _format_findings(findings: list[FindingSchema]) -> str:
                 lines.append(f"{finding.description}\n")
                 if finding.suggestion:
                     lines.append(f"> Suggestion: {finding.suggestion}\n")
+                if finding.fix:
+                    lines.append(f"<details>\n<summary>💡 Suggested Fix: <i>{finding.fix.description}</i></summary>\n")
+                    lines.append(f"```\n{finding.fix.diff}\n```\n</details>\n")
                 lines.append("")
 
     return "\n".join(lines)
