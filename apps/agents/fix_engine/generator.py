@@ -20,9 +20,9 @@ _MAX_TOKENS = 2048
 _CONTEXT_WINDOW = 20
 
 
-def _extract_snippets(file_content: str, line_start: int, line_end: int) -> tuple[str, str]:
+def _extract_snippets(file_content: str, line_start: int, line_end: int) -> tuple[str, str] | None:
     """
-    Return (context_snippet, original_snippet).
+    Return (context_snippet, original_snippet), or None if line numbers are invalid.
 
     context_snippet  — _CONTEXT_WINDOW lines before and after the finding,
                        used in the user prompt so Claude has enough scope.
@@ -36,6 +36,9 @@ def _extract_snippets(file_content: str, line_start: int, line_end: int) -> tupl
     start_idx = line_start - 1
     end_idx = line_end  # exclusive for slicing
 
+    if start_idx < 0 or end_idx > total or start_idx >= end_idx:
+        return None
+
     original_snippet = "\n".join(lines[start_idx:end_idx])
 
     ctx_start = max(0, start_idx - _CONTEXT_WINDOW)
@@ -46,7 +49,16 @@ def _extract_snippets(file_content: str, line_start: int, line_end: int) -> tupl
 
 
 def generate_patch(finding: FindingSchema, file_content: str) -> FixProposal | None:
-    context_snippet, original_snippet = _extract_snippets(file_content, finding.line_start, finding.line_end)
+    snippets = _extract_snippets(file_content, finding.line_start, finding.line_end)
+    if snippets is None:
+        logger.error(
+            "Invalid line numbers (%d-%d) for finding '%s' — skipping LLM call",
+            finding.line_start,
+            finding.line_end,
+            finding.title,
+        )
+        return None
+    context_snippet, original_snippet = snippets
 
     user_prompt = (
         f"File: {finding.file}\n\n"
@@ -86,9 +98,8 @@ def generate_patch(finding: FindingSchema, file_content: str) -> FixProposal | N
         match = re.search(r"<fix>(.*?)</fix>", raw, re.DOTALL)
         if not match:
             logger.error(
-                "No <fix> tags found in Claude response for finding '%s'. Raw: %s",
+                "No <fix> tags found in Claude response for finding '%s'",
                 finding.title,
-                raw[:200],
             )
             return None
 

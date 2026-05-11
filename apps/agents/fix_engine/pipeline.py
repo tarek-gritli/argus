@@ -23,9 +23,9 @@ from .validator import validate_patch
 
 logger = logging.getLogger(__name__)
 
-# Minimum confidence score required to attach a fix to a finding.
-# Patches below this threshold are logged and discarded rather than surfaced,
-# to avoid noisy or incorrect auto-fix suggestions.
+# Confidence threshold for attaching a fix to a finding.
+# Patches scoring at or below this value are discarded — a fix must strictly
+# exceed the threshold to be surfaced, so borderline patches are dropped.
 _CONFIDENCE_THRESHOLD = 0.6
 
 
@@ -116,7 +116,7 @@ def run_fix_pipeline(
             skipped += 1
             continue
 
-        process_finding(finding, file_content)
+        finding = process_finding(finding, file_content)
         processed += 1
         if finding.fix is not None:
             fixed += 1
