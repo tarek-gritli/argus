@@ -10,6 +10,7 @@ Mocking strategy:
   scorer) to confirm the full flow integrates correctly.
 """
 
+import subprocess
 from unittest.mock import patch
 
 import pytest
@@ -42,11 +43,11 @@ ORIGINAL_CODE = "import sys\nimport os\n\ndef hello():\n    print('hi')\n"
 
 
 # ---------------------------------------------------------------------------
-# Validator tests
+# Validator tests — Tier 1 (in-process)
 # ---------------------------------------------------------------------------
 
 
-def test_validator_valid_patch(mock_finding):
+def test_validator_python_valid_patch(mock_finding):
     """Empty patched_code deletes the flagged lines (unused import removal)."""
     proposal = FixProposal(patched_code="", description="Removed import")
 
@@ -55,11 +56,10 @@ def test_validator_valid_patch(mock_finding):
     assert result.is_valid is True
     assert result.applied_patch is not None
     assert "import os" not in result.applied_patch
-    # patched_line_count must be populated on success
     assert result.patched_line_count > 0
 
 
-def test_validator_invalid_syntax(mock_finding):
+def test_validator_python_invalid_syntax(mock_finding):
     """A patch that introduces a SyntaxError is rejected."""
     proposal = FixProposal(patched_code="def broken_func(", description="Broken")
 
@@ -70,17 +70,148 @@ def test_validator_invalid_syntax(mock_finding):
     assert "SyntaxError" in result.error_message
 
 
-def test_validator_non_python_file(mock_finding):
-    """Non-Python files skip AST validation even if the patch is syntactically invalid Python."""
-    mock_finding.file = "test.js"
-    js_code = "const x = 1;\nfunction hello() {\n  console.log('hi');\n}\n"
-    proposal = FixProposal(patched_code="def broken_func(", description="Broken")
+def test_validator_json_valid(mock_finding):
+    """A valid JSON patch is accepted."""
+    mock_finding.file = "config.json"
+    original = '{\n  "key": "old_value",\n  "other": 1\n}\n'
+    mock_finding.line_start = 2
+    mock_finding.line_end = 2
+    proposal = FixProposal(patched_code='  "key": "new_value",', description="Updated key")
 
-    result = validate_patch(js_code, proposal, mock_finding)
+    result = validate_patch(original, proposal, mock_finding)
 
     assert result.is_valid is True
-    assert result.applied_patch is not None
-    assert "def broken_func(" in result.applied_patch
+    assert '"new_value"' in result.applied_patch
+
+
+def test_validator_json_invalid(mock_finding):
+    """A patch that breaks JSON structure is rejected."""
+    mock_finding.file = "config.json"
+    original = '{\n  "key": "value"\n}\n'
+    mock_finding.line_start = 2
+    mock_finding.line_end = 2
+    proposal = FixProposal(patched_code='  "key": value_missing_quotes', description="Bad patch")
+
+    result = validate_patch(original, proposal, mock_finding)
+
+    assert result.is_valid is False
+    assert "JSONDecodeError" in result.error_message
+
+
+# ---------------------------------------------------------------------------
+# Validator tests — Tier 2 (process-based, tool availability guarded)
+# ---------------------------------------------------------------------------
+
+
+def test_validator_javascript_unbalanced_braces_caught(mock_finding):
+    """
+    JS files go through the structural fallback when node isn't available,
+    and the structural validator catches unbalanced braces.
+
+    The patch must replace ALL lines that contain the matching closing brace,
+    otherwise the surviving lines re-balance the count and the check passes.
+    Here we replace the entire 3-line function with only its opening line,
+    so the patched file is left with one unmatched '{'.
+    """
+    mock_finding.file = "app.js"
+    # A self-contained function: open and close brace are both inside the finding span.
+    js_code = "function hello() {\n  console.log('hi');\n}\n"
+    mock_finding.line_start = 1
+    mock_finding.line_end = 3  # replace all 3 lines — closing '}' is gone after patch
+    proposal = FixProposal(patched_code="function hello() {", description="Bad patch")
+
+    with patch("fix_engine.validator.shutil.which", return_value=None):
+        result = validate_patch(js_code, proposal, mock_finding)
+
+    # patched file: "function hello() {\n" — one '{', zero '}' → unbalanced
+    assert result.is_valid is False
+    assert "unbalanced braces" in result.error_message.lower()
+
+
+def test_validator_process_tool_timeout_treated_as_pass(mock_finding):
+    """If an external validator times out, the patch is treated as valid."""
+    mock_finding.file = "main.go"
+    go_code = 'package main\n\nfunc main() {\n\tfmt.Println("hello")\n}\n'
+    mock_finding.line_start = 4
+    mock_finding.line_end = 4
+    proposal = FixProposal(patched_code='\tfmt.Println("world")', description="Changed output")
+
+    with patch("fix_engine.validator.shutil.which", return_value="/usr/bin/gofmt"), patch("fix_engine.validator.subprocess.run", side_effect=subprocess.TimeoutExpired("gofmt", 10)):
+        result = validate_patch(go_code, proposal, mock_finding)
+
+    assert result.is_valid is True
+
+
+def test_validator_process_tool_not_installed_falls_through(mock_finding):
+    """Missing toolchain binary degrades gracefully — patch is not rejected."""
+    mock_finding.file = "main.rs"
+    rs_code = 'fn main() {\n    println!("hello");\n}\n'
+    mock_finding.line_start = 2
+    mock_finding.line_end = 2
+    proposal = FixProposal(patched_code='    println!("world");', description="Changed output")
+
+    with patch("fix_engine.validator.shutil.which", return_value=None):
+        result = validate_patch(rs_code, proposal, mock_finding)
+
+    assert result.is_valid is True
+
+
+# ---------------------------------------------------------------------------
+# Validator tests — Tier 3 (structural heuristic)
+# ---------------------------------------------------------------------------
+
+
+def test_validator_structural_balanced_braces_pass(mock_finding):
+    """A well-formed Java patch passes structural validation."""
+    mock_finding.file = "Hello.java"
+    java_code = 'public class Hello {\n    void greet() {\n        System.out.println("hi");\n    }\n}\n'
+    mock_finding.line_start = 3
+    mock_finding.line_end = 3
+    proposal = FixProposal(
+        patched_code='        System.out.println("hello");',
+        description="Updated greeting",
+    )
+
+    result = validate_patch(java_code, proposal, mock_finding)
+
+    assert result.is_valid is True
+
+
+def test_validator_structural_unbalanced_parens_rejected(mock_finding):
+    """An unbalanced parenthesis in a C++ patch is caught by the structural validator."""
+    mock_finding.file = "main.cpp"
+    cpp_code = '#include <iostream>\nint main() {\n    std::cout << "hi";\n    return 0;\n}\n'
+    mock_finding.line_start = 3
+    mock_finding.line_end = 3
+    # Unclosed paren
+    proposal = FixProposal(
+        patched_code='    std::cout << "hello" << std::endl;(\n',
+        description="Bad patch",
+    )
+
+    result = validate_patch(cpp_code, proposal, mock_finding)
+
+    assert result.is_valid is False
+    assert "unbalanced parentheses" in result.error_message.lower()
+
+
+def test_validator_unknown_extension_always_passes(mock_finding):
+    """Files with unknown extensions (.yaml, .md, etc.) always pass validation."""
+    mock_finding.file = "config.yaml"
+    yaml_code = "key: value\nother: 123\n"
+    mock_finding.line_start = 1
+    mock_finding.line_end = 1
+    # Deliberately garbled — no validator runs for .yaml
+    proposal = FixProposal(patched_code="key: {{{broken", description="Broken YAML")
+
+    result = validate_patch(yaml_code, proposal, mock_finding)
+
+    assert result.is_valid is True
+
+
+# ---------------------------------------------------------------------------
+# Validator tests — shared behaviour
+# ---------------------------------------------------------------------------
 
 
 def test_validator_line_numbers_out_of_bounds(mock_finding):
@@ -92,7 +223,6 @@ def test_validator_line_numbers_out_of_bounds(mock_finding):
     result = validate_patch(ORIGINAL_CODE, proposal, mock_finding)
 
     assert result.is_valid is False
-    assert result.error_message is not None
     assert "out of bounds" in result.error_message.lower()
 
 
@@ -109,7 +239,7 @@ def test_validator_no_double_blank_line_at_boundary(mock_finding):
     result = validate_patch(ORIGINAL_CODE, proposal, mock_finding)
 
     assert result.is_valid is True
-    assert "\n\n\n" not in result.applied_patch  # no triple newline (double blank line)
+    assert "\n\n\n" not in result.applied_patch
 
 
 # ---------------------------------------------------------------------------
