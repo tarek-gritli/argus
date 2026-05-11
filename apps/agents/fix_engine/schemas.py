@@ -32,5 +32,9 @@ class ValidationResult(BaseModel):
     applied_patch: str | None = None
     patched_line_count: int = Field(
         default=0,
-        description="Total number of lines in the fully-patched file. Used by the scorer to detect unexpectedly large rewrites.",
+        description="Total number of lines in the fully-patched file.",
+    )
+    patch_line_count: int = Field(
+        default=0,
+        description="Number of lines introduced by the patch itself (not the total file length). Used by the scorer to detect unexpectedly large rewrites.",
     )

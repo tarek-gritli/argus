@@ -288,22 +288,29 @@ def test_scorer_info_severity(mock_finding):
 
 def test_scorer_churn_penalty_applied(mock_finding):
     """
-    A 1-line finding whose patch results in a very large file triggers the
-    churn penalty (baseline 0.85 − churn 0.15 = 0.70).
+    A 1-line finding whose patch introduces 100 lines triggers the churn
+    penalty (baseline 0.85 − churn 0.15 = 0.70).
     """
-    # finding spans line 2–2 (1 line); patched file is 1000 lines → ratio = 1000
-    valid_res = ValidationResult(is_valid=True, applied_patch="x = 1", patched_line_count=1000)
+    # finding spans line 2–2 (1 line); patch introduces 100 lines → ratio = 100
+    valid_res = ValidationResult(is_valid=True, applied_patch="x = 1", patch_line_count=100)
     score = score_patch(valid_res, mock_finding)
-    # Should be 0.85 - 0.15 = 0.70
     assert score == pytest.approx(0.70, abs=1e-4)
 
 
 def test_scorer_no_churn_penalty_below_threshold(mock_finding):
-    """A modest file size after patching must NOT trigger the churn penalty."""
-    # finding spans 1 line; patched file is 10 lines → ratio = 10, at boundary
-    valid_res = ValidationResult(is_valid=True, applied_patch="x = 1", patched_line_count=10)
+    """A patch introducing lines at or below the threshold must NOT trigger the penalty."""
+    # finding spans 1 line; patch introduces 10 lines → ratio = 10, at boundary
+    valid_res = ValidationResult(is_valid=True, applied_patch="x = 1", patch_line_count=10)
     score = score_patch(valid_res, mock_finding)
     # ratio == threshold, penalty should NOT apply → 0.85
+    assert score == pytest.approx(0.85, abs=1e-4)
+
+
+def test_scorer_no_churn_penalty_large_file_small_patch(mock_finding):
+    """A small patch in a large file must NOT trigger the churn penalty."""
+    # 1-line patch in a 10000-line file — churn is measured on patch size only
+    valid_res = ValidationResult(is_valid=True, applied_patch="x = 1", patch_line_count=2, patched_line_count=10000)
+    score = score_patch(valid_res, mock_finding)
     assert score == pytest.approx(0.85, abs=1e-4)
 
 

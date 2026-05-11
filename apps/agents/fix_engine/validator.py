@@ -259,6 +259,7 @@ def validate_patch(original_code: str, proposal: FixProposal, finding: FindingSc
 
     patched_code = proposal.patched_code.strip("\n")
     replacement = [patched_code + "\n"] if patched_code else []
+    patch_lines = len(replacement[0].splitlines()) if replacement else 0
 
     patched_lines = lines[:start_idx] + replacement + lines[end_idx:]
     patched_content = "".join(patched_lines)
@@ -269,18 +270,20 @@ def validate_patch(original_code: str, proposal: FixProposal, finding: FindingSc
     for validator_fn in _REGISTRY.get(ext, []):
         result = validator_fn(patched_content, finding)
         if result is not None:
-            # A validator returned a result — it either failed or explicitly passed.
             result.patched_line_count = line_count
+            result.patch_line_count = patch_lines
             return result
 
     # --- Tier 3: structural heuristic for all files ---
     structural_result = _validate_structural(patched_content, finding)
     if structural_result is not None:
         structural_result.patched_line_count = line_count
+        structural_result.patch_line_count = patch_lines
         return structural_result
 
     return ValidationResult(
         is_valid=True,
         applied_patch=patched_content,
         patched_line_count=line_count,
+        patch_line_count=patch_lines,
     )

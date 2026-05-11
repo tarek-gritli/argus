@@ -33,15 +33,11 @@ def score_patch(validation: ValidationResult, finding: FindingSchema) -> float:
     severity_penalty = _SEVERITY_PENALTY.get(finding.severity, 0.05)
     confidence -= severity_penalty
 
-    # Penalise patches that touch far more lines than the finding spans.
+    # Penalise patches that introduce far more lines than the finding spans.
     # A 2-line finding that produces a 200-line patch is suspicious.
     finding_span = max(1, finding.line_end - finding.line_start + 1)
-    if validation.patched_line_count > 0:
-        # patched_line_count is the total file length after patching; derive
-        # the number of lines the patch itself introduced for comparison.
-        # We use the ratio of patch-introduced lines to finding span as a
-        # rough churn signal (not a precise diff, intentionally cheap).
-        churn_ratio = validation.patched_line_count / finding_span
+    if validation.patch_line_count > 0:
+        churn_ratio = validation.patch_line_count / finding_span
         if churn_ratio > _CHURN_RATIO_THRESHOLD:
             logger.debug(
                 "High churn ratio %.1f for finding '%s' — applying penalty",
