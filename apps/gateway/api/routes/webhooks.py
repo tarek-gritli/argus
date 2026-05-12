@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Request, Response
 from integrations.github import PullRequestPayload, validate_signature
+from integrations.gitlab import validate_gitlab_signature
 from shared.config import Settings, get_settings
 from shared.queue.tasks import REVIEW_PR_TASK_NAME
 
@@ -62,5 +63,19 @@ async def github_webhook(request: Request, settings: Settings = Depends(get_sett
     except Exception:
         await redis_client.delete(delivery_id)
         return Response(status_code=503, content="Queue unavailable")
+
+    return Response(status_code=200)
+
+
+@router.post("gitlab")
+async def gitlab_webhook(request: Request, settings: Settings = Depends(get_settings)) -> Response:
+    payload = await request.body()
+    signature = request.headers.get("webhook-signature", "")
+    webhook_id = request.headers.get("webhook-id", "")
+    timestamp = request.headers.get("webhook-timestamp", "")
+    signing_token = settings.gitlab_signing_token
+
+    if not validate_gitlab_signature(payload, signature, webhook_id, timestamp, signing_token):
+        return Response(status_code=403, content="Invalid signature")
 
     return Response(status_code=200)

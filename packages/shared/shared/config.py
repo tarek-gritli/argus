@@ -12,6 +12,12 @@ class Settings(BaseSettings):
     github_app_id: str
     github_private_key_b64: str
 
+    # Gitlab
+    gitlab_webhook_secret: str
+    gitlab_bot_user_id: str
+    gitlab_access_token: str
+    gitlab_signing_token: str
+
     # Environment
     env: str = "development"
 
