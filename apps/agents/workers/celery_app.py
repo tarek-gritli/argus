@@ -10,6 +10,11 @@ celery_app = Celery(
     backend=None,
 )
 
+celery_app.conf.update(
+    worker_pool="threads",
+    worker_concurrency=3,
+)
+
 
 @celery_app.task(name=REVIEW_PR_TASK_NAME)
 def review_pr(payload: dict) -> None:

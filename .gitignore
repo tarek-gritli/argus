@@ -9,3 +9,4 @@ build/
 *.pem
 htmlcov/
 .coverage
+.venv/
