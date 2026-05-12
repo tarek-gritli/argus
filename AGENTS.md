@@ -64,9 +64,11 @@ Multi-agent AI platform that automates code review at the pull-request level.
 Deploys specialized agents in parallel, synthesizes findings into actionable feedback,
 and learns from accepted/rejected suggestions over time.
 
-**Current build phase: Phase 2**
+**Current build phase: Phase 3 (in progress)**
 - API gateway + GitHub webhook handler ✅
 - Orchestrator with three parallel agents (Security, Quality, Testing) — full loop end-to-end ✅
+- Fix engine (generator → validator → scorer → pipeline) ✅
+- Inline GitHub review suggestions (`post_findings_as_review`) ✅
 - No auth, no billing, no multi-tenancy, no CLI, no dashboard yet
 
 ---
@@ -227,9 +229,12 @@ apps/agents/
 │   ├── documentation.py     # (Phase 3 — stub only)
 │   └── ticket_compliance.py # (Phase 3 — stub only)
 ├── fix_engine/
-│   ├── generator.py         # Generate code patches (Phase 2 — stub only)
-│   ├── validator.py         # Sandbox-test patches (Phase 2 — stub only)
-│   ├── scorer.py            # Confidence scoring (Phase 2 — stub only)
+│   ├── generator.py         # Generate code patches via Claude — active ✅
+│   ├── validator.py         # Multi-language patch validation — active ✅
+│   ├── scorer.py            # Confidence scoring — active ✅
+│   ├── pipeline.py          # Orchestrates generator → validator → scorer — active ✅
+│   ├── prompts.py           # System prompt for fix generation — active ✅
+│   ├── schemas.py           # FixProposal, ValidationResult — active ✅
 │   └── __init__.py
 └── workers/
     └── celery_app.py        # Celery app instance + task: review_pr
@@ -246,9 +251,10 @@ apps/agents/
 - **Security** (`specialized/security/`) — OWASP analysis, secret detection, dependency CVE scan
 - **Quality** (`specialized/quality/`) — complexity, duplication, dead code, naming
 - **Testing** (`specialized/testing/`) — coverage gaps, weak assertions, test anti-patterns
-- All three run in parallel via LangGraph fan-out; findings are merged by a reducer and posted as a single PR comment grouped by agent, then by severity
+- All three run in parallel via LangGraph fan-out; findings are merged by a reducer and posted as inline GitHub review suggestions + a summary issue comment grouped by agent, then by severity
 - `coordinator.py` fetches the PR diff via `get_pr_diff()`, builds `AgentInput` for quality and testing adapters, passes `files` + `PullRequestPayload` to the security adapter
-- Fix engine is stubbed — do not implement
+- Fix engine runs after agents complete: generates patches via Claude, validates (multi-language), scores by severity + churn, attaches `FixSchema` to qualifying findings
+- Fixes are posted as native GitHub `suggestion` blocks via `post_findings_as_review()`
 
 ---
 
@@ -305,7 +311,7 @@ Rules:
 packages/integrations/integrations/
 ├── github/
 │   ├── client.py    # get_installation_client(installation_id) → Github
-│   ├── pr.py        # fetch_pr_diff(), post_review_comment(), post_finding()
+│   ├── pr.py        # get_pr_diff(), post_issue_comment(), post_findings_as_review()
 │   └── webhook.py   # validate_signature(payload, signature, secret) → bool
 └── gitlab/
     └── __init__.py  # Phase 2 — stub only
@@ -382,18 +388,20 @@ ENV=development
 
 ## What Is NOT Built Yet — Do Not Implement
 
-| Feature | Phase |
-|---|---|
-| JWT auth / API keys | 3 |
-| Multi-tenancy / RBAC | 3 |
-| Billing / quota enforcement | 3 |
-| GitLab integration | 2 |
-| Fix engine | 2 |
-| Additional agents (performance, best_practices, documentation, ticket_compliance) | 3 |
-| Qdrant context injection | 5 |
-| Neo4j dependency graph | 5 |
-| CLI commands | 7 |
-| Web dashboard | 6 |
+| Feature | Phase | Status |
+|---|---|---|
+| JWT auth / API keys | 3 | not started |
+| Multi-tenancy / RBAC | 3 | not started |
+| Billing / quota enforcement | 3 | not started |
+| GitLab integration | 2 | stub only |
+| Fix engine | 3 | ✅ complete |
+| Inline GitHub review suggestions | 3 | ✅ complete |
+| Additional agents (performance, best_practices, documentation, ticket_compliance) | 3 | stub only |
+| Conflict resolution | 3 | stub only |
+| Qdrant context injection | 5 | not started |
+| Neo4j dependency graph | 5 | not started |
+| CLI commands | 7 | not started |
+| Web dashboard | 6 | not started |
 
 Stubs are allowed. Implementation is not.
 
@@ -407,6 +415,6 @@ Stubs are allowed. Implementation is not.
 4. **Every agent outputs FindingSchema** — no exceptions
 5. **Private key never read from file at runtime** — base64 env var, loaded lazily via get_settings()
 6. **No processing inside the webhook handler** — enqueue and return, nothing else
-7. **Middleware stubs do nothing in Phase 1** — do not activate prematurely
+7. **Middleware stubs do nothing until Phase 3 auth sprint** — do not activate prematurely
 8. **uv only for Python deps** — never suggest pip install
 9. **Do not add dependencies without checking if they are already in the workspace**
