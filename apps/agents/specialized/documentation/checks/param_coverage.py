@@ -14,8 +14,8 @@ _TRIVIAL_PARAMS_RE = re.compile(r"^\s*(?:self|cls)?\s*$")
 # Return type hints that suggest a non-trivial return
 _RETURN_HINT_RE = re.compile(r"->\s*(?!None\b)(?!None\s*[|:])(\S)")
 
-# Docstring presence within a few lines after the def
-_DOCSTRING_OPEN_RE = re.compile(r'^\+\s*(?:"""|\'\'\')')
+# Docstring presence within a few lines after the def (lines already have + stripped)
+_DOCSTRING_OPEN_RE = re.compile(r'^\s*(?:"""|\'\'\')')
 # Args/Returns sections inside a docstring
 _ARGS_SECTION_RE = re.compile(r"Args:|Parameters:|:param\s", re.IGNORECASE)
 _RETURNS_SECTION_RE = re.compile(r"Returns:|:returns:|:rtype:", re.IGNORECASE)

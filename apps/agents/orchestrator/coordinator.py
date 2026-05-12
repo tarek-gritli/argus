@@ -18,6 +18,7 @@ _AGENT_LABELS = {
     "security": "Security",
     "quality": "Quality",
     "testing": "Testing",
+    "documentation": "Documentation",
 }
 
 _SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"]
@@ -107,7 +108,7 @@ def _format_findings(findings: list[FindingSchema]) -> str:
 
     lines = ["## Argus Code Review\n"]
 
-    _AGENT_ORDER = ("security", "quality", "testing")
+    _AGENT_ORDER = ("security", "quality", "testing", "documentation")
     ordered = [k for k in _AGENT_ORDER if k in by_agent]
     ordered += [k for k in by_agent if k not in _AGENT_ORDER]
 
