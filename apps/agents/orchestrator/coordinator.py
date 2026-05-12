@@ -3,11 +3,12 @@ import logging
 from datetime import datetime, timezone
 
 from fix_engine.pipeline import run_fix_pipeline
-from integrations.github import PullRequestPayload, get_pr, get_pr_diff, get_pr_file_content, get_pr_files, post_findings_as_review, post_issue_comment
+from integrations.github import PullRequestPayload, get_pr, get_pr_diff, get_pr_file_content, get_pr_files, post_findings_as_review, post_issue_comment, update_pr_body
 from shared.db import fresh_session_context
 from shared.models import Finding as FindingModel
 from shared.models import Repo, Review
 from shared.schemas import FindingSchema
+from specialized.documentation.pr_description import generate_pr_description
 from sqlalchemy import select
 
 from .graph import run_review
@@ -47,6 +48,13 @@ def run(payload: dict) -> None:
 
         findings = run_fix_pipeline(findings, files_content)
 
+        # Auto-generate and update PR description if it's missing or too short
+        pr_description = generate_pr_description(diff, pr.title, pr.body or "")
+        if pr_description:
+            update_pr_body(pr, pr_description)
+            logger.info("PR description updated.")
+
+        # Post inline review suggestions for findings with fixes; summary comment for all findings
         post_findings_as_review(pr, findings, pr_payload.head_sha)
         post_issue_comment(pr, _format_findings(findings))
 

@@ -4,16 +4,10 @@ Documentation agent — LangGraph node.
 Pipeline:
   1. Input          — receive AgentInput
   2. Static checks  — missing docstrings, stale comments, param coverage, README gaps
-  3. LLM analysis   — Claude reviews diff for nuanced documentation issues
+  3. LLM analysis   — Gemini reviews diff + generates inline docstring fixes
   4. Merge & dedupe — combine static + LLM findings, drop duplicates
   5. Validate       — filter low-confidence, enforce limits
-  6. Output         — list[FindingSchema]
-
-Design principle:
-  Static checks are fast, zero-cost, and high-precision for structural issues
-  (missing docstrings, bare TODOs). Claude handles the qualitative assessment
-  (stale comments, README completeness, misleading descriptions).
-  The two passes are union-merged so neither alone is a single point of failure.
+  6. Output         — list[FindingSchema] with fix.diff for one-click suggestions
 """
 
 from __future__ import annotations
@@ -158,6 +152,74 @@ def _dedup(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# Inline docstring fix generation
+# ---------------------------------------------------------------------------
+
+_DOCFIX_SYSTEM = """\
+You are a documentation engineer. Given a list of functions/classes missing docstrings,
+return a JSON array where each element has:
+{
+  "file": "path/to/file.py",
+  "line_start": <line number of the def/class>,
+  "function_signature": "def foo(a, b) -> int:",
+  "docstring": "The complete docstring to insert, indented with 4 spaces, including Args/Returns if applicable"
+}
+Be concise. Use Google-style docstrings. Output ONLY the JSON array.
+"""
+
+
+def _generate_docstring_fixes(
+    missing_findings: list[dict[str, Any]],
+    diff: str,
+) -> dict[tuple[str, int], str]:
+    """Call Gemini once with all missing-docstring findings and get generated docstrings.
+
+    Returns a dict mapping (file, line_start) → generated docstring text.
+    """
+    if not missing_findings:
+        return {}
+
+    settings = get_settings()
+    if not settings.gemini_api_key:
+        return {}
+
+    items = []
+    for f in missing_findings:
+        items.append(f"- file={f['file']} line={f['line_start']} title={f['title']}")
+
+    prompt = "Generate docstrings for these undocumented functions/classes found in the diff.\n\nMissing docstrings:\n" + "\n".join(items) + "\n\nDiff context:\n" + diff[:30_000]
+
+    try:
+        client = genai.Client(api_key=settings.gemini_api_key)
+        response = client.models.generate_content(
+            model=_MODEL,
+            contents=f"{_DOCFIX_SYSTEM}\n\n{prompt}",
+        )
+        raw = response.text or ""
+    except Exception as exc:
+        logger.warning("Gemini docstring generation failed: %s", exc)
+        return {}
+
+    cleaned = re.sub(r"```(?:json)?\s*", "", raw).strip()
+    start, end = cleaned.find("["), cleaned.rfind("]")
+    if start == -1 or end == -1:
+        return {}
+
+    try:
+        items_parsed = json.loads(cleaned[start : end + 1])
+    except json.JSONDecodeError:
+        return {}
+
+    result: dict[tuple[str, int], str] = {}
+    for item in items_parsed:
+        key = (item.get("file", ""), int(item.get("line_start", 0)))
+        docstring = item.get("docstring", "")
+        if docstring:
+            result[key] = docstring
+    return result
+
+
+# ---------------------------------------------------------------------------
 # FindingSchema conversion
 # ---------------------------------------------------------------------------
 
@@ -189,7 +251,18 @@ def run_documentation_agent(input: AgentInput) -> list[FindingSchema]:
     static_findings = _run_static_checks(input)
     logger.info("Static checks returned %d findings", len(static_findings))
 
-    # Step 3: LLM analysis — focus on what static can't catch
+    # Step 3a: Generate inline docstring fixes for missing-docstring findings
+    missing_docstring_findings = [f for f in static_findings if "no docstring" in f.get("title", "").lower()]
+    docstring_fixes = _generate_docstring_fixes(missing_docstring_findings, input.diff)
+    logger.info("Generated %d inline docstring fixes", len(docstring_fixes))
+
+    # Attach generated docstrings as fix.diff suggestions
+    for f in static_findings:
+        key = (f.get("file", ""), int(f.get("line_start", 0)))
+        if key in docstring_fixes:
+            f["fix"] = {"diff": docstring_fixes[key], "description": "Add missing docstring"}
+
+    # Step 3b: LLM qualitative review — focus on what static can't catch
     static_summary = _summarize_static(static_findings)
     user_prompt = _build_user_prompt(input, static_summary)
 
