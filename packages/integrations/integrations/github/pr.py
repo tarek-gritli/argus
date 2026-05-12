@@ -1,3 +1,5 @@
+import re
+
 from github import Github
 from github.File import File
 from github.PullRequest import PullRequest
@@ -14,6 +16,19 @@ def get_pr(repo_full_name: str, pr_number: int, installation_id: int) -> PullReq
 def get_pr_files(pr: PullRequest) -> list[File]:
     """Return changed files for a PR."""
     return list(pr.get_files())
+
+
+def get_pr_file_content(pr: PullRequest, filename: str) -> str | None:
+    """Fetch the full content of a file at the PR's head commit."""
+    try:
+        content_file = pr.head.repo.get_contents(filename, ref=pr.head.sha)
+        # In PyGithub, if it's a single file, it returns a ContentFile.
+        # If it's a list (which happens if it's a dir, but we pass a filename), it returns list.
+        if isinstance(content_file, list):
+            return None
+        return content_file.decoded_content.decode("utf-8")
+    except Exception:
+        return None
 
 
 def get_pr_diff(pr: PullRequest) -> str:
@@ -48,4 +63,76 @@ def post_review_comment(
         path=path,
         line=line,
         side="RIGHT",
+    )
+
+
+def post_findings_as_review(
+    pr: PullRequest,
+    findings: list,
+    commit_sha: str,
+) -> None:
+    """
+    Post findings as a single GitHub review with inline comments.
+
+    Findings with a fix are posted with a ```suggestion``` block so the
+    author can accept the patch with one click. Findings without a fix are
+    posted as plain inline comments.
+
+    Only findings whose line numbers fall within the PR diff are posted
+    inline — GitHub rejects review comments on lines not present in the diff.
+    Findings outside the diff are silently skipped (they still appear in the
+    summary issue comment posted by the coordinator).
+    """
+    if not findings:
+        return
+
+    commit = pr.head.repo.get_commit(commit_sha)
+
+    # Build set of (filename, line) pairs that are part of this PR's diff
+    # so we only post inline comments on lines GitHub will accept.
+    diff_lines: set[tuple[str, int]] = set()
+    for f in pr.get_files():
+        if not f.patch:
+            continue
+        current_line = 0
+        for patch_line in f.patch.splitlines():
+            if patch_line.startswith("@@"):
+                # Extract the starting line number from the hunk header
+                # e.g. @@ -1,4 +3,8 @@ → new file starts at line 3
+                m = re.search(r"\+(\d+)", patch_line)
+                if m:
+                    current_line = int(m.group(1)) - 1
+            elif not patch_line.startswith("-"):
+                current_line += 1
+                diff_lines.add((f.filename, current_line))
+
+    comments = []
+    for finding in findings:
+        if (finding.file, finding.line_start) not in diff_lines:
+            continue
+
+        if finding.fix and finding.fix.diff:
+            body = f"**{finding.title}**\n{finding.description}\n\n```suggestion\n{finding.fix.diff}\n```"
+        else:
+            body = f"**{finding.title}**\n{finding.description}"
+            if finding.suggestion:
+                body += f"\n\n> {finding.suggestion}"
+
+        comments.append(
+            {
+                "path": finding.file,
+                "line": finding.line_start,
+                "side": "RIGHT",
+                "body": body,
+            }
+        )
+
+    if not comments:
+        return
+
+    pr.create_review(
+        commit=commit,
+        body="",
+        event="COMMENT",
+        comments=comments,
     )
