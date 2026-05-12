@@ -85,6 +85,7 @@ def test_pipeline_detects_findings_and_posts_comment():
         patch("specialized.quality.agent._call_claude", return_value="[]"),
         patch("specialized.testing.agent._call_claude", return_value="[]"),
         patch("orchestrator.coordinator.run_fix_pipeline") as mock_fix,
+        patch("orchestrator.coordinator.post_findings_as_review"),
         patch("orchestrator.coordinator.post_issue_comment") as mock_post,
     ):
 
@@ -128,6 +129,7 @@ def test_pipeline_clean_diff_posts_no_issues():
         patch("orchestrator.coordinator.get_pr_file_content", return_value="mock file content"),
         patch("specialized.quality.agent._call_claude", return_value="[]"),
         patch("specialized.testing.agent._call_claude", return_value="[]"),
+        patch("orchestrator.coordinator.post_findings_as_review"),
         patch("orchestrator.coordinator.post_issue_comment") as mock_post,
     ):
         from orchestrator.coordinator import run
@@ -152,6 +154,7 @@ def test_pipeline_comment_severity_ordering():
         patch("specialized.quality.agent._call_claude", return_value="[]"),
         patch("specialized.testing.agent._call_claude", return_value="[]"),
         patch("orchestrator.coordinator.run_fix_pipeline", side_effect=lambda f, _: f),
+        patch("orchestrator.coordinator.post_findings_as_review"),
         patch("orchestrator.coordinator.post_issue_comment") as mock_post,
     ):
         from orchestrator.coordinator import run
@@ -182,3 +185,109 @@ def test_pipeline_empty_file_list_posts_warning():
 
     body: str = mock_post.call_args[0][1]
     assert "No changes detected" in body
+
+
+def test_coordinator_calls_post_findings_as_review():
+    """Coordinator calls post_findings_as_review with the head SHA after fix pipeline."""
+    mock_pr = MagicMock()
+    mock_files = _make_mock_files(DIFF_WITH_FINDINGS)
+
+    with (
+        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
+        patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
+        patch("orchestrator.coordinator.get_pr_diff", return_value=DIFF_WITH_FINDINGS),
+        patch("orchestrator.coordinator.get_pr_file_content", return_value="mock file content"),
+        patch("specialized.quality.agent._call_claude", return_value="[]"),
+        patch("specialized.testing.agent._call_claude", return_value="[]"),
+        patch("orchestrator.coordinator.run_fix_pipeline", side_effect=lambda f, _: f),
+        patch("orchestrator.coordinator.post_findings_as_review") as mock_review,
+        patch("orchestrator.coordinator.post_issue_comment"),
+    ):
+        from orchestrator.coordinator import run
+
+        run(VALID_PAYLOAD)
+
+    mock_review.assert_called_once()
+    _, findings_arg, sha_arg = mock_review.call_args[0]
+    assert sha_arg == VALID_PAYLOAD["head_sha"]
+    assert isinstance(findings_arg, list)
+
+
+def test_post_findings_as_review_suggestion_format():
+    """Findings with fixes are posted with ```suggestion``` blocks; others as plain comments."""
+    from integrations.github.pr import post_findings_as_review
+    from shared.schemas.finding import FindingSchema, FixSchema
+
+    mock_pr = MagicMock()
+    mock_pr.head.repo.get_commit.return_value = MagicMock()
+
+    # Simulate a diff where line 3 of src/auth.py is in the PR
+    mock_file = MagicMock()
+    mock_file.filename = "src/auth.py"
+    mock_file.patch = "@@ -1,4 +1,4 @@\n line1\n line2\n-old line\n+new line\n"
+    mock_pr.get_files.return_value = [mock_file]
+
+    finding_with_fix = FindingSchema(
+        agent="security",
+        severity="high",
+        file="src/auth.py",
+        line_start=3,
+        line_end=3,
+        title="SQL Injection",
+        description="Unsafe query",
+        confidence=0.9,
+        fix=FixSchema(diff="safe_query(user_id)", description="Use parameterised query"),
+    )
+    finding_no_fix = FindingSchema(
+        agent="security",
+        severity="medium",
+        file="src/auth.py",
+        line_start=3,
+        line_end=3,
+        title="Hardcoded Secret",
+        description="Secret in code",
+        confidence=0.8,
+    )
+
+    post_findings_as_review(mock_pr, [finding_with_fix, finding_no_fix], "abc123")
+
+    mock_pr.create_review.assert_called_once()
+    comments = mock_pr.create_review.call_args[1]["comments"]
+    assert len(comments) == 2
+
+    fix_comment = next(c for c in comments if "SQL Injection" in c["body"])
+    assert "```suggestion" in fix_comment["body"]
+    assert "safe_query(user_id)" in fix_comment["body"]
+
+    plain_comment = next(c for c in comments if "Hardcoded Secret" in c["body"])
+    assert "```suggestion" not in plain_comment["body"]
+
+
+def test_post_findings_as_review_skips_lines_outside_diff():
+    """Findings on lines not in the PR diff are silently skipped."""
+    from integrations.github.pr import post_findings_as_review
+    from shared.schemas.finding import FindingSchema
+
+    mock_pr = MagicMock()
+    mock_pr.head.repo.get_commit.return_value = MagicMock()
+
+    mock_file = MagicMock()
+    mock_file.filename = "src/auth.py"
+    mock_file.patch = "@@ -1,2 +1,2 @@\n line1\n line2\n"
+    mock_pr.get_files.return_value = [mock_file]
+
+    # Finding is on line 99 — not in the diff above
+    finding = FindingSchema(
+        agent="security",
+        severity="high",
+        file="src/auth.py",
+        line_start=99,
+        line_end=99,
+        title="Issue",
+        description="Some issue",
+        confidence=0.9,
+    )
+
+    post_findings_as_review(mock_pr, [finding], "abc123")
+
+    mock_pr.create_review.assert_not_called()

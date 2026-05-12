@@ -1,7 +1,7 @@
 import logging
 
 from fix_engine.pipeline import run_fix_pipeline
-from integrations.github import PullRequestPayload, get_pr, get_pr_diff, get_pr_file_content, get_pr_files, post_issue_comment
+from integrations.github import PullRequestPayload, get_pr, get_pr_diff, get_pr_file_content, get_pr_files, post_findings_as_review, post_issue_comment
 from shared.schemas import FindingSchema
 
 from .graph import run_review
@@ -40,6 +40,9 @@ def run(payload: dict) -> None:
 
         # Run the fix engine to attempt to generate patches
         findings = run_fix_pipeline(findings, files_content)
+
+        # Post inline review suggestions for findings with fixes; summary comment for all findings
+        post_findings_as_review(pr, findings, pr_payload.head_sha)
         post_issue_comment(pr, _format_findings(findings))
 
     except Exception:
