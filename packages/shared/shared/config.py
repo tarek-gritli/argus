@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     env: str = "development"
     api_prefix: str = "/api/v1"
     anthropic_api_key: str | None = None
+    gemini_api_key: str | None = None
 
 
 @lru_cache
