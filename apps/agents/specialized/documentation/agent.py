@@ -17,14 +17,13 @@ import logging
 import re
 from typing import Any
 
-from google import genai
-from shared.config import get_settings
 from shared.schemas.finding import FindingSchema
 
 from .checks.missing_docstrings import run_missing_docstring_checks
 from .checks.param_coverage import run_param_coverage_checks
 from .checks.readme_gaps import run_readme_gap_checks
 from .checks.stale_comments import run_stale_comment_checks
+from .gemini_client import call_gemini
 from .prompts.system import DOCUMENTATION_SYSTEM_PROMPT
 from .schemas import AgentInput
 from .validator import validate_findings
@@ -99,20 +98,12 @@ def _summarize_static(findings: list[dict[str, Any]]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# LLM call
+# LLM call (delegates to shared client with retry logic)
 # ---------------------------------------------------------------------------
 
 
 def _call_gemini(system: str, user: str) -> str:
-    settings = get_settings()
-    if not settings.gemini_api_key:
-        raise RuntimeError("GEMINI_API_KEY is not set in environment")
-    client = genai.Client(api_key=settings.gemini_api_key)
-    response = client.models.generate_content(
-        model=_MODEL,
-        contents=f"{system}\n\n{user}",
-    )
-    return response.text or ""
+    return call_gemini(system, user, fallback="[]")
 
 
 # ---------------------------------------------------------------------------
@@ -179,25 +170,14 @@ def _generate_docstring_fixes(
     if not missing_findings:
         return {}
 
-    settings = get_settings()
-    if not settings.gemini_api_key:
-        return {}
-
     items = []
     for f in missing_findings:
         items.append(f"- file={f['file']} line={f['line_start']} title={f['title']}")
 
     prompt = "Generate docstrings for these undocumented functions/classes found in the diff.\n\nMissing docstrings:\n" + "\n".join(items) + "\n\nDiff context:\n" + diff[:30_000]
 
-    try:
-        client = genai.Client(api_key=settings.gemini_api_key)
-        response = client.models.generate_content(
-            model=_MODEL,
-            contents=f"{_DOCFIX_SYSTEM}\n\n{prompt}",
-        )
-        raw = response.text or ""
-    except Exception as exc:
-        logger.warning("Gemini docstring generation failed: %s", exc)
+    raw = call_gemini(_DOCFIX_SYSTEM, prompt, fallback="")
+    if not raw:
         return {}
 
     cleaned = re.sub(r"```(?:json)?\s*", "", raw).strip()

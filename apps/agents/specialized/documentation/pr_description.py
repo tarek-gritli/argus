@@ -7,14 +7,13 @@ and fills in the appropriate template, even if the developer wrote nothing.
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 
-from google import genai
-from shared.config import get_settings
+from .gemini_client import call_gemini
 
 logger = logging.getLogger(__name__)
-
-_MODEL = "gemini-2.0-flash"
 
 _TEMPLATES = {
     "feature": """\
@@ -124,22 +123,10 @@ def generate_pr_description(
         logger.info("PR already has a detailed description — skipping auto-generation.")
         return None
 
-    settings = get_settings()
-    if not settings.gemini_api_key:
-        logger.warning("GEMINI_API_KEY not set — skipping PR description generation.")
+    prompt = f"PR Title: {pr_title}\n\nDiff:\n{diff[:60_000]}"
+    raw = call_gemini(_SYSTEM_PROMPT, prompt, fallback="")
+    if not raw:
         return None
-
-    try:
-        client = genai.Client(api_key=settings.gemini_api_key)
-        prompt = f"{_SYSTEM_PROMPT}\n\nPR Title: {pr_title}\n\nDiff:\n{diff[:60_000]}"
-        response = client.models.generate_content(model=_MODEL, contents=prompt)
-        raw = response.text or ""
-    except Exception as exc:
-        logger.warning("Gemini call failed for PR description: %s", exc)
-        return None
-
-    import json
-    import re
 
     cleaned = re.sub(r"```(?:json)?\s*", "", raw).strip()
     start, end = cleaned.find("{"), cleaned.rfind("}")
