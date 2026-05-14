@@ -15,9 +15,9 @@ class Settings(BaseSettings):
     github_private_key_b64: str
 
     # Auth
-    github_client_id: str = ""
-    github_client_secret: str = ""
-    jwt_secret_key: str = ""
+    github_client_id: str
+    github_client_secret: str
+    jwt_secret_key: str
     jwt_ttl_seconds: int = 86400
 
     # App
