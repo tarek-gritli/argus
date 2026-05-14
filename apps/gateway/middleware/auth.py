@@ -5,13 +5,20 @@ from fastapi import Request, Response
 from shared.config import get_settings
 from starlette.middleware.base import BaseHTTPMiddleware
 
-_EXEMPT_PREFIXES = ("/ping", "/api/v1/webhooks/", "/api/v1/auth/github/", "/api/v1/admin/")
+
+def _build_exempt_prefixes() -> tuple[str, ...]:
+    p = get_settings().api_prefix
+    return ("/ping", f"{p}/webhooks/", f"{p}/auth/github/")
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app):
+        super().__init__(app)
+        self._exempt = _build_exempt_prefixes()
+
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
-        if any(path.startswith(p) for p in _EXEMPT_PREFIXES):
+        if any(path.startswith(p) for p in self._exempt):
             return await call_next(request)
 
         token = _extract_token(request)

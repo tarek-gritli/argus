@@ -71,7 +71,7 @@ async def github_callback(
     existing_user = result.scalar_one_or_none()
 
     if existing_user is None:
-        org = Org(slug=github_login_name, name=gh_user.get("name") or github_login_name, plan="free", review_quota=50)
+        org = Org(slug=github_login_name, name=gh_user.get("name") or github_login_name)
         session.add(org)
         await session.flush()
         user = User(org_id=org.id, github_id=github_id, github_login=github_login_name, avatar_url=avatar_url, role="owner")
