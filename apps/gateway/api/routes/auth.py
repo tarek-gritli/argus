@@ -37,34 +37,41 @@ async def github_callback(
     session: AsyncSession = Depends(get_session),
 ):
     key = f"oauth_state:{state}"
-    valid = await request.app.state.redis.get(key)
+    valid = await request.app.state.redis.getdel(key)
     if not valid:
         return Response(status_code=400, content="Invalid or expired state")
-    await request.app.state.redis.delete(key)
 
-    async with httpx.AsyncClient() as client:
-        token_resp = await client.post(
-            _GITHUB_TOKEN_URL,
-            data={
-                "client_id": settings.github_client_id,
-                "client_secret": settings.github_client_secret,
-                "code": code,
-            },
-            headers={"Accept": "application/json"},
-        )
-    token_data = token_resp.json()
-    access_token = token_data.get("access_token")
-    if not access_token:
-        return Response(status_code=400, content="GitHub OAuth failed")
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            token_resp = await client.post(
+                _GITHUB_TOKEN_URL,
+                data={
+                    "client_id": settings.github_client_id,
+                    "client_secret": settings.github_client_secret,
+                    "code": code,
+                },
+                headers={"Accept": "application/json"},
+            )
+            token_resp.raise_for_status()
+            access_token = token_resp.json().get("access_token")
+            if not access_token:
+                return Response(status_code=400, content="GitHub OAuth failed")
 
-    async with httpx.AsyncClient() as client:
-        user_resp = await client.get(
-            _GITHUB_USER_URL,
-            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/vnd.github+json"},
-        )
-    gh_user = user_resp.json()
-    github_id = gh_user["id"]
-    github_login_name = gh_user["login"]
+            user_resp = await client.get(
+                _GITHUB_USER_URL,
+                headers={"Authorization": f"Bearer {access_token}", "Accept": "application/vnd.github+json"},
+            )
+            user_resp.raise_for_status()
+            gh_user = user_resp.json()
+    except httpx.HTTPError:
+        return Response(status_code=502, content="GitHub API unavailable")
+    except ValueError:
+        return Response(status_code=502, content="Invalid response from GitHub")
+
+    github_id = gh_user.get("id")
+    github_login_name = gh_user.get("login")
+    if not github_id or not github_login_name:
+        return Response(status_code=502, content="Incomplete GitHub user data")
     avatar_url = gh_user.get("avatar_url")
 
     result = await session.execute(select(User).where(User.github_id == github_id))

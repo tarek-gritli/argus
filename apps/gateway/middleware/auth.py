@@ -5,10 +5,12 @@ from fastapi import Request, Response
 from shared.config import get_settings
 from starlette.middleware.base import BaseHTTPMiddleware
 
+_EXEMPT_EXACT = frozenset(["/ping"])
+
 
 def _build_exempt_prefixes() -> tuple[str, ...]:
     p = get_settings().api_prefix
-    return ("/ping", f"{p}/webhooks/", f"{p}/auth/github/")
+    return (f"{p}/webhooks/", f"{p}/auth/github/", f"{p}/auth/logout")
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -18,7 +20,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
-        if any(path.startswith(p) for p in self._exempt):
+        if path in _EXEMPT_EXACT or any(path.startswith(p) for p in self._exempt):
             return await call_next(request)
 
         token = _extract_token(request)
@@ -31,9 +33,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
         except jwt.PyJWTError:
             return Response(status_code=401, content='{"detail":"Unauthorized"}', media_type="application/json")
 
-        request.state.user_id = payload["sub"]
-        request.state.org_id = payload["oid"]
-        request.state.role = payload["role"]
+        try:
+            request.state.user_id = payload["sub"]
+            request.state.org_id = payload["oid"]
+            request.state.role = payload["role"]
+        except KeyError:
+            return Response(status_code=401, content='{"detail":"Unauthorized"}', media_type="application/json")
         return await call_next(request)
 
 

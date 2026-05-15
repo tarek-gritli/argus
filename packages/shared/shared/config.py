@@ -1,6 +1,9 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
+
+_REQUIRED_NON_EMPTY = ("github_webhook_secret", "github_app_id", "github_private_key_b64", "github_client_id", "github_client_secret", "jwt_secret_key")
 
 
 class Settings(BaseSettings):
@@ -19,6 +22,13 @@ class Settings(BaseSettings):
     github_client_secret: str
     jwt_secret_key: str
     jwt_ttl_seconds: int = 86400
+
+    @field_validator(*_REQUIRED_NON_EMPTY, mode="before")
+    @classmethod
+    def _reject_blank(cls, v: str, info) -> str:
+        if not v or not v.strip():
+            raise ValueError(f"{info.field_name} must not be blank")
+        return v
 
     # App
     env: str = "development"
