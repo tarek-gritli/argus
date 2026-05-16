@@ -214,12 +214,31 @@ class _ReflectionDecisions(BaseModel):
 
 
 def run_security_agent(task: AgentTask) -> ReviewResult:
+    logger.info(
+        "Security agent starting: %s PR#%d",
+        task.repo_id,
+        task.pr_number,
+    )
     compiled_rules, ext_map = _load_sast_rules(_RULES_DIR)
     ctx = _build_context(task, _RULES_DIR, ext_map)
     diff_lines = _extract_added_lines(task.diff, task.repo_config.exempt_paths)
+    logger.debug("Extracted %d added lines from diff", len(diff_lines))
+
     hits = asyncio.run(_run_scanners(diff_lines, compiled_rules, ext_map))
+    logger.info(
+        "Scanners complete — SAST: %d, secrets: %d, deps: %d",
+        len(hits.sast),
+        len(hits.secrets),
+        len(hits.dependencies),
+    )
+
+    logger.info("Calling Claude for security review...")
     raw_findings = _generate_findings_llm(task.diff, hits, ctx)
+    logger.info("LLM returned %d raw findings", len(raw_findings))
+
     findings = _reflect_findings_llm(raw_findings)
+    logger.info("After reflection: %d findings", len(findings))
+
     return _format_output(findings, task)
 
 
