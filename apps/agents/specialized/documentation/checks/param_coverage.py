@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
+import ast
 import re
 from typing import Any
 
 FindingDict = dict[str, Any]
 
-# Matches a def line with at least one non-self/cls parameter
-_DEF_WITH_PARAMS_RE = re.compile(r"^\+\s*(?:async\s+)?def\s+(\w+)\s*\(([^)]*)\)")
-_TRIVIAL_PARAMS_RE = re.compile(r"^\s*(?:self|cls)?\s*$")
-
-# Return type hints that suggest a non-trivial return
-_RETURN_HINT_RE = re.compile(r"->\s*(?!None\b)(?!None\s*[|:])(\S)")
+# Matches a def line with a closing paren on the same line (single-line signatures only)
+_DEF_WITH_PARAMS_RE = re.compile(r"^\+\s*(?:async\s+)?def\s+(\w+)\s*\([^)]*\)")
+_TRIVIAL_NAMES = frozenset({"self", "cls"})
 
 # Docstring presence within a few lines after the def (lines already have + stripped)
 _DOCSTRING_OPEN_RE = re.compile(r'^\s*(?:"""|\'\'\')')
@@ -62,15 +60,12 @@ def run_param_coverage_checks(context: dict[str, Any]) -> list[FindingDict]:
         def_match = _DEF_WITH_PARAMS_RE.match(line)
         if def_match:
             name = def_match.group(1)
-            params_raw = def_match.group(2)
 
             if _PRIVATE_RE.match(name):
                 i += 1
                 continue
 
-            # Non-trivial params?
-            params = [p.strip().split(":")[0].split("=")[0].strip() for p in params_raw.split(",") if p.strip() and not _TRIVIAL_PARAMS_RE.match(p.strip())]
-            has_return_hint = bool(_RETURN_HINT_RE.search(line))
+            params, has_return_hint = _extract_params_ast(line)
 
             if not params and not has_return_hint:
                 i += 1
@@ -101,6 +96,29 @@ def run_param_coverage_checks(context: dict[str, Any]) -> list[FindingDict]:
         i += 1
 
     return findings
+
+
+def _extract_params_ast(diff_line: str) -> tuple[list[str], bool]:
+    """Parse a single-line def from a diff line using AST. Returns (params, has_return_hint)."""
+    src = diff_line.lstrip("+").rstrip()
+    if not src.endswith(":"):
+        src += ":"
+    try:
+        tree = ast.parse(src + "\n    pass")
+    except SyntaxError:
+        return [], False
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            args = node.args
+            all_args = args.posonlyargs + args.args + args.kwonlyargs
+            if args.vararg:
+                all_args.append(args.vararg)
+            if args.kwarg:
+                all_args.append(args.kwarg)
+            params = [a.arg for a in all_args if a.arg not in _TRIVIAL_NAMES]
+            has_return = node.returns is not None and not (isinstance(node.returns, ast.Constant) and node.returns.value is None)
+            return params, has_return
+    return [], False
 
 
 def _collect_added_lines(lines: list[str], start: int, max_lines: int) -> list[str]:
