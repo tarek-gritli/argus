@@ -91,7 +91,7 @@ def run_param_coverage_checks(context: dict[str, Any]) -> list[FindingDict]:
                 i += 1
                 continue
 
-            missing_args = params and not _ARGS_SECTION_RE.search(docstring_body)
+            missing_args = bool(params) and not bool(_ARGS_SECTION_RE.search(docstring_body))
             missing_returns = has_return_hint and not _RETURNS_SECTION_RE.search(docstring_body)
 
             if missing_args or missing_returns:

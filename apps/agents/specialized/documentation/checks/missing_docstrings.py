@@ -42,7 +42,7 @@ def run_missing_docstring_checks(context: dict[str, Any]) -> list[FindingDict]:
         def_match = _DEF_RE.match(line)
         class_match = _CLASS_RE.match(line)
         match = def_match or class_match
-        name = (def_match or class_match).group(1) if match else None
+        name = match.group(1) if match else None
 
         if match and name and not _PRIVATE_RE.match(name):
             # Find line number from the most recent @@ header
