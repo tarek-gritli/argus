@@ -6,6 +6,7 @@ from typing import Annotated, Any, TypedDict
 from integrations.github import PullRequestPayload
 from langgraph.graph import END, START, StateGraph
 from shared.schemas import FindingSchema
+from specialized.documentation import analyze as documentation_analyze
 from specialized.quality import analyze as quality_analyze
 from specialized.security import analyze as security_analyze
 from specialized.testing import analyze as testing_analyze
@@ -30,17 +31,24 @@ def _testing_node(state: ReviewState) -> dict:
     return {"findings": testing_analyze(state["files"], state["diff"], state["pr_payload"])}
 
 
+def _documentation_node(state: ReviewState) -> dict:
+    return {"findings": documentation_analyze(state["files"], state["diff"], state["pr_payload"])}
+
+
 def build_review_graph():
     graph = StateGraph(ReviewState)
     graph.add_node("security", _security_node)
     graph.add_node("quality", _quality_node)
     graph.add_node("testing", _testing_node)
+    graph.add_node("documentation", _documentation_node)
     graph.add_edge(START, "security")
     graph.add_edge(START, "quality")
     graph.add_edge(START, "testing")
+    graph.add_edge(START, "documentation")
     graph.add_edge("security", END)
     graph.add_edge("quality", END)
     graph.add_edge("testing", END)
+    graph.add_edge("documentation", END)
     return graph.compile()
 
 

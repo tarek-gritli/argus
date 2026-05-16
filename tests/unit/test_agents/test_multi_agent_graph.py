@@ -53,6 +53,7 @@ class TestBuildReviewGraph:
             patch("orchestrator.graph.security_analyze", return_value=[sec_finding]),
             patch("orchestrator.graph.quality_analyze", return_value=[qual_finding]),
             patch("orchestrator.graph.testing_analyze", return_value=[test_finding]),
+            patch("orchestrator.graph.documentation_analyze", return_value=[]),
         ):
             from orchestrator.graph import run_review
 
@@ -71,6 +72,7 @@ class TestBuildReviewGraph:
             patch("orchestrator.graph.security_analyze", return_value=[]),
             patch("orchestrator.graph.quality_analyze", return_value=[]),
             patch("orchestrator.graph.testing_analyze", return_value=[]),
+            patch("orchestrator.graph.documentation_analyze", return_value=[]),
         ):
             from orchestrator.graph import run_review
 
