@@ -143,7 +143,11 @@ def _make_finding(
         "line_start": lineno,
         "line_end": lineno,
         "title": f"`{name}` docstring is missing {missing_str} section",
-        "description": (f"`{name}` has parameters ({param_list}) but its docstring is missing a {missing_str} section. Callers cannot understand the expected inputs/outputs without reading the implementation."),
+        "description": (
+            f"`{name}` has parameters ({param_list}) but its docstring is missing a {missing_str} section. Callers cannot understand the expected inputs/outputs without reading the implementation."
+            if param_list
+            else f"`{name}`'s docstring is missing a {missing_str} section. Callers cannot understand the return value without reading the implementation."
+        ),
         "suggestion": "\n".join(suggestion_lines),
         "confidence": 0.82,
         "fix": None,

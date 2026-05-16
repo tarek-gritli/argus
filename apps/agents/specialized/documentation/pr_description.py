@@ -111,9 +111,14 @@ Rules:
 
 
 def _has_meaningful_pr_body(body: str) -> bool:
-    """Return True if the PR body already contains substantial content."""
+    """Return True if the PR body contains substantial non-template content."""
+    if not body or not isinstance(body, str):
+        return False
     stripped = body.strip()
-    return len(stripped) > 200 and any(c.isalpha() for c in stripped)
+    cleaned = re.sub(r"(?m)^\s*[-*]\s*\[[ xX]\]\s*.*$", "", stripped)
+    cleaned = re.sub(r"(?m)^\s{0,3}#{1,6}\s+.*$", "", cleaned)
+    cleaned = re.sub(r"\b(N/?A|TBD|TODO)\b", "", cleaned, flags=re.IGNORECASE)
+    return len(cleaned.strip()) > 120
 
 
 def generate_pr_description(
