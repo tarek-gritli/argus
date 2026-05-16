@@ -1,7 +1,7 @@
 import hashlib
 import hmac
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -352,3 +352,34 @@ async def test_github_webhook_payload_extraction(patch_gateway_deps):
     assert task_payload["base_sha"] == "base789"
     assert task_payload["installation_id"] == 999
     assert task_payload["action"] == "opened"
+
+
+@pytest.mark.asyncio
+async def test_webhook_celery_payload_includes_org_id(patch_gateway_deps):
+    """org_id from get_or_create_org should be passed in the Celery task payload."""
+    app, mock_redis, mock_celery = patch_gateway_deps
+    payload = json.dumps(VALID_PR_PAYLOAD).encode()
+    signature = generate_signature(payload, "test-secret")
+    mock_redis.set.return_value = True
+
+    mock_session = AsyncMock()
+    mock_session_ctx = AsyncMock()
+    mock_session_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session_ctx.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("api.routes.webhooks.get_or_create_org", new=AsyncMock(return_value="org-uuid-123")) as mock_org, patch("api.routes.webhooks.session_context", return_value=mock_session_ctx):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/webhooks/github",
+                headers={
+                    "X-Hub-Signature-256": signature,
+                    "X-GitHub-Event": "pull_request",
+                    "X-GitHub-Delivery": "org-resolution-test",
+                },
+                content=payload,
+            )
+
+    assert response.status_code == 200
+    mock_org.assert_called_once()
+    task_payload = mock_celery.send_task.call_args[1]["args"][0]
+    assert task_payload["org_id"] == "org-uuid-123"
