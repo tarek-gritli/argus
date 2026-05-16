@@ -69,8 +69,8 @@ def validate_findings(raw_findings: list[dict[str, Any]]) -> list[dict[str, Any]
             logger.warning("Dropping finding with non-numeric confidence")
             continue
 
-        title_lower = finding["title"].lower()
-        desc_lower = finding.get("description", "").lower()
+        title_lower = str(finding["title"]).lower()
+        desc_lower = str(finding.get("description", "")).lower()
         for pattern in _SPECULATIVE_PATTERNS:
             if pattern in title_lower or pattern in desc_lower:
                 confidence *= 0.5

@@ -64,7 +64,8 @@ def run_missing_docstring_checks(context: dict[str, Any]) -> list[FindingDict]:
 def _next_added_line_is_docstring(lines: list[str], start: int) -> bool:
     """Return True if the next meaningful added line opens a docstring."""
     for line in lines[start : start + 6]:
-        stripped = line.lstrip("+ ")
+        # Strip exactly the diff marker (+/space/minus) to get content
+        stripped = line[1:].lstrip() if line and line[0] in ("+", " ", "-") else line.lstrip()
         if not stripped:
             continue
         # Skip the closing paren / colon of the def — look for body

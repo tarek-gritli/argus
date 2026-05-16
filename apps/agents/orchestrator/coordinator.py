@@ -50,9 +50,12 @@ def run(payload: dict) -> None:
 
         # Auto-generate and update PR description if it's missing or too short
         pr_description = generate_pr_description(diff, pr.title, pr.body or "")
-        if pr_description:
-            update_pr_body(pr, pr_description)
-            logger.info("PR description updated.")
+        if pr_description and pr_description != pr.body:
+            try:
+                update_pr_body(pr, pr_description)
+                logger.info("PR description updated.")
+            except Exception:
+                logger.warning("Failed to update PR description — continuing", exc_info=True)
 
         # Post inline review suggestions for findings with fixes; summary comment for all findings
         post_findings_as_review(pr, findings, pr_payload.head_sha)

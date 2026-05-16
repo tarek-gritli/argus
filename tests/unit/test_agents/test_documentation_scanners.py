@@ -303,8 +303,8 @@ def test_param_coverage_ignores_self_only_functions():
 
 def test_param_coverage_severity_is_medium():
     hits = run_param_coverage_checks(_ctx(DIFF_PARAMS_NO_ARGS_SECTION))
-    if hits:
-        assert all(h["severity"] == "medium" for h in hits)
+    assert hits
+    assert all(h["severity"] == "medium" for h in hits)
 
 
 # ---------------------------------------------------------------------------

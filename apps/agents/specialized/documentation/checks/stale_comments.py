@@ -11,7 +11,9 @@ FindingDict = dict[str, Any]
 _DEBT_RE = re.compile(r"#\s*(TODO|FIXME|HACK|XXX)\b", re.IGNORECASE)
 _TICKET_RE = re.compile(r"[A-Z]+-\d+|#\d+|https?://")
 
-# Commented-out code heuristics: line starts with # and looks like code
+# Commented-out code heuristics: line starts with # and looks like code.
+# Intentionally simple — false positives on explanatory comments are acceptable
+# because the LLM validation pass will filter them if confidence is too low.
 _COMMENTED_CODE_RE = re.compile(
     r"#\s*(?:(?:def |class |import |from |return |if |for |while |with )|"
     r"(?:\w+\s*=\s*\w)|(?:\w+\.\w+\())"

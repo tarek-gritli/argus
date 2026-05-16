@@ -75,11 +75,11 @@ def call_gemini(system: str, user: str, fallback: str = "[]") -> str:
         logger.warning("GEMINI_API_KEY not set — skipping Gemini call.")
         return fallback
 
-    client = genai.Client(api_key=settings.gemini_api_key)
     contents = f"{system}\n\n{user}"
 
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
+            client = genai.Client(api_key=settings.gemini_api_key)
             response = client.models.generate_content(model=_MODEL, contents=contents)
             return response.text or fallback
         except ClientError as exc:

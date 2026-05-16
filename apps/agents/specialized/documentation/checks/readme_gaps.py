@@ -19,9 +19,6 @@ _PUBLIC_MODULE_RE = re.compile(r"^(?!.*(test_|_test\.|__init__)).*\.py$")
 # Environment variable patterns in added lines
 _ENVVAR_RE = re.compile(r'os\.(?:environ\.get|getenv)\(["\'](\w+)["\']|settings\.(\w+)\b')
 
-# Config key patterns
-_CONFIG_KEY_RE = re.compile(r'["\']([A-Z][A-Z0-9_]{3,})["\']')
-
 
 def run_readme_gap_checks(context: dict[str, Any]) -> list[FindingDict]:
     """Detect new public modules and undocumented env vars when docs weren't updated."""

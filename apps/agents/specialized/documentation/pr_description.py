@@ -110,6 +110,12 @@ Rules:
 """
 
 
+def _has_meaningful_pr_body(body: str) -> bool:
+    """Return True if the PR body already contains substantial content."""
+    stripped = body.strip()
+    return len(stripped) > 200 and any(c.isalpha() for c in stripped)
+
+
 def generate_pr_description(
     diff: str,
     pr_title: str,
@@ -119,7 +125,7 @@ def generate_pr_description(
 
     Returns None if generation fails, so the caller can skip updating.
     """
-    if existing_body and len(existing_body.strip()) > 200:
+    if existing_body and _has_meaningful_pr_body(existing_body):
         logger.info("PR already has a detailed description — skipping auto-generation.")
         return None
 

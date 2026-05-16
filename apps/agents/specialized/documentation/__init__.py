@@ -22,7 +22,9 @@ def _patch_to_source(patch: str) -> str:
             continue
         if line.startswith("-"):
             continue
-        lines.append(line[1:])
+        # Only strip the diff marker (+/space) — leave metadata lines like
+        # "\ No newline at end of file" untouched.
+        lines.append(line[1:] if line and line[0] in (" ", "+") else line)
     return "\n".join(lines)
 
 

@@ -34,6 +34,13 @@ logger = logging.getLogger(__name__)
 _MODEL = "gemini-2.0-flash"
 
 
+def _safe_int(value: object, default: int = 0) -> int:
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+
+
 # ---------------------------------------------------------------------------
 # Static analysis pass
 # ---------------------------------------------------------------------------
@@ -135,7 +142,7 @@ def _dedup(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     seen: set[tuple[str, int, str]] = set()
     result = []
     for f in findings:
-        key = (f.get("file", ""), int(f.get("line_start", 0)), f.get("title", "").lower()[:40])
+        key = (f.get("file", ""), _safe_int(f.get("line_start", 0)), f.get("title", "").lower()[:40])
         if key not in seen:
             seen.add(key)
             result.append(f)
@@ -192,7 +199,7 @@ def _generate_docstring_fixes(
 
     result: dict[tuple[str, int], str] = {}
     for item in items_parsed:
-        key = (item.get("file", ""), int(item.get("line_start", 0)))
+        key = (item.get("file", ""), _safe_int(item.get("line_start", 0)))
         docstring = item.get("docstring", "")
         if docstring:
             result[key] = docstring
