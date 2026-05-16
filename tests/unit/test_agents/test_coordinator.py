@@ -202,7 +202,7 @@ def test_run_persists_review_and_findings_when_org_id_present():
         patch("orchestrator.coordinator.run_fix_pipeline", return_value=[SAMPLE_FINDING]),
         patch("orchestrator.coordinator.post_findings_as_review"),
         patch("orchestrator.coordinator.post_issue_comment"),
-        patch("orchestrator.coordinator.session_context", return_value=mock_ctx),
+        patch("orchestrator.coordinator.fresh_session_context", return_value=mock_ctx),
     ):
         from orchestrator.coordinator import run
 
@@ -226,7 +226,7 @@ def test_run_skips_persist_when_no_org_id():
         patch("orchestrator.coordinator.run_fix_pipeline", return_value=[SAMPLE_FINDING]),
         patch("orchestrator.coordinator.post_findings_as_review"),
         patch("orchestrator.coordinator.post_issue_comment"),
-        patch("orchestrator.coordinator.session_context") as mock_sc,
+        patch("orchestrator.coordinator.fresh_session_context") as mock_sc,
     ):
         from orchestrator.coordinator import run
 

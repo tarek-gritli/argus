@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from fix_engine.pipeline import run_fix_pipeline
 from integrations.github import PullRequestPayload, get_pr, get_pr_diff, get_pr_file_content, get_pr_files, post_findings_as_review, post_issue_comment
-from shared.db import session_context
+from shared.db import fresh_session_context
 from shared.models import Finding as FindingModel
 from shared.models import Repo, Review
 from shared.schemas import FindingSchema
@@ -61,7 +61,7 @@ def run(payload: dict) -> None:
 
 
 async def _persist(org_id: str, pr_payload: PullRequestPayload, findings: list[FindingSchema]) -> None:
-    async with session_context() as session:
+    async with fresh_session_context() as session:
         result = await session.execute(select(Repo).where(Repo.installation_id == pr_payload.installation_id, Repo.full_name == pr_payload.repo_full_name))
         repo = result.scalar_one_or_none()
         if not repo:

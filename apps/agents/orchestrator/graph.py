@@ -19,7 +19,7 @@ class ReviewState(TypedDict):
 
 
 def _security_node(state: ReviewState) -> dict:
-    return {"findings": security_analyze(state["files"], state["pr_payload"])}
+    return {"findings": security_analyze(state["files"], state["diff"], state["pr_payload"])}
 
 
 def _quality_node(state: ReviewState) -> dict:
