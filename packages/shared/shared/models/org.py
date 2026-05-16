@@ -12,7 +12,7 @@ from .base import Base
 if TYPE_CHECKING:
     from .repo import Repo
     from .review import Review
-    from .user import User
+    from .user_org import UserOrg
 
 
 class Org(Base):
@@ -26,6 +26,6 @@ class Org(Base):
         default=lambda: datetime.now(timezone.utc),
     )
 
-    users: Mapped[list["User"]] = relationship("User", back_populates="org")
+    memberships: Mapped[list["UserOrg"]] = relationship("UserOrg", back_populates="org")
     repos: Mapped[list["Repo"]] = relationship("Repo", back_populates="org")
     reviews: Mapped[list["Review"]] = relationship("Review", back_populates="org")
