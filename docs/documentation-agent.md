@@ -6,7 +6,7 @@ Analyzes pull request diffs for documentation quality issues and auto-generates 
 
 ## Architecture
 
-```
+```text
 PR Diff
   │
   ├─► Static Checks (no LLM, instant)
@@ -37,13 +37,13 @@ PR Diff
 | Capability | How |
 |---|---|
 | Detects missing docstrings | Regex on added `def`/`class` lines in diff |
-| Detects undocumented params | Checks `Args:`/`Returns:` coverage in existing docstrings |
+| Detects undocumented params | AST-parses added `def` signatures; checks `Args:`/`Returns:` coverage in docstrings |
 | Flags stale comments | Finds TODO/FIXME/HACK without a ticket reference |
 | Spots commented-out code | Detects `# <code>` blocks in added lines |
 | Catches README gaps | New `os.environ.get(...)` or new modules without README mention |
 | Generates docstrings | Single Gemini call → Google-style docstring as a GitHub suggestion |
 | Qualitative review | Gemini reads full diff for semantic doc issues |
-| Auto PR description | Detects PR type (Feature/Bug Fix/Hotfix/Improvement/Refactor) and fills the matching template |
+| Auto PR description | Detects PR type (Feature/Bug Fix/Hotfix/Improvement/Refactor) and fills the matching template; skips if the existing body already contains substantial non-template content |
 
 ---
 
@@ -68,7 +68,7 @@ Findings are posted as inline GitHub review comments. Those with a `fix.diff` ap
 
 ## Files
 
-```
+```text
 specialized/documentation/
 ├── agent.py            — main pipeline entry point
 ├── gemini_client.py    — shared Gemini call with retry logic
