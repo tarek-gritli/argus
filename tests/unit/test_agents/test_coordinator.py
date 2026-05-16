@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from shared.schemas import FindingSchema
@@ -171,3 +171,65 @@ def test_format_findings_empty_returns_clean():
 
     result = _format_findings([])
     assert "No issues" in result
+
+
+def test_run_persists_review_and_findings_when_org_id_present():
+    """When org_id is in payload, coordinator should persist Review + Findings to DB."""
+    mock_pr = _make_mock_pr()
+    mock_files = _make_mock_files()
+
+    mock_repo = MagicMock()
+    mock_repo.id = "repo-uuid"
+
+    mock_session = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_repo)))
+    mock_session.flush = AsyncMock()
+    mock_session.commit = AsyncMock()
+    mock_session.add = MagicMock()
+
+    mock_ctx = AsyncMock()
+    mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_ctx.__aexit__ = AsyncMock(return_value=False)
+
+    payload_with_org = {**VALID_PAYLOAD, "org_id": "org-123"}
+
+    with (
+        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
+        patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
+        patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
+        patch("orchestrator.coordinator.get_pr_file_content", return_value="code"),
+        patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]),
+        patch("orchestrator.coordinator.run_fix_pipeline", return_value=[SAMPLE_FINDING]),
+        patch("orchestrator.coordinator.post_findings_as_review"),
+        patch("orchestrator.coordinator.post_issue_comment"),
+        patch("orchestrator.coordinator.session_context", return_value=mock_ctx),
+    ):
+        from orchestrator.coordinator import run
+
+        run(payload_with_org)
+
+    assert mock_session.add.called
+    assert mock_session.commit.called
+
+
+def test_run_skips_persist_when_no_org_id():
+    """When org_id is absent, coordinator skips DB writes."""
+    mock_pr = _make_mock_pr()
+    mock_files = _make_mock_files()
+
+    with (
+        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
+        patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
+        patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
+        patch("orchestrator.coordinator.get_pr_file_content", return_value="code"),
+        patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]),
+        patch("orchestrator.coordinator.run_fix_pipeline", return_value=[SAMPLE_FINDING]),
+        patch("orchestrator.coordinator.post_findings_as_review"),
+        patch("orchestrator.coordinator.post_issue_comment"),
+        patch("orchestrator.coordinator.session_context") as mock_sc,
+    ):
+        from orchestrator.coordinator import run
+
+        run(VALID_PAYLOAD)  # no org_id
+
+    mock_sc.assert_not_called()

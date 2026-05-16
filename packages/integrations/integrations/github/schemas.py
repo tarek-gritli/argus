@@ -8,3 +8,4 @@ class PullRequestPayload(BaseModel):
     base_sha: str
     installation_id: int
     action: str
+    org_id: str = ""
