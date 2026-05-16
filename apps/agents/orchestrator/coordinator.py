@@ -50,7 +50,10 @@ def run(payload: dict) -> None:
         post_issue_comment(pr, _format_findings(findings))
 
         if org_id:
-            asyncio.run(_persist(org_id=org_id, pr_payload=pr_payload, findings=findings))
+            try:
+                asyncio.run(_persist(org_id=org_id, pr_payload=pr_payload, findings=findings))
+            except Exception:
+                logger.exception("Review persisted to GitHub, but DB persistence failed")
 
     except Exception:
         logger.exception("Orchestration failed")
@@ -59,9 +62,11 @@ def run(payload: dict) -> None:
 
 async def _persist(org_id: str, pr_payload: PullRequestPayload, findings: list[FindingSchema]) -> None:
     async with session_context() as session:
-        result = await session.execute(select(Repo).where(Repo.installation_id == pr_payload.installation_id))
+        result = await session.execute(select(Repo).where(Repo.installation_id == pr_payload.installation_id, Repo.full_name == pr_payload.repo_full_name))
         repo = result.scalar_one_or_none()
-        repo_id = repo.id if repo else ""
+        if not repo:
+            raise ValueError(f"Repo not found for installation_id={pr_payload.installation_id} full_name={pr_payload.repo_full_name}")
+        repo_id = repo.id
 
         review = Review(
             org_id=org_id,

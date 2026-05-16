@@ -58,8 +58,12 @@ async def github_webhook(request: Request, settings: Settings = Depends(get_sett
         await redis_client.delete(delivery_id)
         return Response(status_code=400, content=f"Malformed payload: {e}")
 
-    async with session_context() as session:
-        org_id = await get_or_create_org(session, extracted_payload.installation_id, extracted_payload.repo_full_name)
+    try:
+        async with session_context() as session:
+            org_id = await get_or_create_org(session, extracted_payload.installation_id, extracted_payload.repo_full_name)
+    except Exception:
+        await redis_client.delete(delivery_id)
+        return Response(status_code=503, content="Org resolution failed")
 
     payload_dict = extracted_payload.model_dump()
     payload_dict["org_id"] = org_id

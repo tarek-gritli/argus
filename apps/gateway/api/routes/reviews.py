@@ -19,9 +19,11 @@ async def list_reviews(
     page: int = 1,
     per_page: int = 20,
 ):
+    page = max(1, page)
+    per_page = max(1, min(100, per_page))
     offset = (page - 1) * per_page
     async with session_context() as session:
-        result = await session.execute(select(Review).where(Review.org_id == org_id).offset(offset).limit(per_page))
+        result = await session.execute(select(Review).where(Review.org_id == org_id).order_by(Review.id.asc()).offset(offset).limit(per_page))
         reviews = result.scalars().all()
     return [
         {

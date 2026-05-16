@@ -355,6 +355,31 @@ async def test_github_webhook_payload_extraction(patch_gateway_deps):
 
 
 @pytest.mark.asyncio
+async def test_webhook_org_resolution_failure_cleans_dedupe_key(patch_gateway_deps):
+    """get_or_create_org raises → 503, dedupe key deleted, no Celery task."""
+    app, mock_redis, mock_celery = patch_gateway_deps
+    payload = json.dumps(VALID_PR_PAYLOAD).encode()
+    signature = generate_signature(payload, "test-secret")
+    mock_redis.set.return_value = True
+
+    with patch("api.routes.webhooks.get_or_create_org", new=AsyncMock(side_effect=Exception("DB down"))):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/webhooks/github",
+                headers={
+                    "X-Hub-Signature-256": signature,
+                    "X-GitHub-Event": "pull_request",
+                    "X-GitHub-Delivery": "org-resolution-test",
+                },
+                content=payload,
+            )
+
+    assert response.status_code == 503
+    mock_redis.delete.assert_called_once_with("org-resolution-test")
+    mock_celery.send_task.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_webhook_celery_payload_includes_org_id(patch_gateway_deps):
     """org_id from get_or_create_org should be passed in the Celery task payload."""
     app, mock_redis, mock_celery = patch_gateway_deps

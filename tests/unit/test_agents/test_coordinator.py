@@ -178,8 +178,11 @@ def test_run_persists_review_and_findings_when_org_id_present():
     mock_pr = _make_mock_pr()
     mock_files = _make_mock_files()
 
+    mock_repo = MagicMock()
+    mock_repo.id = "repo-uuid"
+
     mock_session = AsyncMock()
-    mock_session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
+    mock_session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_repo)))
     mock_session.flush = AsyncMock()
     mock_session.commit = AsyncMock()
     mock_session.add = MagicMock()

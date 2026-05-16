@@ -154,3 +154,4 @@ def test_reject_finding():
 
     assert resp.status_code == 200
     assert finding.is_accepted is False
+    mock_db.commit.assert_called_once()
