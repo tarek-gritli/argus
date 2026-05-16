@@ -76,11 +76,14 @@ async def github_callback(
 
     try:
         user, org, membership = await _upsert_user_org(session, github_id, github_login_name, gh_user)
-    except IntegrityError:
-        # Race: two simultaneous first-logins for the same GitHub user — retry as returning user
+    except IntegrityError as exc:
         await session.rollback()
         result = await session.execute(select(User).where(User.github_id == github_id))
-        user = result.scalar_one()
+        user = result.scalar_one_or_none()
+        if user is None:
+            # IntegrityError was not a same-user race (e.g. org slug collision) — surface it
+            raise exc
+        # Race: two simultaneous first-logins for the same GitHub user — continue as returning user
         result2 = await session.execute(select(UserOrg).where(UserOrg.user_id == user.id, UserOrg.role == "owner"))
         membership = result2.scalar_one()
         result3 = await session.execute(select(Org).where(Org.id == membership.org_id))
