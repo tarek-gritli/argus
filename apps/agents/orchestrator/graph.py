@@ -50,7 +50,7 @@ def build_review_graph(plan: str = "free"):
     graph.add_edge("quality", END)
     graph.add_edge("testing", END)
 
-    if plan == "team":
+    if plan in {"team", "enterprise"}:
         from specialized.best_practices import analyze as bp_analyze
         from specialized.performance import analyze as perf_analyze
         from specialized.ticket_compliance import analyze as tc_analyze
