@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -28,3 +28,12 @@ class UserOrg(Base):
 
     user: Mapped[User] = relationship("User", back_populates="memberships")
     org: Mapped[Org] = relationship("Org", back_populates="memberships")
+
+    __table_args__ = (
+        Index(
+            "uq_user_orgs_owner_per_user",
+            "user_id",
+            unique=True,
+            postgresql_where="role = 'owner'",
+        ),
+    )
