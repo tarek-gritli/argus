@@ -21,6 +21,8 @@ def mock_redis():
     mock_r = AsyncMock()
     mock_r.set = AsyncMock(return_value=True)
     mock_r.delete = AsyncMock(return_value=True)
+    mock_r.incr = AsyncMock(return_value=1)
+    mock_r.expire = AsyncMock(return_value=True)
     mock_r.aclose = AsyncMock()
     yield mock_r
 
