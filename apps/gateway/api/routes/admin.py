@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from shared.db import session_context
 from shared.models import Org, OrgBilling
 from sqlalchemy import select
@@ -13,7 +13,7 @@ _VALID_PLANS = {"free", "pro", "team", "enterprise"}
 
 class PlanUpdate(BaseModel):
     plan: str
-    seat_count: int = 1
+    seat_count: int = Field(default=1, ge=1)
 
 
 @router.post("/orgs/{org_id}/plan")
