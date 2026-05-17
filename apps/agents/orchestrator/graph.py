@@ -31,24 +31,52 @@ def _testing_node(state: ReviewState) -> dict:
     return {"findings": testing_analyze(state["files"], state["diff"], state["pr_payload"])}
 
 
-def _documentation_node(state: ReviewState) -> dict:
-    return {"findings": documentation_analyze(state["files"], state["diff"], state["pr_payload"])}
+_VALID_PLANS = {"free", "pro", "team", "enterprise"}
 
 
-def build_review_graph():
+def build_review_graph(plan: str = "free"):
+    plan = plan.lower().strip()
+    if plan not in _VALID_PLANS:
+        raise ValueError(f"Unknown plan {plan!r}. Must be one of: {sorted(_VALID_PLANS)}")
+
     graph = StateGraph(ReviewState)
     graph.add_node("security", _security_node)
     graph.add_node("quality", _quality_node)
     graph.add_node("testing", _testing_node)
-    graph.add_node("documentation", _documentation_node)
     graph.add_edge(START, "security")
     graph.add_edge(START, "quality")
     graph.add_edge(START, "testing")
-    graph.add_edge(START, "documentation")
     graph.add_edge("security", END)
     graph.add_edge("quality", END)
     graph.add_edge("testing", END)
-    graph.add_edge("documentation", END)
+
+    if plan in {"team", "enterprise"}:
+        from specialized.best_practices import analyze as bp_analyze
+        from specialized.performance import analyze as perf_analyze
+        from specialized.ticket_compliance import analyze as tc_analyze
+
+        def _perf_node(state: ReviewState) -> dict:
+            return {"findings": perf_analyze(state["files"], state["diff"], state["pr_payload"])}
+
+        def _bp_node(state: ReviewState) -> dict:
+            return {"findings": bp_analyze(state["files"], state["diff"], state["pr_payload"])}
+
+        def _doc_node(state: ReviewState) -> dict:
+            return {"findings": documentation_analyze(state["files"], state["diff"], state["pr_payload"])}
+
+        def _tc_node(state: ReviewState) -> dict:
+            return {"findings": tc_analyze(state["files"], state["diff"], state["pr_payload"])}
+
+        for name, node in [
+            ("performance", _perf_node),
+            ("best_practices", _bp_node),
+            ("documentation", _doc_node),
+            ("ticket_compliance", _tc_node),
+        ]:
+            graph.add_node(name, node)
+            graph.add_edge(START, name)
+            graph.add_edge(name, END)
+
     return graph.compile()
 
 
@@ -56,7 +84,8 @@ def run_review(
     files: list[Any],
     diff: str,
     pr_payload: PullRequestPayload,
+    plan: str = "free",
 ) -> list[FindingSchema]:
-    app = build_review_graph()
+    app = build_review_graph(plan=plan)
     result = app.invoke({"files": files, "diff": diff, "pr_payload": pr_payload, "findings": []})
     return result.get("findings", [])

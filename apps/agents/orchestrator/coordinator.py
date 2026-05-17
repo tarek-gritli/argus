@@ -12,6 +12,7 @@ from specialized.documentation.pr_description import generate_pr_description
 from sqlalchemy import select
 
 from .graph import run_review
+from .quota import check_and_increment_quota, get_or_create_billing
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,12 @@ def run(payload: dict) -> None:
         if not files:
             post_issue_comment(pr, "⚠️ No changes detected in this PR.")
             return
+
+        if org_id:
+            allowed = asyncio.run(_check_quota(org_id))
+            if not allowed:
+                post_issue_comment(pr, "⚠️ Argus review quota reached for this billing period. Upgrade your plan to continue.")
+                return
 
         diff = get_pr_diff(pr)
         findings = run_review(files=files, diff=diff, pr_payload=pr_payload)
@@ -70,6 +77,12 @@ def run(payload: dict) -> None:
     except Exception:
         logger.exception("Orchestration failed")
         raise
+
+
+async def _check_quota(org_id: str) -> bool:
+    async with fresh_session_context() as session:
+        billing = await get_or_create_billing(session, org_id)
+        return await check_and_increment_quota(session, billing)
 
 
 async def _persist(org_id: str, pr_payload: PullRequestPayload, findings: list[FindingSchema]) -> None:
