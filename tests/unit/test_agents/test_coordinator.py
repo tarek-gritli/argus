@@ -216,19 +216,12 @@ def test_run_persists_review_and_findings_when_org_id_present():
 def test_quota_exceeded_posts_comment_and_returns():
     mock_pr = _make_mock_pr()
 
-    mock_billing = MagicMock()
-    mock_billing.plan = "free"
-    mock_billing.reviews_used_this_month = 50
-    mock_billing.monthly_limit = 50
-
     with (
         patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
         patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
-        patch("orchestrator.coordinator.get_or_create_billing", new=AsyncMock(return_value=mock_billing)),
-        patch("orchestrator.coordinator.check_and_increment_quota", new=AsyncMock(return_value=False)),
+        patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=False)),
         patch("orchestrator.coordinator.run_review") as mock_review,
         patch("orchestrator.coordinator.post_issue_comment") as mock_post,
-        patch("orchestrator.coordinator.fresh_session_context", return_value=_make_session_ctx()),
     ):
         from orchestrator.coordinator import run
 
@@ -237,14 +230,6 @@ def test_quota_exceeded_posts_comment_and_returns():
     mock_review.assert_not_called()
     mock_post.assert_called_once()
     assert "quota" in mock_post.call_args[0][1].lower()
-
-
-def _make_session_ctx():
-    mock_session = AsyncMock()
-    mock_ctx = AsyncMock()
-    mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
-    mock_ctx.__aexit__ = AsyncMock(return_value=False)
-    return mock_ctx
 
 
 def test_run_skips_persist_when_no_org_id():
