@@ -31,7 +31,14 @@ def _testing_node(state: ReviewState) -> dict:
     return {"findings": testing_analyze(state["files"], state["diff"], state["pr_payload"])}
 
 
+_VALID_PLANS = {"free", "pro", "team", "enterprise"}
+
+
 def build_review_graph(plan: str = "free"):
+    plan = plan.lower().strip()
+    if plan not in _VALID_PLANS:
+        raise ValueError(f"Unknown plan {plan!r}. Must be one of: {sorted(_VALID_PLANS)}")
+
     graph = StateGraph(ReviewState)
     graph.add_node("security", _security_node)
     graph.add_node("quality", _quality_node)

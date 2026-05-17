@@ -215,6 +215,25 @@ class TestPlanGating:
         assert "documentation" in nodes
         assert "ticket_compliance" in nodes
 
+    def test_unknown_plan_raises(self):
+        import pytest
+        from orchestrator.graph import build_review_graph
+
+        with pytest.raises(ValueError, match="Unknown plan"):
+            build_review_graph(plan="enterprise_plus")
+
+    def test_plan_normalized_case(self):
+        with (
+            patch("orchestrator.graph.security_analyze", return_value=[]),
+            patch("orchestrator.graph.quality_analyze", return_value=[]),
+            patch("orchestrator.graph.testing_analyze", return_value=[]),
+        ):
+            from orchestrator.graph import build_review_graph
+
+            graph = build_review_graph(plan="FREE")
+
+        assert "security" in graph.get_graph().nodes
+
 
 class TestPatchToSource:
     def test_strips_hunk_headers(self):
