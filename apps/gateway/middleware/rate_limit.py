@@ -40,7 +40,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         try:
             redis = get_redis(request)
             sha = await self._get_sha(redis)
-            result = await redis.evalsha(sha, 1, key, _CAPACITY, _REFILL_RATE, _TTL)
+            try:
+                result = await redis.evalsha(sha, 1, key, _CAPACITY, _REFILL_RATE, _TTL)
+            except Exception as e:
+                if "NOSCRIPT" in str(e):
+                    self._sha = None
+                    sha = await self._get_sha(redis)
+                    result = await redis.evalsha(sha, 1, key, _CAPACITY, _REFILL_RATE, _TTL)
+                else:
+                    raise
             allowed = result[0]
         except Exception:
             logger.warning("Rate limit Redis unavailable — allowing request", exc_info=True)

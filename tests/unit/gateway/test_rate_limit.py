@@ -66,6 +66,18 @@ def test_redis_outage_allows_request():
     assert resp.status_code == 200
 
 
+def test_noscript_reloads_and_retries():
+    # First evalsha raises NOSCRIPT; after reload the retry succeeds.
+    mock_redis = AsyncMock()
+    mock_redis.script_load = AsyncMock(return_value="newsha")
+    mock_redis.evalsha = AsyncMock(side_effect=[Exception("NOSCRIPT No matching script"), [1, 59]])
+    with patch("middleware.rate_limit.get_redis", return_value=mock_redis):
+        client = TestClient(_make_app())
+        resp = client.post("/api/v1/webhooks/github", headers={"X-Installation-Id": "123"})
+    assert resp.status_code == 200
+    assert mock_redis.script_load.call_count == 2  # initial load + reload
+
+
 def test_burst_allowed_within_capacity():
     # Simulates 3 rapid events (GitHub PR open/sync/reopen) — all should pass
     results = [[1, 59], [1, 58], [1, 57]]
