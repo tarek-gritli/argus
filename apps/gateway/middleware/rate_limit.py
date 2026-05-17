@@ -27,7 +27,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     async def _get_sha(self, redis) -> str:
         if self._sha is None:
-            self._sha = await redis.script_load(_LUA_SCRIPT)
+            self._sha = str(await redis.script_load(_LUA_SCRIPT))
         return self._sha
 
     async def dispatch(self, request: Request, call_next):
