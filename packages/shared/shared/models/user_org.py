@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Index, String
+from sqlalchemy import DateTime, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -30,6 +30,7 @@ class UserOrg(Base):
     org: Mapped[Org] = relationship("Org", back_populates="memberships")
 
     __table_args__ = (
+        UniqueConstraint("user_id", "org_id", name="uq_user_orgs_user_id_org_id"),
         Index(
             "uq_user_orgs_owner_per_user",
             "user_id",

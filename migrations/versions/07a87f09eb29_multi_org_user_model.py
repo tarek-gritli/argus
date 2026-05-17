@@ -39,6 +39,7 @@ def upgrade() -> None:
             ["users.id"],
         ),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("user_id", "org_id", name="uq_user_orgs_user_id_org_id"),
     )
     op.drop_constraint(op.f("users_org_id_fkey"), "users", type_="foreignkey")
     op.drop_column("users", "org_id")
