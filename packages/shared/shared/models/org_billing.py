@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -28,6 +28,11 @@ class OrgBilling(Base):
     quota_reset_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: _next_month_start(),
+    )
+
+    __table_args__ = (
+        CheckConstraint("seat_count >= 1", name="ck_org_billing_seat_count_positive"),
+        CheckConstraint("reviews_used_this_month >= 0", name="ck_org_billing_reviews_used_non_negative"),
     )
 
     def __init__(self, org_id: str, plan: str = "free", seat_count: int = 1, reviews_used_this_month: int = 0, **kwargs):

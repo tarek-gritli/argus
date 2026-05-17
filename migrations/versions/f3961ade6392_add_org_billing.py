@@ -35,6 +35,8 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("org_id"),
+        sa.CheckConstraint("seat_count >= 1", name="ck_org_billing_seat_count_positive"),
+        sa.CheckConstraint("reviews_used_this_month >= 0", name="ck_org_billing_reviews_used_non_negative"),
     )
     # ### end Alembic commands ###
 
