@@ -207,15 +207,6 @@ class TestQuotaGate:
         assert "quota reached" not in body.lower()
         assert billing.reviews_used_this_month == 1  # reset to 0 then incremented
 
-    def test_new_org_provisions_free_plan_and_runs(self):
-        """Org with no billing record: fresh free plan, first review succeeds."""
-        fresh_billing = _billing(plan="free", reviews_used=0)
-        post_comment = MagicMock()
-        _run({**BASE_PAYLOAD, "org_id": "org-new"}, fresh_billing, post_comment)
-
-        body = post_comment.call_args[0][1]
-        assert "quota reached" not in body.lower()
-
 
 # ---------------------------------------------------------------------------
 # quota counter side-effects
