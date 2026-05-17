@@ -34,7 +34,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if not request.url.path.startswith(_WEBHOOK_PATH):
             return await call_next(request)
 
-        installation_id = request.headers.get("X-GitHub-Hook-Installation-Target-ID") or request.headers.get("X-Installation-Id", "unknown")
+        installation_id = request.headers.get("X-GitHub-Hook-Installation-Target-ID", "unknown")
         key = f"tb:{installation_id}"
 
         try:

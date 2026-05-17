@@ -4,6 +4,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from middleware.rate_limit import RateLimitMiddleware
 
+_GITHUB_ID_HEADER = "X-GitHub-Hook-Installation-Target-ID"
+
 
 def _make_app():
     app = FastAPI()
@@ -25,18 +27,16 @@ def _make_redis(evalsha_result):
 
 
 def test_under_limit_passes():
-    # evalsha returns [allowed=1, remaining=59]
     with patch("middleware.rate_limit.get_redis", return_value=_make_redis([1, 59])):
         client = TestClient(_make_app())
-        resp = client.post("/api/v1/webhooks/github", headers={"X-Installation-Id": "123"})
+        resp = client.post("/api/v1/webhooks/github", headers={_GITHUB_ID_HEADER: "123"})
     assert resp.status_code == 200
 
 
 def test_over_limit_returns_429():
-    # evalsha returns [allowed=0, remaining=0]
     with patch("middleware.rate_limit.get_redis", return_value=_make_redis([0, 0])):
         client = TestClient(_make_app())
-        resp = client.post("/api/v1/webhooks/github", headers={"X-Installation-Id": "123"})
+        resp = client.post("/api/v1/webhooks/github", headers={_GITHUB_ID_HEADER: "123"})
     assert resp.status_code == 429
 
 
@@ -62,24 +62,22 @@ def test_redis_outage_allows_request():
     mock_redis.script_load = AsyncMock(side_effect=Exception("Redis down"))
     with patch("middleware.rate_limit.get_redis", return_value=mock_redis):
         client = TestClient(_make_app())
-        resp = client.post("/api/v1/webhooks/github", headers={"X-Installation-Id": "123"})
+        resp = client.post("/api/v1/webhooks/github", headers={_GITHUB_ID_HEADER: "123"})
     assert resp.status_code == 200
 
 
 def test_noscript_reloads_and_retries():
-    # First evalsha raises NOSCRIPT; after reload the retry succeeds.
     mock_redis = AsyncMock()
     mock_redis.script_load = AsyncMock(return_value="newsha")
     mock_redis.evalsha = AsyncMock(side_effect=[Exception("NOSCRIPT No matching script"), [1, 59]])
     with patch("middleware.rate_limit.get_redis", return_value=mock_redis):
         client = TestClient(_make_app())
-        resp = client.post("/api/v1/webhooks/github", headers={"X-Installation-Id": "123"})
+        resp = client.post("/api/v1/webhooks/github", headers={_GITHUB_ID_HEADER: "123"})
     assert resp.status_code == 200
     assert mock_redis.script_load.call_count == 2  # initial load + reload
 
 
 def test_burst_allowed_within_capacity():
-    # Simulates 3 rapid events (GitHub PR open/sync/reopen) — all should pass
     results = [[1, 59], [1, 58], [1, 57]]
     call_count = 0
 
@@ -96,5 +94,43 @@ def test_burst_allowed_within_capacity():
     with patch("middleware.rate_limit.get_redis", return_value=mock_redis):
         client = TestClient(_make_app())
         for _ in range(3):
-            resp = client.post("/api/v1/webhooks/github", headers={"X-Installation-Id": "123"})
+            resp = client.post("/api/v1/webhooks/github", headers={_GITHUB_ID_HEADER: "123"})
             assert resp.status_code == 200
+
+
+def test_429_includes_retry_after_header():
+    with patch("middleware.rate_limit.get_redis", return_value=_make_redis([0, 0])):
+        client = TestClient(_make_app())
+        resp = client.post("/api/v1/webhooks/github", headers={_GITHUB_ID_HEADER: "123"})
+    assert resp.status_code == 429
+    assert "retry-after" in resp.headers
+
+
+def test_missing_installation_id_uses_unknown_key():
+    """Request with no X-GitHub-Hook-Installation-Target-ID falls into the 'unknown' bucket."""
+    mock_redis = _make_redis([1, 59])
+    with patch("middleware.rate_limit.get_redis", return_value=mock_redis):
+        client = TestClient(_make_app())
+        resp = client.post("/api/v1/webhooks/github")
+    assert resp.status_code == 200
+    call_args = mock_redis.evalsha.call_args[0]
+    assert "unknown" in call_args[2]
+
+
+def test_installation_id_used_as_rate_limit_key():
+    """The GitHub installation ID from the header becomes the token bucket key."""
+    mock_redis = _make_redis([1, 59])
+    with patch("middleware.rate_limit.get_redis", return_value=mock_redis):
+        client = TestClient(_make_app())
+        resp = client.post("/api/v1/webhooks/github", headers={_GITHUB_ID_HEADER: "99887"})
+    assert resp.status_code == 200
+    call_args = mock_redis.evalsha.call_args[0]
+    assert "99887" in call_args[2]
+
+
+def test_429_response_body_is_json():
+    with patch("middleware.rate_limit.get_redis", return_value=_make_redis([0, 0])):
+        client = TestClient(_make_app())
+        resp = client.post("/api/v1/webhooks/github", headers={_GITHUB_ID_HEADER: "123"})
+    assert resp.headers["content-type"].startswith("application/json")
+    assert resp.json()["detail"] == "Rate limit exceeded"
