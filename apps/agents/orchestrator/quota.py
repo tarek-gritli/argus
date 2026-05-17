@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 
 async def get_or_create_billing(session: AsyncSession, org_id: str) -> OrgBilling:
-    result = await session.execute(select(OrgBilling).where(OrgBilling.org_id == org_id))
+    result = await session.execute(select(OrgBilling).where(OrgBilling.org_id == org_id).with_for_update())
     billing = result.scalar_one_or_none()
     if billing is None:
         billing = OrgBilling(org_id=org_id)
