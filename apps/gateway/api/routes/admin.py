@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from shared.db import session_context
 from shared.models import Org, OrgBilling
@@ -11,13 +11,19 @@ router = APIRouter()
 _VALID_PLANS = {"free", "pro", "team", "enterprise"}
 
 
+def _get_org_id(request: Request) -> str:
+    return request.state.org_id
+
+
 class PlanUpdate(BaseModel):
     plan: str
     seat_count: int = Field(default=1, ge=1)
 
 
 @router.post("/orgs/{org_id}/plan")
-async def update_org_plan(org_id: str, body: PlanUpdate):
+async def update_org_plan(org_id: str, body: PlanUpdate, user_org_id: str = Depends(_get_org_id)):
+    if user_org_id != org_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     if body.plan not in _VALID_PLANS:
         raise HTTPException(status_code=400, detail=f"Invalid plan. Must be one of: {_VALID_PLANS}")
     async with session_context() as session:
