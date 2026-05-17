@@ -8,9 +8,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
-async def get_org_billing(session: AsyncSession, org_id: str) -> OrgBilling | None:
+async def get_or_create_billing(session: AsyncSession, org_id: str) -> OrgBilling:
     result = await session.execute(select(OrgBilling).where(OrgBilling.org_id == org_id))
-    return result.scalar_one_or_none()
+    billing = result.scalar_one_or_none()
+    if billing is None:
+        billing = OrgBilling(org_id=org_id)
+        session.add(billing)
+        await session.flush()
+    return billing
 
 
 async def check_and_increment_quota(session: AsyncSession, billing: OrgBilling) -> bool:

@@ -224,7 +224,7 @@ def test_quota_exceeded_posts_comment_and_returns():
     with (
         patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
         patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
-        patch("orchestrator.coordinator.get_org_billing", new=AsyncMock(return_value=mock_billing)),
+        patch("orchestrator.coordinator.get_or_create_billing", new=AsyncMock(return_value=mock_billing)),
         patch("orchestrator.coordinator.check_and_increment_quota", new=AsyncMock(return_value=False)),
         patch("orchestrator.coordinator.run_review") as mock_review,
         patch("orchestrator.coordinator.post_issue_comment") as mock_post,

@@ -12,7 +12,7 @@ from specialized.documentation.pr_description import generate_pr_description
 from sqlalchemy import select
 
 from .graph import run_review
-from .quota import check_and_increment_quota, get_org_billing
+from .quota import check_and_increment_quota, get_or_create_billing
 
 logger = logging.getLogger(__name__)
 
@@ -81,9 +81,7 @@ def run(payload: dict) -> None:
 
 async def _check_quota(org_id: str) -> bool:
     async with fresh_session_context() as session:
-        billing = await get_org_billing(session, org_id)
-        if billing is None:
-            return True
+        billing = await get_or_create_billing(session, org_id)
         return await check_and_increment_quota(session, billing)
 
 
