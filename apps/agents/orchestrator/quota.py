@@ -24,7 +24,7 @@ async def check_and_increment_quota(session: AsyncSession, billing: OrgBilling) 
     if now >= billing.quota_reset_at:
         billing.reviews_used_this_month = 0
         billing.quota_reset_at = _next_month_start()
-        await session.flush()
+        await session.commit()
 
     if billing.reviews_used_this_month >= billing.monthly_limit:
         return False
