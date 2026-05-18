@@ -102,3 +102,26 @@ def test_low_confidence_findings_filtered_out():
             result = run_ticket_compliance_agent(agent_input=_make_input(), providers={"github_issues": mock_provider})
 
     assert result == []
+
+
+def test_analyze_adapter_returns_list():
+    """Smoke test: analyze() returns a list (empty when no issue refs found)."""
+    from specialized.ticket_compliance import analyze
+
+    mock_file = MagicMock()
+    mock_file.filename = "src/main.py"
+    mock_file.patch = ""
+
+    mock_payload = MagicMock()
+    mock_payload.repo_full_name = "org/repo"
+    mock_payload.pr_number = 1
+    mock_payload.head_sha = "abc"
+    mock_payload.base_sha = "def"
+    mock_payload.installation_id = 0
+    mock_payload.pr_title = ""
+    mock_payload.pr_body = ""
+
+    with patch("specialized.ticket_compliance.run_ticket_compliance_agent", return_value=[]):
+        result = analyze([mock_file], "diff text", mock_payload)
+
+    assert isinstance(result, list)
