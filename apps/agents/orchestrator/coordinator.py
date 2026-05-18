@@ -21,6 +21,7 @@ _AGENT_LABELS = {
     "quality": "Quality",
     "testing": "Testing",
     "documentation": "Documentation",
+    "ticket_compliance": "Ticket Compliance",
 }
 
 _SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"]
