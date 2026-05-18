@@ -9,3 +9,5 @@ class PullRequestPayload(BaseModel):
     installation_id: int
     action: str
     org_id: str = ""
+    pr_title: str = ""
+    pr_body: str = ""

@@ -21,6 +21,7 @@ _AGENT_LABELS = {
     "quality": "Quality",
     "testing": "Testing",
     "documentation": "Documentation",
+    "ticket_compliance": "Ticket Compliance",
 }
 
 _SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"]
@@ -31,6 +32,8 @@ def run(payload: dict) -> None:
         org_id = payload.get("org_id", "")
         pr_payload = PullRequestPayload(**payload)
         pr = get_pr(pr_payload.repo_full_name, pr_payload.pr_number, pr_payload.installation_id)
+        pr_payload.pr_title = pr.title or ""
+        pr_payload.pr_body = pr.body or ""
         files = get_pr_files(pr)
 
         if not files:
