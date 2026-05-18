@@ -39,8 +39,8 @@ def analyze(files: list[Any], diff: str, pr_payload: "PullRequestPayload") -> li
         head_sha=pr_payload.head_sha,
         base_sha=pr_payload.base_sha,
         installation_id=pr_payload.installation_id,
-        pr_title=getattr(pr_payload, "pr_title", ""),
-        pr_description=getattr(pr_payload, "pr_body", ""),
+        pr_title=getattr(pr_payload, "pr_title", None) or "",
+        pr_description=getattr(pr_payload, "pr_body", None) or "",
     )
     providers = _build_providers(pr_payload.installation_id, pr_payload.repo_full_name)
     return run_ticket_compliance_agent(agent_input, providers)

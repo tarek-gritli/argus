@@ -60,7 +60,11 @@ def _resolve_ticket(
         provider = providers.get(provider_name)
         if provider is None:
             continue
-        ticket = provider.fetch(ticket_id)
+        try:
+            ticket = provider.fetch(ticket_id)
+        except Exception:
+            logger.debug("ticket_compliance: provider %s failed for %s", provider_name, ticket_id, exc_info=True)
+            continue
         if ticket is not None:
             return ticket
     return None
@@ -115,10 +119,14 @@ def _parse_findings(raw: str) -> list[dict[str, Any]]:
     if start == -1 or end == -1:
         return []
     try:
-        return json.loads(cleaned[start : end + 1])
+        parsed = json.loads(cleaned[start : end + 1])
     except json.JSONDecodeError:
         logger.warning("ticket_compliance: failed to parse LLM JSON response")
         return []
+    if not isinstance(parsed, list):
+        logger.warning("ticket_compliance: LLM output is not a JSON array")
+        return []
+    return [item for item in parsed if isinstance(item, dict)]
 
 
 def _to_finding_schemas(findings: list[dict[str, Any]]) -> list[FindingSchema]:
