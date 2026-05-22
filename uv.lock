@@ -25,6 +25,7 @@ source = { editable = "apps/agents" }
 dependencies = [
     { name = "anthropic" },
     { name = "celery" },
+    { name = "context" },
     { name = "google-genai" },
     { name = "integrations" },
     { name = "langgraph" },
@@ -40,6 +41,7 @@ dev = [
 requires-dist = [
     { name = "anthropic", specifier = ">=0.95.0" },
     { name = "celery" },
+    { name = "context", editable = "packages/context" },
     { name = "google-genai", specifier = ">=1.0.0" },
     { name = "integrations", editable = "packages/integrations" },
     { name = "langgraph", specifier = ">=1.1.6" },
