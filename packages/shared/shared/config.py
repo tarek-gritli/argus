@@ -30,6 +30,14 @@ class Settings(BaseSettings):
             raise ValueError(f"{info.field_name} must not be blank")
         return v
 
+    # Context / vector store
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_api_key: str = ""
+    qdrant_embedding_dim: int = 1024
+
+    # Voyage AI
+    voyage_api_key: str | None = None
+
     # App
     env: str = "development"
     api_prefix: str = "/api/v1"
