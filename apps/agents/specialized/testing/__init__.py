@@ -10,6 +10,7 @@ from .agent import run_testing_agent
 from .schemas import AgentInput
 
 if TYPE_CHECKING:
+    from context.bundle import ContextBundle
     from integrations.github.schemas import PullRequestPayload
 
 __all__ = ["analyze", "run_testing_agent"]
@@ -33,7 +34,7 @@ def _patch_to_source(patch: str) -> str:
     return "\n".join(lines)
 
 
-def analyze(files: list[Any], diff: str, pr_payload: "PullRequestPayload") -> list[FindingSchema]:
+def analyze(files: list[Any], diff: str, pr_payload: "PullRequestPayload", context: ContextBundle | None = None) -> list[FindingSchema]:
     """Adapter: build AgentInput from coordinator inputs and run the testing agent."""
     changed_files = {f.filename: _patch_to_source(f.patch or "") for f in files}
     agent_input = AgentInput(

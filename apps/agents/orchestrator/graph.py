@@ -3,6 +3,7 @@ from __future__ import annotations
 import operator
 from typing import Annotated, Any, TypedDict
 
+from context.bundle import ContextBundle
 from integrations.github import PullRequestPayload
 from langgraph.graph import END, START, StateGraph
 from shared.schemas import FindingSchema
@@ -17,18 +18,19 @@ class ReviewState(TypedDict):
     diff: str
     pr_payload: PullRequestPayload
     findings: Annotated[list[FindingSchema], operator.add]
+    context: ContextBundle
 
 
 def _security_node(state: ReviewState) -> dict:
-    return {"findings": security_analyze(state["files"], state["diff"], state["pr_payload"])}
+    return {"findings": security_analyze(state["files"], state["diff"], state["pr_payload"], context=state.get("context"))}
 
 
 def _quality_node(state: ReviewState) -> dict:
-    return {"findings": quality_analyze(state["files"], state["diff"], state["pr_payload"])}
+    return {"findings": quality_analyze(state["files"], state["diff"], state["pr_payload"], context=state.get("context"))}
 
 
 def _testing_node(state: ReviewState) -> dict:
-    return {"findings": testing_analyze(state["files"], state["diff"], state["pr_payload"])}
+    return {"findings": testing_analyze(state["files"], state["diff"], state["pr_payload"], context=state.get("context"))}
 
 
 _VALID_PLANS = {"free", "pro", "team", "enterprise"}
@@ -85,7 +87,16 @@ def run_review(
     diff: str,
     pr_payload: PullRequestPayload,
     plan: str = "free",
+    context: ContextBundle | None = None,
 ) -> list[FindingSchema]:
     app = build_review_graph(plan=plan)
-    result = app.invoke({"files": files, "diff": diff, "pr_payload": pr_payload, "findings": []})
+    result = app.invoke(
+        {
+            "files": files,
+            "diff": diff,
+            "pr_payload": pr_payload,
+            "findings": [],
+            "context": context or ContextBundle.empty(),
+        }
+    )
     return result.get("findings", [])

@@ -8,12 +8,13 @@ from .agent import run_security_agent
 from .schemas import AgentTask, RepoConfig
 
 if TYPE_CHECKING:
+    from context.bundle import ContextBundle
     from integrations.github import PullRequestPayload
 
 __all__ = ["analyze", "run_security_agent"]
 
 
-def analyze(files: list[Any], diff: str, pr_payload: PullRequestPayload) -> list[FindingSchema]:
+def analyze(files: list[Any], diff: str, pr_payload: PullRequestPayload, context: ContextBundle | None = None) -> list[FindingSchema]:
     """
     Adapter: Convert coordinator's interface to agent's interface and back.
 
