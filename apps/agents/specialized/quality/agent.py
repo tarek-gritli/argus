@@ -54,6 +54,11 @@ def _build_user_prompt(
     if input.pr_description:
         sections.append(f"Description: {input.pr_description[:500]}")
 
+    if input.vector_context:
+        sections += ["", "## Codebase Context (semantically similar code from this repo)"]
+        for chunk in input.vector_context[:5]:
+            sections += ["```", chunk[:2000], "```"]
+
     sections += [
         "",
         static_context,

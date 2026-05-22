@@ -233,7 +233,7 @@ def run_security_agent(task: AgentTask) -> ReviewResult:
     )
 
     logger.info("Calling Claude for security review...")
-    raw_findings = _generate_findings_llm(task.diff, hits, ctx)
+    raw_findings = _generate_findings_llm(task.diff, hits, ctx, task.vector_context)
     logger.info("LLM returned %d raw findings", len(raw_findings))
 
     findings = _reflect_findings_llm(raw_findings)
@@ -316,7 +316,7 @@ async def _run_scanners(
     return ScannerHits(secrets=secrets, sast=sast, dependencies=dependencies)
 
 
-def _build_generation_prompt(diff: str, hits: ScannerHits, ctx: SecurityContext) -> str:
+def _build_generation_prompt(diff: str, hits: ScannerHits, ctx: SecurityContext, vector_context: list[str] | None = None) -> str:
     scanner_lines: list[str] = []
     for hit in hits.sast:
         scanner_lines.append(f"[SAST]   {hit.file}:{hit.line}  rule={hit.rule_id}  owasp={hit.owasp_id}  severity={hit.severity_hint.value}")
@@ -328,11 +328,17 @@ def _build_generation_prompt(diff: str, hits: ScannerHits, ctx: SecurityContext)
 
     scanner_block = "\n".join(scanner_lines) if scanner_lines else "(none)"
 
+    context_block = ""
+    if vector_context:
+        chunks = "\n\n".join(f"```\n{c[:2000]}\n```" for c in vector_context[:5])
+        context_block = f"## Codebase Context (semantically similar code from this repo)\n{chunks}\n\n"
+
     return (
         "## OWASP Top 10:2025 Reference\n"
         f"{json.dumps(ctx.owasp_rules, indent=2)}\n\n"
         "## Language-Specific Rule Descriptions\n"
         f"{json.dumps(ctx.lang_rules, indent=2)}\n\n"
+        f"{context_block}"
         "## Pre-computed Scanner Hits\n"
         f"{scanner_block}\n\n"
         "## Git Diff\n"
@@ -349,7 +355,7 @@ def _build_reflection_prompt(raw_findings: list[RawFinding]) -> str:
     return f"## Findings to Review\n{findings_json}\n\n## Task\nFor each finding (0-indexed), decide KEEP, DROP, or DOWNGRADE. Return a JSON object with a `decisions` array. Each decision must include: finding_index, action, reason, and revised_severity (only when action is DOWNGRADE)."
 
 
-def _generate_findings_llm(diff: str, hits: ScannerHits, ctx: SecurityContext) -> list[RawFinding]:
+def _generate_findings_llm(diff: str, hits: ScannerHits, ctx: SecurityContext, vector_context: list[str] | None = None) -> list[RawFinding]:
     """Call Claude to produce structured findings; fall back to rule-based output on failure."""
     settings = get_settings()
     if not settings.anthropic_api_key:
@@ -362,7 +368,7 @@ def _generate_findings_llm(diff: str, hits: ScannerHits, ctx: SecurityContext) -
     from anthropic import Anthropic
 
     client = Anthropic(api_key=settings.anthropic_api_key)
-    user_prompt = _build_generation_prompt(diff, hits, ctx)
+    user_prompt = _build_generation_prompt(diff, hits, ctx, vector_context or [])
 
     try:
         response = client.messages.parse(

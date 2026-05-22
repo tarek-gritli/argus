@@ -14,6 +14,18 @@ if TYPE_CHECKING:
 __all__ = ["analyze", "run_security_agent"]
 
 
+def _format_vector_context(chunks: list[dict]) -> list[str]:
+    out = []
+    for c in chunks:
+        header = f"{c.get('filepath', '?')}:{c.get('start_line', '?')}-{c.get('end_line', '?')}"
+        if c.get("function_name"):
+            header += f"  fn={c['function_name']}"
+        if c.get("class_name"):
+            header += f"  class={c['class_name']}"
+        out.append(f"# {header}\n{c.get('content', '')}")
+    return out
+
+
 def analyze(files: list[Any], diff: str, pr_payload: PullRequestPayload, context: ContextBundle | None = None) -> list[FindingSchema]:
     """
     Adapter: Convert coordinator's interface to agent's interface and back.
@@ -26,6 +38,7 @@ def analyze(files: list[Any], diff: str, pr_payload: PullRequestPayload, context
         pr_number=pr_payload.pr_number,
         repo_id=pr_payload.repo_full_name,
         repo_config=RepoConfig(exempt_paths=["tests/", "fixtures/"]),
+        vector_context=_format_vector_context(context.similar_chunks) if context else [],
     )
 
     result = run_security_agent(task)
