@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from context.bundle import ContextBundle
 from context.embeddings import search_similar
+from context.history import get_rejected_finding_keys, suppress_duplicate_findings
 from fix_engine.pipeline import run_fix_pipeline
 from integrations.github import PullRequestPayload, get_pr, get_pr_diff, get_pr_file_content, get_pr_files, post_findings_as_review, post_issue_comment, update_pr_body
 from shared.db import fresh_session_context
@@ -56,6 +57,10 @@ def run(payload: dict) -> None:
         repo_id = asyncio.run(_get_repo_id_for_run(pr_payload)) if org_id else None
         context = asyncio.run(_fetch_context(repo_id=repo_id, diff=diff)) if repo_id else ContextBundle.empty()
         findings = run_review(files=files, diff=diff, pr_payload=pr_payload, context=context)
+
+        if org_id and repo_id:
+            rejected_keys = asyncio.run(get_rejected_finding_keys(org_id=org_id, repo_id=repo_id))
+            findings = suppress_duplicate_findings(findings, rejected_keys)
 
         files_content: dict[str, str] = {}
         for finding in findings:
