@@ -567,6 +567,7 @@ version = "0.1.0"
 source = { editable = "packages/context" }
 dependencies = [
     { name = "qdrant-client", extra = ["fastembed"] },
+    { name = "redis" },
     { name = "tiktoken" },
     { name = "tree-sitter" },
     { name = "tree-sitter-c-sharp" },
@@ -584,6 +585,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "qdrant-client", extras = ["fastembed"], specifier = ">=1.18.0" },
+    { name = "redis", specifier = ">=7.4.0" },
     { name = "tiktoken", specifier = ">=0.13.0" },
     { name = "tree-sitter", specifier = ">=0.25.2" },
     { name = "tree-sitter-c-sharp", specifier = ">=0.23.5" },
