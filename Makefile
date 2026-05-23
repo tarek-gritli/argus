@@ -41,7 +41,7 @@ install-pre-commit: ## Install pre-commit hooks
 # ============================================================
 
 run-gateway: ## Run the gateway service
-	$(UV) run --package gateway --env-file .env uvicorn gateway_main:app --reload
+	$(UV) run --package gateway --env-file .env uvicorn gateway_main:app --reload --reload-dir apps/gateway
 
 run-agents: ## Run agents with hot reload on source changes
 	$(UV) run --env-file .env --package agents watchmedo auto-restart \
