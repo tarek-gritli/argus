@@ -1,4 +1,3 @@
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -29,14 +28,12 @@ async def test_embed_chunks_calls_voyage_and_upserts():
     mock_voyage.embed.return_value = MagicMock(embeddings=[[0.1] * 1024])
     mock_qdrant = AsyncMock()
     mock_qdrant.get_collections = AsyncMock(return_value=MagicMock(collections=[]))
-    mock_redis = AsyncMock()
-    mock_redis.get = AsyncMock(return_value=None)
-    mock_redis.setex = AsyncMock()
 
     with (
         patch("context.embeddings._get_voyage", return_value=mock_voyage),
         patch("context.embeddings._get_qdrant", return_value=mock_qdrant),
-        patch("context.embeddings._get_redis", return_value=mock_redis),
+        patch("context.embeddings.cache_get", new=AsyncMock(return_value=None)),
+        patch("context.embeddings.cache_set", new=AsyncMock()),
     ):
         await embed_chunks("repo_abc", [chunk])
 
@@ -47,8 +44,6 @@ async def test_embed_chunks_calls_voyage_and_upserts():
 async def test_embed_chunks_uses_redis_cache():
     chunk = _make_chunk()
     cached_vec = [0.2] * 1024
-    mock_redis = AsyncMock()
-    mock_redis.get = AsyncMock(return_value=json.dumps(cached_vec).encode())
     mock_qdrant = AsyncMock()
     mock_qdrant.get_collections = AsyncMock(return_value=MagicMock(collections=[]))
     mock_voyage = MagicMock()
@@ -56,7 +51,8 @@ async def test_embed_chunks_uses_redis_cache():
     with (
         patch("context.embeddings._get_voyage", return_value=mock_voyage),
         patch("context.embeddings._get_qdrant", return_value=mock_qdrant),
-        patch("context.embeddings._get_redis", return_value=mock_redis),
+        patch("context.embeddings.cache_get", new=AsyncMock(return_value=cached_vec)),
+        patch("context.embeddings.cache_set", new=AsyncMock()),
     ):
         await embed_chunks("repo_abc", [chunk])
 
@@ -103,14 +99,12 @@ async def test_embed_chunks_graceful_on_qdrant_outage():
     mock_qdrant = AsyncMock()
     mock_qdrant.get_collections = AsyncMock(return_value=MagicMock(collections=[]))
     mock_qdrant.upsert.side_effect = Exception("connection refused")
-    mock_redis = AsyncMock()
-    mock_redis.get = AsyncMock(return_value=None)
-    mock_redis.setex = AsyncMock()
 
     with (
         patch("context.embeddings._get_voyage", return_value=mock_voyage),
         patch("context.embeddings._get_qdrant", return_value=mock_qdrant),
-        patch("context.embeddings._get_redis", return_value=mock_redis),
+        patch("context.embeddings.cache_get", new=AsyncMock(return_value=None)),
+        patch("context.embeddings.cache_set", new=AsyncMock()),
     ):
         # Must not raise — indexing failure is non-fatal
         await embed_chunks("repo_abc", [chunk])

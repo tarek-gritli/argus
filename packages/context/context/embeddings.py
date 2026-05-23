@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 from functools import lru_cache
 
 from shared.config import get_settings
 
+from .cache import cache_get, cache_set
 from .chunker import CodeChunk
 
 logger = logging.getLogger(__name__)
@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 _COLLECTION_PREFIX = "repo_"
 _EMBED_MODEL = "voyage-code-3"
 _EMBED_DIM = 1024
-_CACHE_TTL = 3600
 
 
 @lru_cache(maxsize=1)
@@ -30,12 +29,6 @@ def _get_qdrant():
 
     s = get_settings()
     return AsyncQdrantClient(url=s.qdrant_url, api_key=s.qdrant_api_key or None)
-
-
-def _get_redis():
-    from shared.db import get_redis_client
-
-    return get_redis_client()
 
 
 def _collection(repo_id: str) -> str:
@@ -64,7 +57,6 @@ async def embed_chunks(repo_id: str, chunks: list[CodeChunk]) -> None:
     if not chunks:
         return
     try:
-        redis = _get_redis()
         voyage = _get_voyage()
         qdrant = _get_qdrant()
         await ensure_collection(repo_id)
@@ -75,9 +67,9 @@ async def embed_chunks(repo_id: str, chunks: list[CodeChunk]) -> None:
 
         for i, chunk in enumerate(chunks):
             key = _cache_key(chunk.content)
-            cached = await redis.get(key)
-            if cached:
-                vectors.append(json.loads(cached))
+            cached = await cache_get(key)
+            if cached is not None:
+                vectors.append(cached)
             else:
                 vectors.append([])  # placeholder
                 uncached_indices.append(i)
@@ -88,7 +80,7 @@ async def embed_chunks(repo_id: str, chunks: list[CodeChunk]) -> None:
             for chunk_idx, vec in zip(uncached_indices, result.embeddings):
                 vectors[chunk_idx] = vec
                 key = _cache_key(chunks[chunk_idx].content)
-                await redis.setex(key, _CACHE_TTL, json.dumps(vec))
+                await cache_set(key, vec)
 
         from qdrant_client.models import PointStruct
 
