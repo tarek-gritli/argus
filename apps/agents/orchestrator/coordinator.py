@@ -93,12 +93,14 @@ async def _already_reviewed(org_id: str, repo_full_name: str, installation_id: i
         if not repo:
             return False
         result = await session.execute(
-            select(Review).where(
+            select(Review.id)
+            .where(
                 Review.org_id == org_id,
                 Review.repo_id == repo.id,
                 Review.head_sha == head_sha,
                 Review.status == "completed",
             )
+            .limit(1)
         )
         return result.scalar_one_or_none() is not None
 
