@@ -62,15 +62,18 @@ async def github_webhook(request: Request, settings: Settings = Depends(get_sett
         repo_id = await _get_repo_id(installation_id, repo_full_name)
         if repo_id:
             celery_app = request.app.state.celery
-            celery_app.send_task(
-                INDEX_REPO_TASK_NAME,
-                kwargs={
-                    "repo_id": repo_id,
-                    "installation_id": installation_id,
-                    "repo_full_name": repo_full_name,
-                    "ref": ref_name,
-                },
-            )
+            try:
+                celery_app.send_task(
+                    INDEX_REPO_TASK_NAME,
+                    kwargs={
+                        "repo_id": repo_id,
+                        "installation_id": installation_id,
+                        "repo_full_name": repo_full_name,
+                        "ref": ref_name,
+                    },
+                )
+            except Exception:
+                logger.warning("Failed to enqueue %s for repo_id=%s", INDEX_REPO_TASK_NAME, repo_id, exc_info=True)
         return Response(status_code=200)
 
     if event != "pull_request":
