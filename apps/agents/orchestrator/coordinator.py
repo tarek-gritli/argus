@@ -40,6 +40,10 @@ def run(payload: dict) -> None:
             post_issue_comment(pr, "⚠️ No changes detected in this PR.")
             return
 
+        if org_id and asyncio.run(_already_reviewed(org_id, pr_payload.repo_full_name, pr_payload.installation_id, pr_payload.head_sha)):
+            logger.info("Skipping review — head_sha %s already reviewed", pr_payload.head_sha[:8])
+            return
+
         if org_id:
             allowed = asyncio.run(_check_quota(org_id))
             if not allowed:
@@ -80,6 +84,23 @@ def run(payload: dict) -> None:
     except Exception:
         logger.exception("Orchestration failed")
         raise
+
+
+async def _already_reviewed(org_id: str, repo_full_name: str, installation_id: int, head_sha: str) -> bool:
+    async with fresh_session_context() as session:
+        repo_result = await session.execute(select(Repo).where(Repo.installation_id == installation_id, Repo.full_name == repo_full_name))
+        repo = repo_result.scalar_one_or_none()
+        if not repo:
+            return False
+        result = await session.execute(
+            select(Review).where(
+                Review.org_id == org_id,
+                Review.repo_id == repo.id,
+                Review.head_sha == head_sha,
+                Review.status == "completed",
+            )
+        )
+        return result.scalar_one_or_none() is not None
 
 
 async def _check_quota(org_id: str) -> bool:

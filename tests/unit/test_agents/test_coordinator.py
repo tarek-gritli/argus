@@ -203,6 +203,7 @@ def test_run_persists_review_and_findings_when_org_id_present():
         patch("orchestrator.coordinator.post_findings_as_review"),
         patch("orchestrator.coordinator.post_issue_comment"),
         patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=True)),
+        patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
         patch("orchestrator.coordinator.fresh_session_context", return_value=mock_ctx),
     ):
         from orchestrator.coordinator import run
@@ -230,6 +231,50 @@ def test_quota_exceeded_posts_comment_and_returns():
     mock_review.assert_not_called()
     mock_post.assert_called_once()
     assert "quota" in mock_post.call_args[0][1].lower()
+
+
+def test_run_skips_review_when_head_sha_already_reviewed():
+    """Coordinator skips analysis entirely if head_sha was already reviewed."""
+    mock_pr = _make_mock_pr()
+
+    with (
+        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
+        patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
+        patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
+        patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=True)),
+        patch("orchestrator.coordinator.run_review") as mock_review,
+        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
+    ):
+        from orchestrator.coordinator import run
+
+        run({**VALID_PAYLOAD, "org_id": "org-1"})
+
+    mock_review.assert_not_called()
+    mock_post.assert_not_called()
+
+
+def test_run_proceeds_when_head_sha_not_yet_reviewed():
+    """Coordinator runs full review when head_sha has no completed review."""
+    mock_pr = _make_mock_pr()
+
+    with (
+        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
+        patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
+        patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
+        patch("orchestrator.coordinator.get_pr_file_content", return_value="code"),
+        patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
+        patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=True)),
+        patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]),
+        patch("orchestrator.coordinator.run_fix_pipeline", return_value=[SAMPLE_FINDING]),
+        patch("orchestrator.coordinator.post_findings_as_review"),
+        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
+        patch("orchestrator.coordinator._persist", new=AsyncMock()),
+    ):
+        from orchestrator.coordinator import run
+
+        run({**VALID_PAYLOAD, "org_id": "org-1"})
+
+    mock_post.assert_called_once()
 
 
 def test_run_skips_persist_when_no_org_id():
