@@ -2,6 +2,9 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
+from context.bundle import ContextBundle
+from context.embeddings import search_similar
+from context.history import get_rejected_finding_keys, suppress_duplicate_findings
 from fix_engine.pipeline import run_fix_pipeline
 from integrations.github import PullRequestPayload, get_pr, get_pr_diff, get_pr_file_content, get_pr_files, post_findings_as_review, post_issue_comment, update_pr_body
 from shared.db import fresh_session_context
@@ -51,7 +54,13 @@ def run(payload: dict) -> None:
                 return
 
         diff = get_pr_diff(pr)
-        findings = run_review(files=files, diff=diff, pr_payload=pr_payload)
+        repo_id = asyncio.run(_get_repo_id_for_run(pr_payload)) if org_id else None
+        context = asyncio.run(_fetch_context(repo_id=repo_id, diff=diff)) if repo_id else ContextBundle.empty()
+        findings = run_review(files=files, diff=diff, pr_payload=pr_payload, context=context)
+
+        if org_id and repo_id:
+            rejected_keys = asyncio.run(get_rejected_finding_keys(org_id=org_id, repo_id=repo_id))
+            findings = suppress_duplicate_findings(findings, rejected_keys)
 
         files_content: dict[str, str] = {}
         for finding in findings:
@@ -103,6 +112,22 @@ async def _already_reviewed(org_id: str, repo_full_name: str, installation_id: i
             .limit(1)
         )
         return result.scalar_one_or_none() is not None
+
+
+async def _get_repo_id_for_run(pr_payload: PullRequestPayload) -> str | None:
+    async with fresh_session_context() as session:
+        result = await session.execute(select(Repo).where(Repo.installation_id == pr_payload.installation_id, Repo.full_name == pr_payload.repo_full_name))
+        repo = result.scalar_one_or_none()
+        return repo.id if repo else None
+
+
+async def _fetch_context(repo_id: str, diff: str) -> ContextBundle:
+    try:
+        similar = await search_similar(repo_id, diff, top_k=5)
+        return ContextBundle(similar_chunks=similar, repo_id=repo_id)
+    except Exception:
+        logger.warning("_fetch_context failed — using empty context", exc_info=True)
+        return ContextBundle.empty()
 
 
 async def _check_quota(org_id: str) -> bool:
