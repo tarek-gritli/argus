@@ -25,7 +25,7 @@ def _make_chunk(
 async def test_embed_chunks_calls_voyage_and_upserts():
     chunk = _make_chunk()
     mock_voyage = MagicMock()
-    mock_voyage.embed.return_value = MagicMock(embeddings=[[0.1] * 1024])
+    mock_voyage.embed = AsyncMock(return_value=MagicMock(embeddings=[[0.1] * 1024]))
     mock_qdrant = AsyncMock()
     mock_qdrant.get_collections = AsyncMock(return_value=MagicMock(collections=[]))
 
@@ -63,7 +63,7 @@ async def test_embed_chunks_uses_redis_cache():
 @pytest.mark.asyncio
 async def test_search_similar_returns_chunks():
     mock_voyage = MagicMock()
-    mock_voyage.embed.return_value = MagicMock(embeddings=[[0.1] * 1024])
+    mock_voyage.embed = AsyncMock(return_value=MagicMock(embeddings=[[0.1] * 1024]))
     mock_qdrant = AsyncMock()
     mock_point = MagicMock(
         payload={
@@ -94,7 +94,7 @@ async def test_search_similar_returns_chunks():
 async def test_embed_chunks_graceful_on_qdrant_outage():
     chunk = _make_chunk()
     mock_voyage = MagicMock()
-    mock_voyage.embed.return_value = MagicMock(embeddings=[[0.1] * 1024])
+    mock_voyage.embed = AsyncMock(return_value=MagicMock(embeddings=[[0.1] * 1024]))
     mock_qdrant = AsyncMock()
     mock_qdrant.get_collections = AsyncMock(return_value=MagicMock(collections=[]))
     mock_qdrant.upsert.side_effect = Exception("connection refused")
@@ -112,7 +112,7 @@ async def test_embed_chunks_graceful_on_qdrant_outage():
 @pytest.mark.asyncio
 async def test_search_similar_returns_empty_on_outage():
     mock_voyage = MagicMock()
-    mock_voyage.embed.side_effect = Exception("Voyage down")
+    mock_voyage.embed = AsyncMock(side_effect=Exception("Voyage down"))
     mock_qdrant = AsyncMock()
 
     with (

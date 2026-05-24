@@ -18,9 +18,9 @@ _EMBED_DIM = 1024
 
 @lru_cache(maxsize=1)
 def _get_voyage():
-    from voyageai.client import Client
+    from voyageai.client_async import AsyncClient
 
-    return Client(api_key=get_settings().voyage_api_key)
+    return AsyncClient(api_key=get_settings().voyage_api_key)
 
 
 @lru_cache(maxsize=1)
@@ -77,7 +77,7 @@ async def embed_chunks(repo_id: str, chunks: list[CodeChunk]) -> None:
                 uncached_contents.append(chunk.content)
 
         if uncached_contents:
-            result = voyage.embed(uncached_contents, model=_EMBED_MODEL, input_type="document")
+            result = await voyage.embed(uncached_contents, model=_EMBED_MODEL, input_type="document")
             for chunk_idx, vec in zip(uncached_indices, result.embeddings):
                 vec = [float(v) for v in vec]
                 vectors[chunk_idx] = vec
@@ -112,7 +112,7 @@ async def search_similar(repo_id: str, query: str, top_k: int = 5) -> list[dict]
     try:
         voyage = _get_voyage()
         qdrant = _get_qdrant()
-        result = voyage.embed([query], model=_EMBED_MODEL, input_type="query")
+        result = await voyage.embed([query], model=_EMBED_MODEL, input_type="query")
         vec = result.embeddings[0]
         response = await qdrant.query_points(
             collection_name=_collection(repo_id),
