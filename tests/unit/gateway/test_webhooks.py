@@ -447,7 +447,7 @@ async def test_push_on_default_branch_enqueues_index(patch_gateway_deps):
     call = mock_celery.send_task.call_args
     assert call.kwargs["kwargs"]["repo_id"] == "repo_abc"
     assert call.kwargs["kwargs"]["repo_full_name"] == "acme/api"
-    assert "ref" not in call.kwargs["kwargs"]
+    assert call.kwargs["kwargs"]["ref"] == "main"
     assert call.kwargs["countdown"] == 300
 
 

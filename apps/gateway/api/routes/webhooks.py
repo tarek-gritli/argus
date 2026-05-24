@@ -69,13 +69,13 @@ async def github_webhook(request: Request, settings: Settings = Depends(get_sett
                 scheduled = await redis_client.set(scheduled_key, "1", ex=300, nx=True)
             except Exception:
                 logger.warning(
-                    "index scheduling skipped: Redis unavailable for repo_id=%s ref=%s installation_id=%s",
+                    "Redis unavailable for repo_id=%s ref=%s installation_id=%s — enqueuing with ref fallback",
                     repo_id,
                     ref_name,
                     installation_id,
                     exc_info=True,
                 )
-                scheduled = False
+                scheduled = True
             if scheduled:
                 celery_app = request.app.state.celery
                 try:
@@ -85,11 +85,15 @@ async def github_webhook(request: Request, settings: Settings = Depends(get_sett
                             "repo_id": repo_id,
                             "installation_id": installation_id,
                             "repo_full_name": repo_full_name,
+                            "ref": ref_name,
                         },
                         countdown=300,
                     )
                 except Exception:
-                    await redis_client.delete(scheduled_key)
+                    try:
+                        await redis_client.delete(scheduled_key)
+                    except Exception:
+                        logger.warning("Failed to clean up scheduled_key for repo_id=%s", repo_id, exc_info=True)
                     logger.warning("Failed to enqueue %s for repo_id=%s", INDEX_REPO_TASK_NAME, repo_id, exc_info=True)
         return Response(status_code=200)
 
