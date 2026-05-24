@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 
 from fix_engine.pipeline import run_fix_pipeline
 from integrations.github import PullRequestPayload, get_pr, get_pr_diff, get_pr_file_content, get_pr_files, post_findings_as_review, post_issue_comment, update_pr_body
+from shared import dashboard_token
+from shared.config import get_settings
 from shared.db import fresh_session_context
 from shared.models import Finding as FindingModel
 from shared.models import Repo, Review
@@ -71,9 +73,12 @@ def run(payload: dict) -> None:
             except Exception:
                 logger.warning("Failed to update PR description — continuing", exc_info=True)
 
+        # Build dashboard link if a public URL is configured
+        dashboard_url = _build_dashboard_url(pr_payload.repo_full_name, pr_payload.pr_number)
+
         # Post inline review suggestions for findings with fixes; summary comment for all findings
         post_findings_as_review(pr, findings, pr_payload.head_sha)
-        post_issue_comment(pr, _format_findings(findings))
+        post_issue_comment(pr, _format_findings(findings, dashboard_url))
 
         if org_id:
             try:
@@ -148,7 +153,16 @@ async def _persist(org_id: str, pr_payload: PullRequestPayload, findings: list[F
         await session.commit()
 
 
-def _format_findings(findings: list[FindingSchema]) -> str:
+def _build_dashboard_url(repo_full_name: str, pr_number: int) -> str | None:
+    settings = get_settings()
+    if not settings.public_url:
+        return None
+    owner, repo = repo_full_name.split("/", 1)
+    token = dashboard_token.sign(settings.jwt_secret_key, repo_full_name, pr_number)
+    return f"{settings.public_url.rstrip('/')}/dashboard/{owner}/{repo}/{pr_number}?token={token}"
+
+
+def _format_findings(findings: list[FindingSchema], dashboard_url: str | None = None) -> str:
     if not findings:
         return "✅ No issues found across all review agents."
 
@@ -157,6 +171,9 @@ def _format_findings(findings: list[FindingSchema]) -> str:
         by_agent.setdefault(f.agent, {}).setdefault(f.severity, []).append(f)
 
     lines = ["## Argus Code Review\n"]
+
+    if dashboard_url:
+        lines.append(f"🔗 **[View full interactive report →]({dashboard_url})**\n")
 
     _AGENT_ORDER = ("security", "quality", "testing", "documentation")
     ordered = [k for k in _AGENT_ORDER if k in by_agent]

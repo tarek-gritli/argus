@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     anthropic_api_key: str | None = None
     gemini_api_key: str | None = None
+    public_url: str | None = None  # e.g. https://xxx.ngrok-free.app — enables dashboard links in PR comments
 
 
 @lru_cache

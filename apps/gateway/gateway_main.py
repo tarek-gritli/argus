@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 import redis.asyncio as redis
 from api import api_router
+from api.routes.dashboard import router as dashboard_router
 from celery import Celery
 from fastapi import FastAPI
 from middleware.auth import AuthMiddleware
@@ -35,3 +36,4 @@ async def ping():
 
 
 app.include_router(api_router, prefix=settings.api_prefix)
+app.include_router(dashboard_router, prefix="/dashboard", tags=["dashboard"])
