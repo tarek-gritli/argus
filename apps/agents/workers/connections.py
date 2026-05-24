@@ -74,8 +74,6 @@ def init_connections() -> None:
 def close_connections() -> None:
     global redis_client, _engine, session_factory
 
-    _closing.set()
-
     if redis_client is not None:
         redis_client.close()
         redis_client = None
@@ -85,6 +83,8 @@ def close_connections() -> None:
             run_async(_engine.dispose(), timeout=30.0)
         _engine = None
         session_factory = None
+
+    _closing.set()
 
     if _loop is not None:
         _loop.call_soon_threadsafe(_loop.stop)
