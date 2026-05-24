@@ -19,7 +19,7 @@ def bar():
 
 def test_unsupported_language_falls_back():
     source = "line one\nline two\nline three\n" * 20
-    chunks = chunk_file(source, language="ruby", filepath="app.rb")
+    chunks = chunk_file(source, language="elixir", filepath="app.ex")
     assert len(chunks) >= 1
     assert all(isinstance(c, CodeChunk) for c in chunks)
 

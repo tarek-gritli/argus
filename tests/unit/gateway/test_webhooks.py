@@ -443,8 +443,12 @@ async def test_push_on_default_branch_enqueues_index(patch_gateway_deps):
             )
 
     assert response.status_code == 200
-    calls = [c for c in mock_celery.send_task.call_args_list if "index" in str(c)]
-    assert len(calls) == 1
+    mock_celery.send_task.assert_called_once()
+    call = mock_celery.send_task.call_args
+    assert call.args[0] == "workers.index_task.index_repo_task"
+    assert call.kwargs["kwargs"]["repo_id"] == "repo_abc"
+    assert call.kwargs["kwargs"]["repo_full_name"] == "acme/api"
+    assert call.kwargs["kwargs"]["ref"] == "main"
 
 
 @pytest.mark.asyncio
