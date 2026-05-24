@@ -53,10 +53,9 @@ def test_finding_schema_all_valid_agents():
     for agent in [
         "security",
         "quality",
-        "performance",
         "testing",
         "documentation",
-        "best_practices",
+        "ticket_compliance",
     ]:
         finding = FindingSchema(**{**VALID_FINDING, "agent": agent})
         assert finding.agent == agent
