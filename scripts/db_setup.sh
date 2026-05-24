@@ -17,8 +17,12 @@ PSQL_URL="${DB_URL/postgresql+asyncpg/postgresql}"
 
 # Extract host and port from URL (e.g. postgresql://user:pass@host:port/db)
 DB_HOST="$(echo "$PSQL_URL" | sed -E 's|.*@([^:/]+).*|\1|')"
-DB_PORT="$(echo "$PSQL_URL" | sed -E 's|.*:([0-9]+)/.*|\1|')"
-DB_PORT="${DB_PORT:-5432}"
+_RAW_PORT="$(echo "$PSQL_URL" | sed -E 's|.*@[^:/]+:([0-9]+)/.*|\1|')"
+if [[ "$_RAW_PORT" =~ ^[0-9]+$ ]]; then
+  DB_PORT="$_RAW_PORT"
+else
+  DB_PORT="5432"
+fi
 
 export DATABASE_URL="$DB_URL"
 

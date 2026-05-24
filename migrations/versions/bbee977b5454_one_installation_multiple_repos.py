@@ -10,6 +10,7 @@ and add a new unique constraint on installation_id and full_name.
 
 from typing import Sequence, Union
 
+import sqlalchemy as sa
 from alembic import op, util
 
 # revision identifiers, used by Alembic.
@@ -29,7 +30,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     conn = op.get_bind()
-    result = conn.execute("SELECT installation_id, COUNT(*) FROM repos GROUP BY installation_id HAVING COUNT(*) > 1").fetchall()
+    result = conn.execute(sa.text("SELECT installation_id, COUNT(*) FROM repos GROUP BY installation_id HAVING COUNT(*) > 1")).fetchall()
     if result:
         dupes = ", ".join(str(r[0]) for r in result)
         raise util.CommandError(f"Cannot downgrade: duplicate installation_id values exist in repos ({dupes}). Clean up duplicates before rolling back this migration.")
