@@ -54,8 +54,9 @@ async def _prepare_tmp_collection(repo_id: str) -> str:
     tmp_name = f"{prefix}{uuid.uuid4().hex[:8]}"
 
     existing = [c.name for c in (await qdrant.get_collections()).collections]
+    live_targets = {a.collection_name for a in (await qdrant.get_aliases()).aliases}
     for name in existing:
-        if name.startswith(prefix):
+        if name.startswith(prefix) and name not in live_targets:
             try:
                 await qdrant.delete_collection(name)
             except Exception:
