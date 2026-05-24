@@ -11,22 +11,6 @@ from sqlalchemy import select
 
 router = APIRouter()
 
-_SEVERITY_COLOR = {
-    "critical": "#dc2626",
-    "high": "#ea580c",
-    "medium": "#d97706",
-    "low": "#16a34a",
-    "info": "#6b7280",
-}
-
-_SEVERITY_BG = {
-    "critical": "#fef2f2",
-    "high": "#fff7ed",
-    "medium": "#fffbeb",
-    "low": "#f0fdf4",
-    "info": "#f9fafb",
-}
-
 _AGENT_ICONS = {
     "security": "🔒",
     "quality": "⚙️",
@@ -46,6 +30,319 @@ _SEVERITY_ICONS = {
 _AGENT_ORDER = ("security", "quality", "testing", "documentation", "ticket_compliance")
 _SEVERITY_ORDER = ("critical", "high", "medium", "low", "info")
 
+# ── CSS (plain string — no f-string escaping needed) ────────────────────────
+_CSS = """
+:root[data-theme="dark"] {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface2: #21262d;
+  --surface3: #30363d;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text-muted: #8b949e;
+  --text-subtle: #6e7681;
+  --accent: #58a6ff;
+  --accent-bg: rgba(88,166,255,.12);
+  --shadow: 0 1px 4px rgba(0,0,0,.5);
+  --sev-critical:#f85149; --sev-critical-bg:rgba(248,81,73,.15);
+  --sev-high:#fb8500;     --sev-high-bg:rgba(251,133,0,.15);
+  --sev-medium:#e3b341;   --sev-medium-bg:rgba(227,179,65,.15);
+  --sev-low:#3fb950;      --sev-low-bg:rgba(63,185,80,.15);
+  --sev-info:#8b949e;     --sev-info-bg:rgba(139,148,158,.12);
+  --sug-bg:rgba(88,166,255,.08);
+  --sug-border:rgba(88,166,255,.3);
+  --sug-header:rgba(88,166,255,.18);
+}
+:root[data-theme="light"] {
+  --bg: #f6f8fa;
+  --surface: #ffffff;
+  --surface2: #f6f8fa;
+  --surface3: #eaecef;
+  --border: #d0d7de;
+  --text: #1f2328;
+  --text-muted: #656d76;
+  --text-subtle: #909dab;
+  --accent: #0969da;
+  --accent-bg: rgba(9,105,218,.08);
+  --shadow: 0 1px 3px rgba(0,0,0,.1);
+  --sev-critical:#cf222e; --sev-critical-bg:#fff5f5;
+  --sev-high:#bc4c00;     --sev-high-bg:#fff8f0;
+  --sev-medium:#9a6700;   --sev-medium-bg:#fffbe6;
+  --sev-low:#1a7f37;      --sev-low-bg:#f0fff4;
+  --sev-info:#57606a;     --sev-info-bg:#f6f8fa;
+  --sug-bg:#ddf4ff;
+  --sug-border:#54aeff;
+  --sug-header:#cae8ff;
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',sans-serif;
+  background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;
+  transition:background .2s,color .2s;
+}
+
+/* ── HEADER ── */
+header{
+  background:var(--surface);border-bottom:1px solid var(--border);
+  padding:14px 24px;display:flex;align-items:center;
+  justify-content:space-between;gap:12px;
+  position:sticky;top:0;z-index:100;box-shadow:var(--shadow);
+}
+.h-left{display:flex;align-items:center;gap:12px}
+.h-logo{font-size:1.7rem;line-height:1}
+.h-title h1{font-size:1rem;font-weight:700}
+.h-meta{font-size:.78rem;color:var(--text-muted);margin-top:2px}
+.h-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.status-pill{
+  padding:5px 14px;border-radius:99px;font-size:.75rem;
+  font-weight:700;color:#fff;white-space:nowrap;
+}
+.status-bad{background:#cf222e}
+.status-ok{background:#1a7f37}
+.theme-btn{
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:8px;padding:6px 11px;cursor:pointer;
+  font-size:.95rem;color:var(--text);transition:border-color .15s;
+}
+.theme-btn:hover{border-color:var(--accent)}
+
+/* ── LAYOUT ── */
+.container{max-width:1080px;margin:0 auto;padding:24px 16px}
+
+/* ── STATS STRIP ── */
+.stats-strip{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+.stat{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:14px 18px;display:flex;
+  flex-direction:column;align-items:center;gap:3px;
+  flex:1;min-width:76px;box-shadow:var(--shadow);
+}
+.stat-icon{font-size:1.05rem}
+.stat-count{font-size:1.45rem;font-weight:800}
+.stat-label{font-size:.67rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
+.stat.sev-critical .stat-count{color:var(--sev-critical)}
+.stat.sev-high     .stat-count{color:var(--sev-high)}
+.stat.sev-medium   .stat-count{color:var(--sev-medium)}
+.stat.sev-low      .stat-count{color:var(--sev-low)}
+.stat.sev-info     .stat-count{color:var(--sev-info)}
+
+/* ── SUMMARY CARD ── */
+.summary-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:var(--shadow);
+}
+.card-heading{
+  font-size:.75rem;font-weight:700;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px;
+}
+table{width:100%;border-collapse:collapse;font-size:.875rem}
+th{
+  text-align:left;padding:8px 12px;color:var(--text-muted);
+  font-weight:500;border-bottom:1px solid var(--border);font-size:.78rem;
+}
+td{padding:10px 12px;border-bottom:1px solid var(--border)}
+tr:last-child td{border-bottom:none}
+.agent-cell{font-weight:500}
+.cnt{
+  display:inline-block;border-radius:99px;
+  padding:2px 8px;font-size:.72rem;font-weight:700;
+}
+.cnt-critical{background:var(--sev-critical-bg);color:var(--sev-critical)}
+.cnt-high    {background:var(--sev-high-bg);    color:var(--sev-high)}
+.cnt-medium  {background:var(--sev-medium-bg);  color:var(--sev-medium)}
+.cnt-low     {background:var(--sev-low-bg);     color:var(--sev-low)}
+.cnt-info    {background:var(--sev-info-bg);    color:var(--sev-info)}
+.cnt-zero    {color:var(--text-subtle)}
+
+/* ── FILTER BAR ── */
+.filter-bar{
+  display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px;
+}
+.filter-label{font-size:.78rem;color:var(--text-muted);font-weight:600;margin-right:2px}
+.filter-chip{
+  background:var(--surface);border:1.5px solid var(--border);
+  border-radius:99px;padding:5px 14px;font-size:.78rem;font-weight:500;
+  color:var(--text-muted);cursor:pointer;transition:all .15s;
+  display:inline-flex;align-items:center;gap:5px;
+}
+.filter-chip:hover{border-color:var(--accent);color:var(--accent)}
+.filter-chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.fc-n{
+  background:var(--surface3);color:var(--text-subtle);
+  border-radius:99px;padding:0 6px;font-size:.68rem;
+}
+.filter-chip.active .fc-n{background:rgba(255,255,255,.25);color:#fff}
+
+/* ── TABS ── */
+.tabs{
+  display:flex;gap:2px;margin-bottom:16px;
+  background:var(--surface2);border-radius:10px;
+  padding:4px;border:1px solid var(--border);flex-wrap:wrap;
+}
+.tab{
+  background:transparent;border:none;border-radius:7px;
+  padding:8px 16px;font-size:.875rem;font-weight:500;
+  color:var(--text-muted);cursor:pointer;transition:all .15s;
+  display:inline-flex;align-items:center;gap:6px;
+}
+.tab:hover{color:var(--text);background:var(--surface3)}
+.tab.active{background:var(--surface);color:var(--text);box-shadow:var(--shadow)}
+.badge{
+  background:var(--surface3);color:var(--text-muted);
+  border-radius:99px;padding:1px 7px;font-size:.7rem;font-weight:600;
+}
+.tab.active .badge{background:var(--accent-bg);color:var(--accent)}
+
+/* ── PANELS ── */
+.panel{display:none}
+.panel.active{display:block}
+
+/* ── SEV GROUP ── */
+.sev-group{margin-bottom:6px}
+.sev-group-header{
+  font-size:.7rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:.08em;padding:12px 4px 8px;
+  display:flex;align-items:center;gap:8px;
+}
+.sev-group-header .gc{
+  background:var(--surface3);border-radius:99px;
+  padding:1px 8px;font-size:.68rem;color:var(--text-muted);font-weight:600;
+}
+.sev-group-header.sev-critical{color:var(--sev-critical)}
+.sev-group-header.sev-high    {color:var(--sev-high)}
+.sev-group-header.sev-medium  {color:var(--sev-medium)}
+.sev-group-header.sev-low     {color:var(--sev-low)}
+.sev-group-header.sev-info    {color:var(--sev-info)}
+
+/* ── FINDING CARD ── */
+.finding-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-left:4px solid transparent;border-radius:10px;
+  padding:16px 18px;margin-bottom:10px;
+  box-shadow:var(--shadow);transition:box-shadow .15s,transform .1s;
+}
+.finding-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.2);transform:translateY(-1px)}
+.finding-card[data-severity="critical"]{border-left-color:var(--sev-critical)}
+.finding-card[data-severity="high"]    {border-left-color:var(--sev-high)}
+.finding-card[data-severity="medium"]  {border-left-color:var(--sev-medium)}
+.finding-card[data-severity="low"]     {border-left-color:var(--sev-low)}
+.finding-card[data-severity="info"]    {border-left-color:var(--sev-info)}
+.card-meta{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;
+}
+.sev-badge{
+  border-radius:4px;padding:3px 8px;font-size:.68rem;
+  font-weight:800;text-transform:uppercase;letter-spacing:.06em;
+}
+.sev-badge.sev-critical{background:var(--sev-critical-bg);color:var(--sev-critical)}
+.sev-badge.sev-high    {background:var(--sev-high-bg);    color:var(--sev-high)}
+.sev-badge.sev-medium  {background:var(--sev-medium-bg);  color:var(--sev-medium)}
+.sev-badge.sev-low     {background:var(--sev-low-bg);     color:var(--sev-low)}
+.sev-badge.sev-info    {background:var(--sev-info-bg);    color:var(--sev-info)}
+.agent-badge{
+  background:var(--accent-bg);color:var(--accent);
+  border-radius:4px;padding:3px 8px;font-size:.68rem;font-weight:600;
+}
+.file-chip{
+  font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace;
+  font-size:.72rem;background:var(--surface2);color:var(--text-muted);
+  border:1px solid var(--border);border-radius:4px;padding:3px 8px;
+  margin-left:auto;
+}
+.card-title{font-size:.95rem;font-weight:700;margin-bottom:6px}
+.card-desc{font-size:.875rem;color:var(--text-muted);line-height:1.65}
+
+/* ── SUGGESTION BLOCK ── */
+.suggestion-block{
+  margin-top:14px;border:1px solid var(--sug-border);
+  border-radius:8px;overflow:hidden;
+}
+.suggestion-header{
+  background:var(--sug-header);border-bottom:1px solid var(--sug-border);
+  padding:7px 14px;font-size:.75rem;font-weight:700;
+  color:var(--accent);display:flex;align-items:center;gap:6px;
+}
+.suggestion-body{
+  padding:12px 14px;font-size:.875rem;color:var(--text);
+  line-height:1.65;background:var(--sug-bg);
+  white-space:pre-wrap;word-break:break-word;
+}
+
+/* ── EMPTY ── */
+.empty-state{
+  text-align:center;padding:48px 0;color:var(--text-muted);font-size:.9rem;
+}
+
+/* ── RESPONSIVE ── */
+@media(max-width:640px){
+  header{padding:12px 14px}
+  .h-title h1{font-size:.9rem}
+  .stats-strip{gap:6px}
+  .stat{min-width:56px;padding:10px 8px}
+  .stat-count{font-size:1.1rem}
+  .container{padding:16px 10px}
+  .file-chip{margin-left:0;margin-top:4px}
+}
+"""
+
+# ── JS (plain string — no f-string escaping needed) ─────────────────────────
+_JS = """
+// Theme
+function toggleTheme() {
+  const html = document.documentElement;
+  const next = html.dataset.theme === 'dark' ? 'light' : 'dark';
+  html.dataset.theme = next;
+  document.getElementById('theme-btn').textContent = next === 'dark' ? '☀️' : '🌙';
+  localStorage.setItem('argus-theme', next);
+}
+(function () {
+  const saved = localStorage.getItem('argus-theme') || 'dark';
+  document.documentElement.dataset.theme = saved;
+  const btn = document.getElementById('theme-btn');
+  if (btn) btn.textContent = saved === 'dark' ? '☀️' : '🌙';
+})();
+
+// Tabs
+const tabs   = document.querySelectorAll('.tab');
+const panels = document.querySelectorAll('.panel');
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    tabs.forEach(t => t.classList.remove('active'));
+    panels.forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    const panel = document.getElementById('panel-' + tab.dataset.tab);
+    if (panel) panel.classList.add('active');
+    applyFilter(document.querySelector('.filter-chip.active')?.dataset.filter || 'all');
+  });
+});
+if (panels[0]) panels[0].classList.add('active');
+
+// Filtering
+function applyFilter(filter) {
+  const active = document.querySelector('.panel.active');
+  if (!active) return;
+  active.querySelectorAll('.finding-card').forEach(card => {
+    const show = filter === 'all'
+      || (filter === 'has-suggestion' && card.dataset.hasSuggestion === 'true')
+      || card.dataset.severity === filter;
+    card.style.display = show ? '' : 'none';
+  });
+  active.querySelectorAll('.sev-group').forEach(grp => {
+    const visible = [...grp.querySelectorAll('.finding-card')]
+      .some(c => c.style.display !== 'none');
+    grp.style.display = visible ? '' : 'none';
+  });
+}
+document.querySelectorAll('.filter-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    applyFilter(chip.dataset.filter);
+  });
+});
+"""
+
 
 @router.get("/{owner}/{repo}/{pr_number}", response_class=HTMLResponse)
 async def review_dashboard(
@@ -63,13 +360,11 @@ async def review_dashboard(
     async with session_context() as session:
         repo_result = await session.execute(select(Repo).where(Repo.full_name == repo_full_name))
         repo_obj = repo_result.scalar_one_or_none()
-
         if not repo_obj:
             raise HTTPException(status_code=404, detail="Repository not found")
 
         review_result = await session.execute(select(Review).where(Review.repo_id == repo_obj.id, Review.pr_number == pr_number).order_by(Review.created_at.desc()).limit(1))
         review = review_result.scalar_one_or_none()
-
         if not review:
             raise HTTPException(status_code=404, detail="No review found for this PR")
 
@@ -92,163 +387,138 @@ def _render_dashboard(
     agents = [a for a in _AGENT_ORDER if a in by_agent]
     agents += [a for a in by_agent if a not in _AGENT_ORDER]
 
-    # Summary counts per agent per severity
-    def count(agent: str, sev: str) -> int:
-        return sum(1 for f in by_agent.get(agent, []) if f.severity == sev)
-
     total = len(findings)
-    critical_count = sum(1 for f in findings if f.severity == "critical")
-    high_count = sum(1 for f in findings if f.severity == "high")
+    counts = {s: sum(1 for f in findings if f.severity == s) for s in _SEVERITY_ORDER}
+    has_critical_or_high = counts["critical"] > 0 or counts["high"] > 0
+    completed = review.completed_at.strftime("%Y-%m-%d %H:%M UTC") if review.completed_at else "—"
 
-    # Tab radio inputs
-    tab_inputs = '<input type="radio" name="tab" id="tab-all" checked>\n'
+    # ── Stats strip ─────────────────────────────────────────────────────────
+    stats_html = "".join(f'<div class="stat sev-{s}"><span class="stat-icon">{_SEVERITY_ICONS.get(s, "⚪")}</span><span class="stat-count">{counts[s]}</span><span class="stat-label">{s.capitalize()}</span></div>' for s in _SEVERITY_ORDER)
+
+    # ── Summary table ────────────────────────────────────────────────────────
+    th_cells = "".join(f"<th>{_SEVERITY_ICONS.get(s, '⚪')} {s.capitalize()}</th>" for s in _SEVERITY_ORDER)
+    table_rows = ""
     for agent in agents:
-        tab_inputs += f'<input type="radio" name="tab" id="tab-{agent}">\n'
+        icon = _AGENT_ICONS.get(agent, "🤖")
+        label = agent.replace("_", " ").title()
+        row = f'<tr><td class="agent-cell">{icon} {label}</td>'
+        for sev in _SEVERITY_ORDER:
+            c = sum(1 for f in by_agent.get(agent, []) if f.severity == sev)
+            row += f'<td><span class="cnt cnt-{sev}">{c}</span></td>' if c else '<td><span class="cnt-zero">—</span></td>'
+        row += "</tr>"
+        table_rows += row
 
-    # Tab labels
-    tab_labels = '<label for="tab-all">All <span class="badge">{}</span></label>\n'.format(total)
+    # ── Filter chips ─────────────────────────────────────────────────────────
+    filter_chips = '<button class="filter-chip active" data-filter="all">All</button>\n'
+    for sev in _SEVERITY_ORDER:
+        if counts[sev]:
+            filter_chips += f'<button class="filter-chip" data-filter="{sev}">{_SEVERITY_ICONS.get(sev, "⚪")} {sev.capitalize()} <span class="fc-n">{counts[sev]}</span></button>\n'
+    suggestions_count = sum(1 for f in findings if f.suggestion)
+    if suggestions_count:
+        filter_chips += f'<button class="filter-chip" data-filter="has-suggestion">💡 Has Suggestion <span class="fc-n">{suggestions_count}</span></button>\n'
+
+    # ── Tab buttons ──────────────────────────────────────────────────────────
+    tab_buttons = f'<button class="tab active" data-tab="all">All <span class="badge">{total}</span></button>\n'
     for agent in agents:
         n = len(by_agent[agent])
         icon = _AGENT_ICONS.get(agent, "🤖")
         label = agent.replace("_", " ").title()
-        tab_labels += f'<label for="tab-{agent}">{icon} {label} <span class="badge">{n}</span></label>\n'
+        tab_buttons += f'<button class="tab" data-tab="{agent}">{icon} {label} <span class="badge">{n}</span></button>\n'
 
-    # CSS tab selectors
-    css_selectors = "#tab-all:checked ~ .panels #panel-all { display: block; }\n"
-    for agent in agents:
-        css_selectors += f"#tab-{agent}:checked ~ .panels #panel-{agent} {{ display: block; }}\n"
-    # Active tab label highlighting
-    css_active = "#tab-all:checked ~ .tabs label[for='tab-all'],\n"
-    css_active += ",\n".join(f"#tab-{a}:checked ~ .tabs label[for='tab-{a}']" for a in agents)
-    css_active += " { background:#2563eb; color:#fff; border-color:#2563eb; }\n"
-
-    # Finding cards
-    def render_finding(f: FindingModel) -> str:
-        color = _SEVERITY_COLOR.get(f.severity, "#6b7280")
-        bg = _SEVERITY_BG.get(f.severity, "#f9fafb")
-        icon = _SEVERITY_ICONS.get(f.severity, "⚪")
+    # ── Panels ───────────────────────────────────────────────────────────────
+    def render_card(f: FindingModel) -> str:
+        sev = f.severity
+        agent_label = f.agent.replace("_", " ").title()
+        file_loc = f"{_esc(f.file)}:{f.line_start}"
+        if f.line_end and f.line_end != f.line_start:
+            file_loc += f"–{f.line_end}"
         suggestion_html = ""
         if f.suggestion:
-            suggestion_html = f'<div class="suggestion">💡 {_esc(f.suggestion)}</div>'
-        return f"""
-<div class="card" style="border-left:4px solid {color}; background:{bg}">
-  <div class="card-header">
-    <span class="sev-badge" style="background:{color}">{icon} {f.severity.upper()}</span>
-    <span class="file-loc">{_esc(f.file)}:{f.line_start}</span>
-  </div>
-  <div class="card-title">{_esc(f.title)}</div>
-  <div class="card-desc">{_esc(f.description)}</div>
-  {suggestion_html}
-</div>"""
+            suggestion_html = f'<div class="suggestion-block"><div class="suggestion-header">💡 Suggested change</div><div class="suggestion-body">{_esc(f.suggestion)}</div></div>'
+        return (
+            f'<div class="finding-card" data-severity="{sev}" data-agent="{f.agent}"'
+            f' data-has-suggestion="{"true" if f.suggestion else "false"}">'
+            f'<div class="card-meta">'
+            f'<span class="sev-badge sev-{sev}">{_SEVERITY_ICONS.get(sev, "⚪")} {sev.upper()}</span>'
+            f'<span class="agent-badge">{_AGENT_ICONS.get(f.agent, "🤖")} {_esc(agent_label)}</span>'
+            f'<span class="file-chip">{file_loc}</span>'
+            f"</div>"
+            f'<div class="card-title">{_esc(f.title)}</div>'
+            f'<div class="card-desc">{_esc(f.description)}</div>'
+            f"{suggestion_html}"
+            f"</div>"
+        )
 
     def render_panel(panel_id: str, panel_findings: list[FindingModel]) -> str:
         if not panel_findings:
-            return f'<div class="panel" id="{panel_id}"><p class="empty">No findings.</p></div>'
-        cards = ""
+            return f'<div class="panel" id="panel-{panel_id}"><div class="empty-state">✅ No findings here.</div></div>'
+        body = ""
         for sev in _SEVERITY_ORDER:
             bucket = [f for f in panel_findings if f.severity == sev]
             if not bucket:
                 continue
             icon = _SEVERITY_ICONS.get(sev, "⚪")
-            cards += f'<h3 class="sev-header">{icon} {sev.upper()}</h3>\n'
+            body += f'<div class="sev-group" data-sev="{sev}"><div class="sev-group-header sev-{sev}">{icon} {sev.upper()} <span class="gc">{len(bucket)}</span></div>'
             for f in bucket:
-                cards += render_finding(f)
-        return f'<div class="panel" id="{panel_id}">{cards}</div>'
+                body += render_card(f)
+            body += "</div>"
+        return f'<div class="panel" id="panel-{panel_id}">{body}</div>'
 
-    # All panel
-    panels = render_panel("panel-all", list(findings))
+    panels_html = render_panel("all", list(findings))
     for agent in agents:
-        panels += render_panel(f"panel-{agent}", by_agent[agent])
+        panels_html += render_panel(agent, by_agent[agent])
 
-    # Summary table rows
-    table_rows = ""
-    for agent in agents:
-        icon = _AGENT_ICONS.get(agent, "🤖")
-        label = agent.replace("_", " ").title()
-        row = f"<tr><td>{icon} {label}</td>"
-        for sev in _SEVERITY_ORDER:
-            c = count(agent, sev)
-            color = _SEVERITY_COLOR.get(sev, "#6b7280")
-            cell = f'<strong style="color:{color}">{c}</strong>' if c else '<span style="color:#d1d5db">—</span>'
-            row += f"<td>{cell}</td>"
-        row += "</tr>"
-        table_rows += row
-
-    status_color = "#dc2626" if critical_count or high_count else "#16a34a"
-    status_label = f"{'❌' if critical_count or high_count else '✅'} {total} findings"
-
-    completed = review.completed_at.strftime("%Y-%m-%d %H:%M UTC") if review.completed_at else "—"
+    status_label = f"{'❌' if has_critical_or_high else '✅'} {total} findings"
+    status_cls = "status-bad" if has_critical_or_high else "status-ok"
 
     return f"""<!DOCTYPE html>
-<html lang="en">
+<html data-theme="dark" lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Argus Review · {_esc(repo_full_name)} · PR #{pr_number}</title>
-<style>
-  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f1f5f9; color: #1e293b; }}
-  header {{ background: #0f172a; color: #f8fafc; padding: 20px 32px; display: flex; align-items: center; gap: 16px; }}
-  header h1 {{ font-size: 1.25rem; font-weight: 600; }}
-  header .meta {{ font-size: 0.85rem; color: #94a3b8; }}
-  .status-pill {{ padding: 4px 12px; border-radius: 99px; font-size: 0.8rem; font-weight: 600; background: {status_color}; color: #fff; }}
-  .container {{ max-width: 1000px; margin: 0 auto; padding: 24px 16px; }}
-  .summary-card {{ background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }}
-  .summary-card h2 {{ font-size: 1rem; font-weight: 600; margin-bottom: 14px; color: #475569; }}
-  table {{ width: 100%; border-collapse: collapse; font-size: 0.9rem; }}
-  th {{ text-align: left; padding: 8px 12px; color: #64748b; font-weight: 500; border-bottom: 1px solid #e2e8f0; }}
-  td {{ padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }}
-  tr:last-child td {{ border-bottom: none; }}
-  /* CSS-only tabs */
-  input[type=radio] {{ display: none; }}
-  .tabs {{ display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }}
-  .tabs label {{ padding: 8px 16px; border-radius: 8px; border: 1.5px solid #e2e8f0; cursor: pointer; font-size: 0.875rem; font-weight: 500; background: #fff; color: #475569; transition: all .15s; }}
-  .tabs label:hover {{ border-color: #2563eb; color: #2563eb; }}
-  {css_active}
-  .badge {{ display: inline-block; background: #e2e8f0; color: #475569; border-radius: 99px; padding: 1px 7px; font-size: 0.75rem; margin-left: 4px; }}
-  /* Panels */
-  .panels .panel {{ display: none; }}
-  {css_selectors}
-  .card {{ border-radius: 10px; padding: 16px; margin-bottom: 12px; }}
-  .card-header {{ display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }}
-  .sev-badge {{ color: #fff; border-radius: 4px; padding: 2px 8px; font-size: 0.75rem; font-weight: 700; }}
-  .file-loc {{ font-family: monospace; font-size: 0.8rem; color: #64748b; background: rgba(0,0,0,.06); padding: 2px 6px; border-radius: 4px; }}
-  .card-title {{ font-weight: 600; font-size: 0.95rem; margin-bottom: 6px; }}
-  .card-desc {{ font-size: 0.875rem; color: #475569; line-height: 1.5; }}
-  .suggestion {{ margin-top: 10px; padding: 10px 14px; background: rgba(37,99,235,.07); border-radius: 6px; font-size: 0.85rem; color: #1e40af; }}
-  .sev-header {{ font-size: 0.85rem; font-weight: 700; color: #64748b; margin: 16px 0 8px; text-transform: uppercase; letter-spacing: .05em; }}
-  .empty {{ color: #94a3b8; padding: 24px 0; text-align: center; }}
-</style>
+<title>Argus · {_esc(repo_full_name)} · PR #{pr_number}</title>
+<style>{_CSS}</style>
 </head>
 <body>
 <header>
-  <div>
-    <h1>🛡 Argus Code Review</h1>
-    <div class="meta">{_esc(repo_full_name)} · PR #{pr_number} · {completed}</div>
+  <div class="h-left">
+    <span class="h-logo">🛡</span>
+    <div class="h-title">
+      <h1>Argus Code Review</h1>
+      <div class="h-meta">{_esc(repo_full_name)} &nbsp;·&nbsp; PR #{pr_number} &nbsp;·&nbsp; {completed}</div>
+    </div>
   </div>
-  <span class="status-pill">{status_label}</span>
+  <div class="h-right">
+    <span class="status-pill {status_cls}">{status_label}</span>
+    <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle dark / light mode">☀️</button>
+  </div>
 </header>
 
 <div class="container">
+
+  <div class="stats-strip">
+    {stats_html}
+  </div>
+
   <div class="summary-card">
-    <h2>Summary by agent</h2>
+    <div class="card-heading">Summary by Agent</div>
     <table>
-      <tr>
-        <th>Agent</th>
-        {"".join(f"<th>{_SEVERITY_ICONS.get(s, '⚪')} {s.capitalize()}</th>" for s in _SEVERITY_ORDER)}
-      </tr>
+      <tr><th>Agent</th>{th_cells}</tr>
       {table_rows}
     </table>
   </div>
 
-  {tab_inputs}
-  <div class="tabs">
-    {tab_labels}
+  <div class="filter-bar">
+    <span class="filter-label">Filter:</span>
+    {filter_chips}
   </div>
-  <div class="panels">
-    {panels}
-  </div>
+
+  <div class="tabs">{tab_buttons}</div>
+
+  <div id="panels">{panels_html}</div>
+
 </div>
+<script>{_JS}</script>
 </body>
 </html>"""
 
