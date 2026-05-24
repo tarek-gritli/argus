@@ -1,4 +1,5 @@
 from celery import Celery
+from celery.signals import worker_process_init, worker_process_shutdown
 from shared.config import get_settings
 from shared.queue.tasks import INDEX_REPO_TASK_NAME, REVIEW_PR_TASK_NAME
 
@@ -14,6 +15,20 @@ celery_app.conf.update(
     worker_pool="threads",
     worker_concurrency=3,
 )
+
+
+@worker_process_init.connect
+def on_worker_init(**_) -> None:
+    from workers.connections import init_connections
+
+    init_connections()
+
+
+@worker_process_shutdown.connect
+def on_worker_shutdown(**_) -> None:
+    from workers.connections import close_connections
+
+    close_connections()
 
 
 @celery_app.task(name=REVIEW_PR_TASK_NAME)
