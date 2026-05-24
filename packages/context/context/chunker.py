@@ -13,7 +13,7 @@ _LANG_MAP: dict[str, str] = {
     ".js": "javascript",
     ".jsx": "javascript",
     ".ts": "typescript",
-    ".tsx": "typescript",
+    ".tsx": "tsx",
     ".go": "go",
     ".java": "java",
     ".kt": "kotlin",
@@ -33,6 +33,7 @@ _NODE_TARGETS: dict[str, set[str]] = {
     "python": {"function_definition", "class_definition", "decorated_definition"},
     "javascript": {"function_declaration", "class_declaration", "export_statement", "lexical_declaration"},
     "typescript": {"function_declaration", "class_declaration", "export_statement", "lexical_declaration"},
+    "tsx": {"function_declaration", "class_declaration", "export_statement", "lexical_declaration"},
     "go": {"function_declaration", "method_declaration", "type_declaration"},
     "java": {"class_declaration", "method_declaration", "interface_declaration", "enum_declaration"},
     "kotlin": {"function_declaration", "class_declaration", "object_declaration"},
@@ -99,10 +100,18 @@ def _get_ts_language(language: str):
         import tree_sitter_python as m
 
         return m.language()
-    if language in ("javascript", "typescript"):
+    if language == "javascript":
         import tree_sitter_javascript as m
 
         return m.language()
+    if language == "typescript":
+        import tree_sitter_typescript as m
+
+        return m.language_typescript()
+    if language == "tsx":
+        import tree_sitter_typescript as ts_m
+
+        return ts_m.language_tsx()
     if language == "go":
         import tree_sitter_go as m
 
@@ -134,7 +143,7 @@ def _get_ts_language(language: str):
     if language == "php":
         import tree_sitter_php as m
 
-        return m.language()
+        return m.language_php()
     raise ValueError(f"unsupported language: {language}")
 
 
@@ -188,8 +197,15 @@ def _ast_chunks(source: str, language: str, filepath: str) -> list[CodeChunk]:
             covered.update(range(c.start_line, c.end_line + 1))
         remainder = [(i + 1, line) for i, line in enumerate(lines) if (i + 1) not in covered and line.strip()]
         if remainder:
-            text = "".join(ln for _, ln in remainder)
-            _split_and_collect(text, filepath, remainder[0][0], remainder[-1][0], chunks)
+            groups: list[list[tuple[int, str]]] = [[remainder[0]]]
+            for ln, line in remainder[1:]:
+                if ln == groups[-1][-1][0] + 1:
+                    groups[-1].append((ln, line))
+                else:
+                    groups.append([(ln, line)])
+            for group in groups:
+                text = "".join(ln_text for _, ln_text in group)
+                _split_and_collect(text, filepath, group[0][0], group[-1][0], chunks)
 
         return sorted(chunks, key=lambda c: c.start_line)
     except Exception:
