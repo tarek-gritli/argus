@@ -29,18 +29,31 @@ class OrgBilling(Base):
         DateTime(timezone=True),
         default=lambda: _next_month_start(),
     )
+    stripe_customer_id: Mapped[str | None] = mapped_column(String, nullable=True, unique=True, index=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
 
     __table_args__ = (
         CheckConstraint("seat_count >= 1", name="ck_org_billing_seat_count_positive"),
         CheckConstraint("reviews_used_this_month >= 0", name="ck_org_billing_reviews_used_non_negative"),
     )
 
-    def __init__(self, org_id: str, plan: str = "free", seat_count: int = 1, reviews_used_this_month: int = 0, **kwargs):
+    def __init__(
+        self,
+        org_id: str,
+        plan: str = "free",
+        seat_count: int = 1,
+        reviews_used_this_month: int = 0,
+        stripe_customer_id: str | None = None,
+        stripe_subscription_id: str | None = None,
+        **kwargs,
+    ):
         super().__init__(
             org_id=org_id,
             plan=plan,
             seat_count=seat_count,
             reviews_used_this_month=reviews_used_this_month,
+            stripe_customer_id=stripe_customer_id,
+            stripe_subscription_id=stripe_subscription_id,
             **kwargs,
         )
 
