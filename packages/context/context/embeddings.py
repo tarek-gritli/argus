@@ -39,28 +39,51 @@ def _cache_key(content: str) -> str:
     return f"emb:{hashlib.sha256(content.encode()).hexdigest()}"
 
 
-async def _rebuild_collection(repo_id: str) -> None:
+async def _prepare_tmp_collection(repo_id: str) -> str:
+    """Create (or recreate) a tmp collection. Returns tmp_name for callers to upsert into."""
     from qdrant_client.models import Distance, VectorParams
 
     qdrant = _get_qdrant()
-    name = _collection(repo_id)
+    tmp_name = f"{_collection(repo_id)}__tmp"
     existing = [c.name for c in (await qdrant.get_collections()).collections]
-    if name in existing:
-        await qdrant.delete_collection(name)
+    if tmp_name in existing:
+        await qdrant.delete_collection(tmp_name)
     await qdrant.create_collection(
-        name,
+        tmp_name,
         vectors_config=VectorParams(size=_EMBED_DIM, distance=Distance.COSINE),
     )
+    return tmp_name
+
+
+async def _promote_tmp_collection(repo_id: str, tmp_name: str) -> None:
+    """Atomically swap the live alias to point at tmp_name, then delete the old real collection."""
+    from qdrant_client.models import CreateAlias, CreateAliasOperation
+
+    qdrant = _get_qdrant()
+    alias_name = _collection(repo_id)
+
+    existing_aliases = {a.alias_name: a.collection_name for a in (await qdrant.get_aliases()).aliases}
+    old_collection = existing_aliases.get(alias_name)
+
+    # Single CreateAliasOperation is atomic and overwrites any existing alias with the same name.
+    await qdrant.update_collection_aliases(change_aliases_operations=[CreateAliasOperation(create_alias=CreateAlias(collection_name=tmp_name, alias_name=alias_name))])
+
+    if old_collection and old_collection != tmp_name:
+        try:
+            await qdrant.delete_collection(old_collection)
+        except Exception:
+            logger.warning("Failed to delete old collection %s — it may have already been removed", old_collection)
 
 
 async def embed_chunks(repo_id: str, chunks: list[CodeChunk]) -> None:
     """Embed chunks and upsert into Qdrant. Redis-cached per content hash. Non-fatal on outage."""
     if not chunks:
         return
+    tmp_name: str | None = None
     try:
         voyage = _get_voyage()
         qdrant = _get_qdrant()
-        await _rebuild_collection(repo_id)
+        tmp_name = await _prepare_tmp_collection(repo_id)
 
         vectors: list[list[float]] = []
         uncached_indices: list[int] = []
@@ -102,8 +125,14 @@ async def embed_chunks(repo_id: str, chunks: list[CodeChunk]) -> None:
             )
             for c, vec in zip(chunks, vectors)
         ]
-        await qdrant.upsert(collection_name=_collection(repo_id), points=points)
+        await qdrant.upsert(collection_name=tmp_name, points=points)
+        await _promote_tmp_collection(repo_id, tmp_name)
     except Exception:
+        if tmp_name:
+            try:
+                await _get_qdrant().delete_collection(tmp_name)
+            except Exception:
+                pass
         logger.warning("embed_chunks failed — indexing skipped", exc_info=True)
 
 

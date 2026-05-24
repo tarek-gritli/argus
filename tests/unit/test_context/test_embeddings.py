@@ -28,6 +28,7 @@ async def test_embed_chunks_calls_voyage_and_upserts():
     mock_voyage.embed = AsyncMock(return_value=MagicMock(embeddings=[[0.1] * 1024]))
     mock_qdrant = AsyncMock()
     mock_qdrant.get_collections = AsyncMock(return_value=MagicMock(collections=[]))
+    mock_qdrant.get_aliases = AsyncMock(return_value=MagicMock(aliases=[]))
 
     with (
         patch("context.embeddings._get_voyage", return_value=mock_voyage),
@@ -46,6 +47,7 @@ async def test_embed_chunks_uses_redis_cache():
     cached_vec = [0.2] * 1024
     mock_qdrant = AsyncMock()
     mock_qdrant.get_collections = AsyncMock(return_value=MagicMock(collections=[]))
+    mock_qdrant.get_aliases = AsyncMock(return_value=MagicMock(aliases=[]))
     mock_voyage = MagicMock()
 
     with (
@@ -97,6 +99,7 @@ async def test_embed_chunks_graceful_on_qdrant_outage():
     mock_voyage.embed = AsyncMock(return_value=MagicMock(embeddings=[[0.1] * 1024]))
     mock_qdrant = AsyncMock()
     mock_qdrant.get_collections = AsyncMock(return_value=MagicMock(collections=[]))
+    mock_qdrant.get_aliases = AsyncMock(return_value=MagicMock(aliases=[]))
     mock_qdrant.upsert.side_effect = Exception("connection refused")
 
     with (
