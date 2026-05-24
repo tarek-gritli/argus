@@ -44,24 +44,13 @@ async def _prepare_tmp_collection(repo_id: str) -> str:
     """Create a uniquely-named tmp collection. Returns tmp_name for callers to upsert into.
 
     Uses a UUID suffix so the live alias keeps serving the previous collection uninterrupted
-    while the new one is being built. Cleans up any orphaned __tmp_* collections from
-    prior crashed runs before creating the new one.
+    while the new one is being built. Orphaned __tmp_* collections from prior crashed runs
+    are left in place — cleaning them up here risks racing with another in-flight indexer.
     """
     from qdrant_client.models import Distance, VectorParams
 
     qdrant = _get_qdrant()
-    prefix = f"{_collection(repo_id)}__tmp_"
-    tmp_name = f"{prefix}{uuid.uuid4().hex[:8]}"
-
-    existing = [c.name for c in (await qdrant.get_collections()).collections]
-    live_targets = {a.collection_name for a in (await qdrant.get_aliases()).aliases}
-    for name in existing:
-        if name.startswith(prefix) and name not in live_targets:
-            try:
-                await qdrant.delete_collection(name)
-            except Exception:
-                logger.warning("Failed to delete orphaned tmp collection %s", name)
-
+    tmp_name = f"{_collection(repo_id)}__tmp_{uuid.uuid4().hex[:8]}"
     await qdrant.create_collection(
         tmp_name,
         vectors_config=VectorParams(size=_EMBED_DIM, distance=Distance.COSINE),
