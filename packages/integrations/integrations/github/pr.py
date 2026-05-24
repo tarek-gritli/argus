@@ -143,3 +143,52 @@ def post_findings_as_review(
         event="COMMENT",
         comments=comments,
     )
+
+
+_CODE_EXTENSIONS = {
+    ".py",
+    ".js",
+    ".ts",
+    ".tsx",
+    ".jsx",
+    ".go",
+    ".rs",
+    ".java",
+    ".rb",
+    ".cpp",
+    ".cc",
+    ".cxx",
+    ".c",
+    ".h",
+    ".cs",
+    ".kt",
+    ".kts",
+    ".php",
+}
+
+
+def get_repo_files(repo_full_name: str, installation_id: int, ref: str = "main") -> list[dict]:
+    """Fetch all indexable source files from a repo at a given ref."""
+    client = get_installation_client(installation_id)
+    repo = client.get_repo(repo_full_name)
+    tree = repo.get_git_tree(ref, recursive=True)
+    files = []
+    for item in tree.tree:
+        if item.type != "blob":
+            continue
+        ext = "." + item.path.rsplit(".", 1)[-1] if "." in item.path else ""
+        if ext not in _CODE_EXTENSIONS:
+            continue
+        try:
+            blob = repo.get_contents(item.path, ref=ref)
+            if isinstance(blob, list):
+                continue
+            files.append(
+                {
+                    "filename": item.path,
+                    "content": blob.decoded_content.decode("utf-8", errors="replace"),
+                }
+            )
+        except Exception:
+            continue
+    return files

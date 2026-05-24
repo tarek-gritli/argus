@@ -4,44 +4,43 @@ LangGraph-based agent orchestration for parallel code review.
 
 ## Agents
 
-1. **Security Agent** - Detects vulnerabilities, secrets, OWASP risks
-2. **Quality Agent** - Code style, complexity, maintainability
-3. **Performance Agent** - Performance anti-patterns, algorithmic issues
-4. **Testing Agent** - Test coverage, test quality assessment
-5. **Docs Agent** - Documentation completeness, docstrings
-6. **Best Practices Agent** - Language/framework patterns
+**Active on all plans:**
+1. **Security** — OWASP vulnerability detection, secrets exposure, OSV CVE scanning
+2. **Quality** — complexity, duplication, dead code, naming
+3. **Testing** — coverage gaps, weak assertions, test anti-patterns
+
+**Team/Enterprise only (stubs on free/pro):**
+4. **Documentation** — PR description auto-generation, docstring completeness
+5. **Ticket Compliance** — links PR changes to issue tracker requirements, flags scope drift ✅
 
 ## Architecture
 
 ```
-Review Request
-      │
-      ▼
-┌─────────────────┐
-│  Orchestrator   │◀── LangGraph state machine
-│  (LangGraph)    │
-└────────┬────────┘
+Celery Task (review_pr)
          │
-    ┌────┴────┬────┬────┬────┬────┐
-    ▼         ▼    ▼    ▼    ▼    ▼
-  Sec     Quality Perf Test Docs Best
-  Agent   Agent   Agent Agent Agent Agent
-    │         │    │    │    │    │
-    └─────────┴────┴────┴────┴────┘
-              │
-              ▼
-      ┌───────────────┐
-      │  Synthesizer  │
-      │  (Aggregation)│
-      └───────────────┘
-              │
-              ▼
-       PR Comment
+         ▼
+┌─────────────────┐
+│  Coordinator    │  fetches diff + context, checks quota, persists results
+└────────┬────────┘
+         │ LangGraph fan-out
+    ┌────┴─────┬──────────┐
+    ▼          ▼          ▼
+Security    Quality    Testing
+ Agent       Agent      Agent
+    └────┬─────┴──────────┘
+         │ merged findings
+         ▼
+  ┌─────────────┐
+  │ Fix Engine  │  generator → validator → scorer
+  └──────┬──────┘
+         │
+  GitHub PR Review (inline suggestions + summary comment)
 ```
 
-## Fix Suggestions
+## Fix Engine
 
-Auto-generated code fixes for common issues via:
-- AST-based transformation
-- LLM-generated patches
-- Template-based corrections
+Runs after agents complete. For each qualifying finding (severity ≥ medium, confidence ≥ 0.7):
+1. **Generator** — Claude produces a unified diff patch
+2. **Validator** — multi-language syntax check (Python AST, JSON, Go/Rust/JS/TS)
+3. **Scorer** — weights by severity and patch churn; discards low-confidence patches
+4. Attached as `FixSchema` on the finding, posted as native GitHub `suggestion` block

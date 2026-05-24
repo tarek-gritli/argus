@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from context.bundle import ContextBundle
 from shared.schemas import FindingSchema
 
 VALID_PAYLOAD = {
@@ -265,6 +266,9 @@ def test_run_proceeds_when_head_sha_not_yet_reviewed():
         patch("orchestrator.coordinator.get_pr_file_content", return_value="code"),
         patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
         patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=True)),
+        patch("orchestrator.coordinator._get_repo_id_for_run", new=AsyncMock(return_value="repo_abc")),
+        patch("orchestrator.coordinator._fetch_context", new=AsyncMock(return_value=ContextBundle.empty())),
+        patch("orchestrator.coordinator.get_rejected_finding_keys", new=AsyncMock(return_value=set())),
         patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]),
         patch("orchestrator.coordinator.run_fix_pipeline", return_value=[SAMPLE_FINDING]),
         patch("orchestrator.coordinator.post_findings_as_review"),
