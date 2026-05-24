@@ -21,6 +21,7 @@ async def get_rejected_finding_keys(org_id: str, repo_id: str, lookback_days: in
                 select(Finding.file, Finding.title)
                 .join(Review, Finding.review_id == Review.id)
                 .where(
+                    Review.repo_id == repo_id,
                     Review.org_id == org_id,
                     Finding.is_accepted == False,  # noqa: E712
                     Finding.created_at >= cutoff,

@@ -36,6 +36,26 @@ async def test_get_rejected_keys_queries_db():
     assert ("app.py", "SQL Injection") in keys
 
 
+@pytest.mark.asyncio
+async def test_get_rejected_keys_scoped_by_repo():
+    """Rejected findings from a different repo must not bleed into another repo's suppression set."""
+    mock_result = MagicMock()
+    mock_result.all.return_value = []  # repo_xyz has no rejections
+
+    mock_session = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=mock_result)
+
+    mock_cm = MagicMock()
+    mock_cm.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_cm.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("context.history.fresh_session_context", return_value=mock_cm):
+        keys = await get_rejected_finding_keys(org_id="org_1", repo_id="repo_xyz", lookback_days=30)
+
+    assert ("app.py", "SQL Injection") not in keys
+    assert keys == set()
+
+
 def test_suppress_duplicate_findings_removes_rejected():
     findings = [_finding("SQL Injection", "app.py"), _finding("XSS", "views.py")]
     rejected = {("app.py", "SQL Injection")}
