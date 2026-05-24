@@ -65,19 +65,18 @@ async def test_search_similar_returns_chunks():
     mock_voyage = MagicMock()
     mock_voyage.embed.return_value = MagicMock(embeddings=[[0.1] * 1024])
     mock_qdrant = AsyncMock()
-    mock_qdrant.search.return_value = [
-        MagicMock(
-            payload={
-                "filepath": "a.py",
-                "start_line": 1,
-                "end_line": 5,
-                "content": "def foo(): pass",
-                "function_name": "foo",
-                "class_name": None,
-            },
-            score=0.9,
-        )
-    ]
+    mock_point = MagicMock(
+        payload={
+            "filepath": "a.py",
+            "start_line": 1,
+            "end_line": 5,
+            "content": "def foo(): pass",
+            "function_name": "foo",
+            "class_name": None,
+        },
+        score=0.9,
+    )
+    mock_qdrant.query_points.return_value = MagicMock(points=[mock_point])
 
     with (
         patch("context.embeddings._get_voyage", return_value=mock_voyage),
@@ -114,8 +113,13 @@ async def test_embed_chunks_graceful_on_qdrant_outage():
 async def test_search_similar_returns_empty_on_outage():
     mock_voyage = MagicMock()
     mock_voyage.embed.side_effect = Exception("Voyage down")
+    mock_qdrant = AsyncMock()
 
-    with patch("context.embeddings._get_voyage", return_value=mock_voyage):
+    with (
+        patch("context.embeddings._get_voyage", return_value=mock_voyage),
+        patch("context.embeddings._get_qdrant", return_value=mock_qdrant),
+    ):
         results = await search_similar("repo_abc", "find auth", top_k=3)
 
     assert results == []
+    mock_qdrant.query_points.assert_not_called()

@@ -18,9 +18,9 @@ _EMBED_DIM = 1024
 
 @lru_cache(maxsize=1)
 def _get_voyage():
-    import voyageai
+    from voyageai.client import Client
 
-    return voyageai.Client(api_key=get_settings().voyage_api_key)
+    return Client(api_key=get_settings().voyage_api_key)
 
 
 @lru_cache(maxsize=1)
@@ -39,17 +39,18 @@ def _cache_key(content: str) -> str:
     return f"emb:{hashlib.sha256(content.encode()).hexdigest()}"
 
 
-async def ensure_collection(repo_id: str) -> None:
+async def _rebuild_collection(repo_id: str) -> None:
     from qdrant_client.models import Distance, VectorParams
 
     qdrant = _get_qdrant()
     name = _collection(repo_id)
     existing = [c.name for c in (await qdrant.get_collections()).collections]
-    if name not in existing:
-        await qdrant.create_collection(
-            name,
-            vectors_config=VectorParams(size=_EMBED_DIM, distance=Distance.COSINE),
-        )
+    if name in existing:
+        await qdrant.delete_collection(name)
+    await qdrant.create_collection(
+        name,
+        vectors_config=VectorParams(size=_EMBED_DIM, distance=Distance.COSINE),
+    )
 
 
 async def embed_chunks(repo_id: str, chunks: list[CodeChunk]) -> None:
@@ -59,7 +60,7 @@ async def embed_chunks(repo_id: str, chunks: list[CodeChunk]) -> None:
     try:
         voyage = _get_voyage()
         qdrant = _get_qdrant()
-        await ensure_collection(repo_id)
+        await _rebuild_collection(repo_id)
 
         vectors: list[list[float]] = []
         uncached_indices: list[int] = []
@@ -78,6 +79,7 @@ async def embed_chunks(repo_id: str, chunks: list[CodeChunk]) -> None:
         if uncached_contents:
             result = voyage.embed(uncached_contents, model=_EMBED_MODEL, input_type="document")
             for chunk_idx, vec in zip(uncached_indices, result.embeddings):
+                vec = [float(v) for v in vec]
                 vectors[chunk_idx] = vec
                 key = _cache_key(chunks[chunk_idx].content)
                 await cache_set(key, vec)
@@ -112,9 +114,9 @@ async def search_similar(repo_id: str, query: str, top_k: int = 5) -> list[dict]
         qdrant = _get_qdrant()
         result = voyage.embed([query], model=_EMBED_MODEL, input_type="query")
         vec = result.embeddings[0]
-        hits = await qdrant.search(
+        response = await qdrant.query_points(
             collection_name=_collection(repo_id),
-            query_vector=vec,
+            query=[float(v) for v in vec],
             limit=top_k,
         )
         return [
@@ -127,7 +129,8 @@ async def search_similar(repo_id: str, query: str, top_k: int = 5) -> list[dict]
                 "class_name": h.payload.get("class_name"),
                 "score": h.score,
             }
-            for h in hits
+            for h in response.points
+            if h.payload
         ]
     except Exception:
         logger.warning("search_similar failed — returning empty context", exc_info=True)
