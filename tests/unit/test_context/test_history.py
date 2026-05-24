@@ -38,12 +38,18 @@ async def test_get_rejected_keys_queries_db():
 
 @pytest.mark.asyncio
 async def test_get_rejected_keys_scoped_by_repo():
-    """Rejected findings from a different repo must not bleed into another repo's suppression set."""
+    """Query must include repo_id in its WHERE clause — removing it would break this test."""
+    captured: list = []
+
     mock_result = MagicMock()
-    mock_result.all.return_value = []  # repo_xyz has no rejections
+    mock_result.all.return_value = []
+
+    async def capturing_execute(stmt, *args, **kwargs):
+        captured.append(str(stmt.compile(compile_kwargs={"literal_binds": True})))
+        return mock_result
 
     mock_session = AsyncMock()
-    mock_session.execute = AsyncMock(return_value=mock_result)
+    mock_session.execute = capturing_execute
 
     mock_cm = MagicMock()
     mock_cm.__aenter__ = AsyncMock(return_value=mock_session)
@@ -52,8 +58,9 @@ async def test_get_rejected_keys_scoped_by_repo():
     with patch("context.history.fresh_session_context", return_value=mock_cm):
         keys = await get_rejected_finding_keys(org_id="org_1", repo_id="repo_xyz", lookback_days=30)
 
-    assert ("app.py", "SQL Injection") not in keys
     assert keys == set()
+    assert captured, "execute was never called"
+    assert "repo_xyz" in captured[0], f"repo_id not found in query: {captured[0]}"
 
 
 def test_suppress_duplicate_findings_removes_rejected():
