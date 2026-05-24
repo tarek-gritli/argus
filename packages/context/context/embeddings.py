@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import uuid
 from functools import lru_cache
 
 from shared.config import get_settings
@@ -40,14 +41,26 @@ def _cache_key(content: str) -> str:
 
 
 async def _prepare_tmp_collection(repo_id: str) -> str:
-    """Create (or recreate) a tmp collection. Returns tmp_name for callers to upsert into."""
+    """Create a uniquely-named tmp collection. Returns tmp_name for callers to upsert into.
+
+    Uses a UUID suffix so the live alias keeps serving the previous collection uninterrupted
+    while the new one is being built. Cleans up any orphaned __tmp_* collections from
+    prior crashed runs before creating the new one.
+    """
     from qdrant_client.models import Distance, VectorParams
 
     qdrant = _get_qdrant()
-    tmp_name = f"{_collection(repo_id)}__tmp"
+    prefix = f"{_collection(repo_id)}__tmp_"
+    tmp_name = f"{prefix}{uuid.uuid4().hex[:8]}"
+
     existing = [c.name for c in (await qdrant.get_collections()).collections]
-    if tmp_name in existing:
-        await qdrant.delete_collection(tmp_name)
+    for name in existing:
+        if name.startswith(prefix):
+            try:
+                await qdrant.delete_collection(name)
+            except Exception:
+                logger.warning("Failed to delete orphaned tmp collection %s", name)
+
     await qdrant.create_collection(
         tmp_name,
         vectors_config=VectorParams(size=_EMBED_DIM, distance=Distance.COSINE),
