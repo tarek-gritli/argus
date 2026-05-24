@@ -245,7 +245,7 @@ def _format_findings(findings: list[FindingSchema]) -> str:
                     lines.append("<details>")
                     lines.append(f"<summary>🔧 Suggested fix — <i>{finding.fix.description}</i></summary>")
                     lines.append("")
-                    lines.append("```suggestion")
+                    lines.append("```diff")
                     lines.append(finding.fix.diff)
                     lines.append("```")
                     lines.append("")
