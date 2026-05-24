@@ -64,8 +64,18 @@ async def github_webhook(request: Request, settings: Settings = Depends(get_sett
             redis_client = request.app.state.redis
             latest_key = f"index:latest:{repo_id}"
             scheduled_key = f"index:scheduled:{repo_id}"
-            await redis_client.set(latest_key, ref_name, ex=600)
-            scheduled = await redis_client.set(scheduled_key, "1", ex=300, nx=True)
+            try:
+                await redis_client.set(latest_key, ref_name, ex=600)
+                scheduled = await redis_client.set(scheduled_key, "1", ex=300, nx=True)
+            except Exception:
+                logger.warning(
+                    "index scheduling skipped: Redis unavailable for repo_id=%s ref=%s installation_id=%s",
+                    repo_id,
+                    ref_name,
+                    installation_id,
+                    exc_info=True,
+                )
+                scheduled = False
             if scheduled:
                 celery_app = request.app.state.celery
                 try:

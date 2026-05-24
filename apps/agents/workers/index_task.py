@@ -16,12 +16,12 @@ def index_repo_task(repo_id: str, installation_id: int, repo_full_name: str, ref
     and indexes that commit. The gateway debounces scheduling so this task fires at most
     once per 5-minute window, always for the most recent push in that window.
     """
-    if redis_client is None:
-        logger.error("index_repo_task called before worker connections were initialized")
-        return
-
-    raw = redis_client.get(f"index:latest:{repo_id}")
-    latest_ref = str(raw) if raw is not None else ref
+    try:
+        raw = redis_client.get(f"index:latest:{repo_id}") if redis_client is not None else None
+        latest_ref = str(raw) if raw is not None else ref
+    except Exception:
+        logger.warning("index_repo_task: Redis unavailable, falling back to ref=%s for repo_id=%s", ref, repo_id, exc_info=True)
+        latest_ref = ref
 
     try:
         files = get_repo_files(repo_full_name, installation_id, latest_ref)
