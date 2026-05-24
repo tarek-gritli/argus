@@ -74,19 +74,24 @@ VALID_PAYLOAD = {
 
 def test_pipeline_detects_findings_and_posts_comment():
     """Real scanners find secrets + SAST issues; coordinator posts a formatted comment."""
-    mock_pr = MagicMock()
     mock_files = _make_mock_files(DIFF_WITH_FINDINGS)
 
+    mock_provider = MagicMock()
+    mock_provider.get_files.return_value = mock_files
+    mock_provider.get_diff.return_value = DIFF_WITH_FINDINGS
+    mock_provider.get_file_content.return_value = "mock file content"
+    mock_unified = MagicMock()
+    mock_unified.head_sha = "abc123"
+    mock_unified.repo_id = "owner/repo"
+    mock_unified.pr_id = 1
+    mock_unified.repo_id = "owner/repo"
+    mock_unified.pr_id = 1
+
     with (
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
-        patch("orchestrator.coordinator.get_pr_diff", return_value=DIFF_WITH_FINDINGS),
-        patch("orchestrator.coordinator.get_pr_file_content", return_value="mock file content"),
+        patch("orchestrator.coordinator.get_vcs_provider", return_value=(mock_provider, mock_unified)),
         patch("specialized.quality.agent._call_claude", return_value="[]"),
         patch("specialized.testing.agent._call_claude", return_value="[]"),
         patch("orchestrator.coordinator.run_fix_pipeline") as mock_fix,
-        patch("orchestrator.coordinator.post_findings_as_review"),
-        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
     ):
 
         def fake_run_fix(findings, files_content):
@@ -103,8 +108,8 @@ def test_pipeline_detects_findings_and_posts_comment():
 
         run(VALID_PAYLOAD)
 
-    mock_post.assert_called_once()
-    body: str = mock_post.call_args[0][1]
+    mock_provider.post_issue_comment.assert_called_once()
+    body: str = mock_provider.post_issue_comment.call_args[0][0]
 
     assert "Security Review" in body
     assert "No issues found" not in body
@@ -119,49 +124,55 @@ def test_pipeline_detects_findings_and_posts_comment():
 
 def test_pipeline_clean_diff_posts_no_issues():
     """A diff with no security issues and no LLM findings produces the all-clear comment."""
-    mock_pr = MagicMock()
     mock_files = _make_mock_files(DIFF_CLEAN)
 
+    mock_provider = MagicMock()
+    mock_provider.get_files.return_value = mock_files
+    mock_provider.get_diff.return_value = DIFF_CLEAN
+    mock_provider.get_file_content.return_value = "mock file content"
+    mock_unified = MagicMock()
+    mock_unified.head_sha = "abc123"
+    mock_unified.repo_id = "owner/repo"
+    mock_unified.pr_id = 1
+
     with (
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
-        patch("orchestrator.coordinator.get_pr_diff", return_value=DIFF_CLEAN),
-        patch("orchestrator.coordinator.get_pr_file_content", return_value="mock file content"),
+        patch("orchestrator.coordinator.get_vcs_provider", return_value=(mock_provider, mock_unified)),
         patch("specialized.quality.agent._call_claude", return_value="[]"),
         patch("specialized.testing.agent._call_claude", return_value="[]"),
-        patch("orchestrator.coordinator.post_findings_as_review"),
-        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
     ):
         from orchestrator.coordinator import run
 
         run(VALID_PAYLOAD)
 
-    mock_post.assert_called_once()
-    body: str = mock_post.call_args[0][1]
+    mock_provider.post_issue_comment.assert_called_once()
+    body: str = mock_provider.post_issue_comment.call_args[0][0]
     assert "No issues found" in body
 
 
 def test_pipeline_comment_severity_ordering():
     """Findings are grouped critical → high → medium → low in the comment."""
-    mock_pr = MagicMock()
     mock_files = _make_mock_files(DIFF_WITH_FINDINGS)
 
+    mock_provider = MagicMock()
+    mock_provider.get_files.return_value = mock_files
+    mock_provider.get_diff.return_value = DIFF_WITH_FINDINGS
+    mock_provider.get_file_content.return_value = "mock file content"
+    mock_unified = MagicMock()
+    mock_unified.head_sha = "abc123"
+    mock_unified.repo_id = "owner/repo"
+    mock_unified.pr_id = 1
+
     with (
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
-        patch("orchestrator.coordinator.get_pr_diff", return_value=DIFF_WITH_FINDINGS),
-        patch("orchestrator.coordinator.get_pr_file_content", return_value="mock file content"),
+        patch("orchestrator.coordinator.get_vcs_provider", return_value=(mock_provider, mock_unified)),
         patch("specialized.quality.agent._call_claude", return_value="[]"),
         patch("specialized.testing.agent._call_claude", return_value="[]"),
         patch("orchestrator.coordinator.run_fix_pipeline", side_effect=lambda f, _: f),
-        patch("orchestrator.coordinator.post_findings_as_review"),
-        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
     ):
         from orchestrator.coordinator import run
 
         run(VALID_PAYLOAD)
 
-    body: str = mock_post.call_args[0][1]
+    body: str = mock_provider.post_issue_comment.call_args[0][0]
 
     severity_order = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
     positions = {s: body.find(f"#### {s}") for s in severity_order if f"#### {s}" in body}
@@ -172,43 +183,47 @@ def test_pipeline_comment_severity_ordering():
 
 def test_pipeline_empty_file_list_posts_warning():
     """No files in the PR → warning comment, agent never runs."""
-    mock_pr = MagicMock()
+
+    mock_provider = MagicMock()
+    mock_provider.get_files.return_value = []
+    mock_unified = MagicMock()
 
     with (
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=[]),
-        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
+        patch("orchestrator.coordinator.get_vcs_provider", return_value=(mock_provider, mock_unified)),
     ):
         from orchestrator.coordinator import run
 
         run(VALID_PAYLOAD)
 
-    body: str = mock_post.call_args[0][1]
+    body: str = mock_provider.post_issue_comment.call_args[0][0]
     assert "No changes detected" in body
 
 
 def test_coordinator_calls_post_findings_as_review():
     """Coordinator calls post_findings_as_review with the head SHA after fix pipeline."""
-    mock_pr = MagicMock()
     mock_files = _make_mock_files(DIFF_WITH_FINDINGS)
 
+    mock_provider = MagicMock()
+    mock_provider.get_files.return_value = mock_files
+    mock_provider.get_diff.return_value = DIFF_WITH_FINDINGS
+    mock_provider.get_file_content.return_value = "mock file content"
+    mock_unified = MagicMock()
+    mock_unified.head_sha = "abc123"
+    mock_unified.repo_id = "owner/repo"
+    mock_unified.pr_id = 1
+
     with (
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
-        patch("orchestrator.coordinator.get_pr_diff", return_value=DIFF_WITH_FINDINGS),
-        patch("orchestrator.coordinator.get_pr_file_content", return_value="mock file content"),
+        patch("orchestrator.coordinator.get_vcs_provider", return_value=(mock_provider, mock_unified)),
         patch("specialized.quality.agent._call_claude", return_value="[]"),
         patch("specialized.testing.agent._call_claude", return_value="[]"),
         patch("orchestrator.coordinator.run_fix_pipeline", side_effect=lambda f, _: f),
-        patch("orchestrator.coordinator.post_findings_as_review") as mock_review,
-        patch("orchestrator.coordinator.post_issue_comment"),
     ):
         from orchestrator.coordinator import run
 
         run(VALID_PAYLOAD)
 
-    mock_review.assert_called_once()
-    _, findings_arg, sha_arg = mock_review.call_args[0]
+    mock_provider.post_findings_as_review.assert_called_once()
+    findings_arg, sha_arg = mock_provider.post_findings_as_review.call_args[0]
     assert sha_arg == VALID_PAYLOAD["head_sha"]
     assert isinstance(findings_arg, list)
 

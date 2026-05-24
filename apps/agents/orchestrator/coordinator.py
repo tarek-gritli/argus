@@ -1,10 +1,10 @@
 import logging
 
 from fix_engine.pipeline import run_fix_pipeline
-from integrations.github import PullRequestPayload, get_pr, get_pr_diff, get_pr_file_content, get_pr_files, post_findings_as_review, post_issue_comment
 from shared.schemas import FindingSchema
 
 from .graph import run_review
+from .vcs import get_vcs_provider
 
 logger = logging.getLogger(__name__)
 
@@ -19,22 +19,21 @@ _SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"]
 
 def run(payload: dict) -> None:
     try:
-        pr_payload = PullRequestPayload(**payload)
-        pr = get_pr(pr_payload.repo_full_name, pr_payload.pr_number, pr_payload.installation_id)
-        files = get_pr_files(pr)
+        provider, unified_payload = get_vcs_provider(payload)
+        files = provider.get_files()
 
         if not files:
-            post_issue_comment(pr, "⚠️ No changes detected in this PR.")
+            provider.post_issue_comment("⚠️ No changes detected in this PR.")
             return
 
-        diff = get_pr_diff(pr)
-        findings = run_review(files=files, diff=diff, pr_payload=pr_payload)
+        diff = provider.get_diff()
+        findings = run_review(files=files, diff=diff, pr_payload=unified_payload)
 
         # Build the files_content mapping for the fix engine
         files_content: dict[str, str] = {}
         for finding in findings:
             if finding.file not in files_content:
-                content = get_pr_file_content(pr, finding.file)
+                content = provider.get_file_content(finding.file)
                 if content is not None:
                     files_content[finding.file] = content
 
@@ -42,9 +41,13 @@ def run(payload: dict) -> None:
         findings = run_fix_pipeline(findings, files_content)
 
         # Post inline review suggestions for findings with fixes; summary comment for all findings
-        post_findings_as_review(pr, findings, pr_payload.head_sha)
-        post_issue_comment(pr, _format_findings(findings))
+        provider.post_findings_as_review(findings, unified_payload.head_sha)
+        provider.post_issue_comment(_format_findings(findings))
 
+    except ValueError as e:
+        # Expected failures (e.g. could not resolve MR/project). Log and stop orchestration.
+        logger.error("Orchestration aborted: %s", e)
+        return
     except Exception:
         logger.exception("Orchestration failed")
         raise

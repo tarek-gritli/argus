@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from shared.schemas import FindingSchema
 
@@ -8,12 +8,12 @@ from .agent import run_security_agent
 from .schemas import AgentTask, RepoConfig
 
 if TYPE_CHECKING:
-    from integrations.github import PullRequestPayload
+    from apps.agents.orchestrator.vcs import FileChange, UnifiedPayload
 
 __all__ = ["analyze", "run_security_agent"]
 
 
-def analyze(files: list[Any], pr_payload: PullRequestPayload) -> list[FindingSchema]:
+def analyze(files: list["FileChange"], pr_payload: "UnifiedPayload") -> list[FindingSchema]:
     """
     Adapter: Convert coordinator's interface to agent's interface and back.
 
@@ -27,8 +27,8 @@ def analyze(files: list[Any], pr_payload: PullRequestPayload) -> list[FindingSch
     # Create AgentTask for the security agent
     task = AgentTask(
         diff=diff,
-        pr_number=pr_payload.pr_number,
-        repo_id=pr_payload.repo_full_name,
+        pr_number=pr_payload.pr_id,
+        repo_id=pr_payload.repo_id,
         repo_config=RepoConfig(exempt_paths=["tests/", "fixtures/"]),
     )
 
@@ -57,7 +57,7 @@ def analyze(files: list[Any], pr_payload: PullRequestPayload) -> list[FindingSch
     return findings
 
 
-def _build_diff_from_files(files: list[Any]) -> str:
+def _build_diff_from_files(files: list["FileChange"]) -> str:
     """Build unified diff string from GitHub API file objects."""
     diff_lines = []
 

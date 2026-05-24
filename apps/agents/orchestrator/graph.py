@@ -1,20 +1,21 @@
 from __future__ import annotations
 
 import operator
-from typing import Annotated, Any, TypedDict
+from typing import Annotated, TypedDict
 
-from integrations.github import PullRequestPayload
 from langgraph.graph import END, START, StateGraph
 from shared.schemas import FindingSchema
 from specialized.quality import analyze as quality_analyze
 from specialized.security import analyze as security_analyze
 from specialized.testing import analyze as testing_analyze
 
+from .vcs import FileChange, UnifiedPayload
+
 
 class ReviewState(TypedDict):
-    files: list[Any]
+    files: list[FileChange]
     diff: str
-    pr_payload: PullRequestPayload
+    pr_payload: UnifiedPayload
     findings: Annotated[list[FindingSchema], operator.add]
 
 
@@ -45,9 +46,9 @@ def build_review_graph():
 
 
 def run_review(
-    files: list[Any],
+    files: list[FileChange],
     diff: str,
-    pr_payload: PullRequestPayload,
+    pr_payload: UnifiedPayload,
 ) -> list[FindingSchema]:
     app = build_review_graph()
     result = app.invoke({"files": files, "diff": diff, "pr_payload": pr_payload, "findings": []})

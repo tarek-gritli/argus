@@ -42,68 +42,77 @@ def _make_mock_files(n: int = 2):
 
 def test_run_happy_path_posts_findings():
     """Coordinator fetches files, runs analysis, posts comment."""
-    mock_pr = _make_mock_pr()
     mock_files = _make_mock_files()
 
+    mock_provider = MagicMock()
+    mock_provider.get_files.return_value = mock_files
+    mock_provider.get_diff.return_value = "+ some diff"
+    mock_unified = MagicMock()
+    mock_unified.repo_id = "owner/repo"
+    mock_unified.pr_id = 123
+
     with (
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
-        patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
+        patch("orchestrator.coordinator.get_vcs_provider", return_value=(mock_provider, mock_unified)),
         patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]),
-        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
+        patch("orchestrator.coordinator.run_fix_pipeline", side_effect=lambda f, _: f),
     ):
         from orchestrator.coordinator import run
 
         run(VALID_PAYLOAD)
 
-    mock_post.assert_called_once()
-    body = mock_post.call_args[0][1]
+    mock_provider.post_issue_comment.assert_called_once()
+    body = mock_provider.post_issue_comment.call_args[0][0]
     assert "SQL Injection" in body
     assert "HIGH" in body or "high" in body.lower()
 
 
 def test_run_no_files_posts_warning():
     """Empty file list posts a warning comment and skips analysis."""
-    mock_pr = _make_mock_pr()
+    mock_provider = MagicMock()
+    mock_provider.get_files.return_value = []
+    mock_unified = MagicMock()
+    mock_unified.repo_id = "owner/repo"
+    mock_unified.pr_id = 123
 
     with (
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=[]),
+        patch("orchestrator.coordinator.get_vcs_provider", return_value=(mock_provider, mock_unified)),
         patch("orchestrator.coordinator.run_review") as mock_analyze,
-        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
     ):
         from orchestrator.coordinator import run
 
         run(VALID_PAYLOAD)
 
     mock_analyze.assert_not_called()
-    mock_post.assert_called_once()
-    body = mock_post.call_args[0][1]
+    mock_provider.post_issue_comment.assert_called_once()
+    body = mock_provider.post_issue_comment.call_args[0][0]
     assert "No changes detected" in body
 
 
 def test_run_no_findings_posts_clean_message():
     """No findings from analysis posts a clean bill of health."""
-    mock_pr = _make_mock_pr()
+    mock_provider = MagicMock()
+    mock_provider.get_files.return_value = _make_mock_files()
+    mock_provider.get_diff.return_value = ""
+    mock_unified = MagicMock()
+    mock_unified.repo_id = "owner/repo"
+    mock_unified.pr_id = 123
 
     with (
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
-        patch("orchestrator.coordinator.get_pr_diff", return_value=""),
+        patch("orchestrator.coordinator.get_vcs_provider", return_value=(mock_provider, mock_unified)),
         patch("orchestrator.coordinator.run_review", return_value=[]),
-        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
+        patch("orchestrator.coordinator.run_fix_pipeline", return_value=[]),
     ):
         from orchestrator.coordinator import run
 
         run(VALID_PAYLOAD)
 
-    body = mock_post.call_args[0][1]
+    body = mock_provider.post_issue_comment.call_args[0][0]
     assert "No issues" in body
 
 
 def test_run_raises_on_get_pr_failure():
-    """If get_pr raises, the exception propagates out of run()."""
-    with patch("orchestrator.coordinator.get_pr", side_effect=Exception("GitHub API down")):
+    """If get_vcs_provider raises, the exception propagates out of run()."""
+    with patch("orchestrator.coordinator.get_vcs_provider", side_effect=Exception("GitHub API down")):
         from orchestrator.coordinator import run
 
         with pytest.raises(Exception, match="GitHub API down"):

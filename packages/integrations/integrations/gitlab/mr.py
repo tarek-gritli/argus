@@ -1,4 +1,6 @@
+import logging
 import re
+import urllib.parse
 from typing import Any
 
 import gitlab
@@ -6,11 +8,51 @@ from gitlab.v4.objects import ProjectMergeRequest
 
 from .client import get_gitlab_client
 
+logger = logging.getLogger(__name__)
 
-def get_mr(project_id: int, mr_iid: int) -> ProjectMergeRequest:
+
+def get_mr(project_id: int | str, mr_iid: int) -> ProjectMergeRequest:
+    """Resolve a project and return its Merge Request object.
+
+    Accepts either a numeric project_id or a namespace/path string. If the
+    initial numeric lookup returns 404, we attempt a path-based lookup and a
+    best-effort search before raising the original error with extra context.
+    """
     gl = get_gitlab_client()
-    project = gl.projects.get(project_id)
-    return project.mergerequests.get(mr_iid)
+
+    # First attempt: direct lookup (numeric id or canonical path)
+    try:
+        project = gl.projects.get(project_id)
+        return project.mergerequests.get(mr_iid)
+    except gitlab.exceptions.GitlabGetError as initial_exc:
+        logger.debug("Initial lookup for project %s failed: %s", project_id, initial_exc)
+
+    # If project_id is a path-like string, try URL-encoding and lookup
+    if isinstance(project_id, str) and "/" in project_id:
+        try:
+            encoded = urllib.parse.quote_plus(project_id)
+            project = gl.projects.get(encoded)
+            return project.mergerequests.get(mr_iid)
+        except gitlab.exceptions.GitlabGetError:
+            logger.debug("Path lookup with encoded project path failed: %s", project_id)
+
+    # As a last resort, try searching projects by name (best-effort)
+    try:
+        search_term = str(project_id)
+        projects = gl.projects.list(search=search_term, as_list=False)
+        # projects is a paginated list; convert to list and try the first sensible match
+        candidates = list(projects)
+        if candidates:
+            project = candidates[0]
+            logger.debug("Found candidate project via search: %s (id=%s)", project.path_with_namespace, project.id)
+            return project.mergerequests.get(mr_iid)
+    except Exception as search_exc:  # broad catch because search can vary by client/server
+        logger.debug("Project search attempt failed for %s: %s", project_id, search_exc)
+
+    # Nothing worked; raise a clear error with context
+    msg = f"Could not find GitLab project '{project_id}' when looking up MR iid={mr_iid}"
+    logger.error(msg)
+    raise gitlab.exceptions.GitlabGetError(msg)
 
 
 def get_mr_files(mr: ProjectMergeRequest) -> list[dict[str, Any]]:
