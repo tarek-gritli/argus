@@ -64,12 +64,19 @@ Multi-agent AI platform that automates code review at the pull-request level.
 Deploys specialized agents in parallel, synthesizes findings into actionable feedback,
 and learns from accepted/rejected suggestions over time.
 
-**Current build phase: Phase 3 (in progress)**
+**Current build phase: Phase 4 complete**
 - API gateway + GitHub webhook handler ✅
 - Orchestrator with three parallel agents (Security, Quality, Testing) — full loop end-to-end ✅
 - Fix engine (generator → validator → scorer → pipeline) ✅
 - Inline GitHub review suggestions (`post_findings_as_review`) ✅
-- No auth, no billing, no multi-tenancy, no CLI, no dashboard yet
+- JWT auth + GitHub OAuth ✅
+- Multi-org via `UserOrg` join table ✅
+- Billing + quota enforcement (free/pro/team/enterprise) ✅
+- Review API (`GET /api/v1/reviews/`) ✅
+- Semantic context injection via Qdrant + Voyage AI ✅
+- AST-based code chunking (9 languages) ✅
+- Blue-green Qdrant collection swap for zero-downtime reindex ✅
+- No CLI, no dashboard yet
 
 ---
 
@@ -138,8 +145,8 @@ argus/
 │   └── web/            # Next.js dashboard (Phase 6 — do not build)
 ├── packages/
 │   ├── shared/         # Cross-app models, schemas, DB session, queue interface
-│   ├── context/        # Vector embeddings + dependency graph (Phase 5 — do not build)
-│   └── integrations/   # GitHub/GitLab/Slack/Notion API clients
+│   ├── context/        # Vector embeddings (Qdrant), AST chunking, Redis cache ✅
+│   └── integrations/   # GitHub App client, GitLab stub
 ├── migrations/         # Alembic migrations — models live in packages/shared
 ├── tests/
 │   ├── unit/
@@ -200,9 +207,9 @@ Agents never handle HTTP. They receive tasks from Celery only.
 apps/agents/
 ├── main.py                  # Celery worker entrypoint
 ├── orchestrator/
-│   ├── graph.py             # LangGraph graph: parallel fan-out to all three agents
-│   ├── coordinator.py       # Receives Celery task → fetches diff → triggers graph → posts comment
-│   ├── conflict.py          # Conflict resolution when agents disagree (Phase 3)
+│   ├── graph.py             # LangGraph graph: parallel fan-out to agents
+│   ├── coordinator.py       # Receives Celery task → fetches diff + context → triggers graph → posts review
+│   ├── quota.py             # Quota check + increment helpers
 │   └── __init__.py
 ├── specialized/
 │   ├── security/            # Security agent — active (OWASP, secrets, CVE)
@@ -224,20 +231,22 @@ apps/agents/
 │   │   ├── prompts/
 │   │   ├── tools/
 │   │   └── validator.py
-│   ├── best_practices.py    # (Phase 3 — stub only)
-│   ├── performance.py       # (Phase 3 — stub only)
-│   ├── documentation.py     # (Phase 3 — stub only)
-│   └── ticket_compliance.py # (Phase 3 — stub only)
+│   ├── documentation/       # Documentation agent — team/enterprise only
+│   │   ├── agent.py
+│   │   ├── pr_description.py
+│   │   └── ...
+│   └── ticket_compliance/   # Ticket compliance agent — team/enterprise only ✅
 ├── fix_engine/
-│   ├── generator.py         # Generate code patches via Claude — active ✅
-│   ├── validator.py         # Multi-language patch validation — active ✅
-│   ├── scorer.py            # Confidence scoring — active ✅
-│   ├── pipeline.py          # Orchestrates generator → validator → scorer — active ✅
-│   ├── prompts.py           # System prompt for fix generation — active ✅
-│   ├── schemas.py           # FixProposal, ValidationResult — active ✅
+│   ├── generator.py         # Generate code patches via Claude ✅
+│   ├── validator.py         # Multi-language patch validation ✅
+│   ├── scorer.py            # Confidence scoring ✅
+│   ├── pipeline.py          # Orchestrates generator → validator → scorer ✅
+│   ├── prompts.py           # System prompt for fix generation ✅
+│   ├── schemas.py           # FixProposal, ValidationResult ✅
 │   └── __init__.py
 └── workers/
-    └── celery_app.py        # Celery app instance + task: review_pr
+    ├── celery_app.py        # Celery app instance + tasks: review_pr, index_repo
+    └── index_task.py        # Repo indexing task (embeds code → Qdrant)
 ```
 
 ### Agent internal pipeline (every agent must follow this exactly):
@@ -328,15 +337,16 @@ GitHub client rules:
 
 ## packages/context — Sole Responsibility
 
-**Semantic context retrieval. Phase 5 — do not build.**
+**Semantic context retrieval. Phase 4 — complete.**
 
 ```
 packages/context/context/
-├── embeddings.py    # Embed code chunks → Qdrant
-├── cache.py         # Redis cache for embeddings
-└── graph.py         # Neo4j dependency graph queries
+├── chunker.py       # AST-based code splitting (tree-sitter, 9 languages)
+├── embeddings.py    # Voyage AI → Qdrant; blue-green collection swap
+├── cache.py         # Redis TTL cache for embedding lookups
+├── bundle.py        # ContextBundle passed read-only to agents
+└── history.py       # Rejected finding suppression
 ```
-
 ---
 
 ## Canonical Data Contract
@@ -368,6 +378,14 @@ GITHUB_APP_ID=
 GITHUB_WEBHOOK_SECRET=
 GITHUB_PRIVATE_KEY_B64=      # base64 of .pem: cat key.pem | base64 | tr -d '\n'
 
+# GitHub OAuth
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+
+# JWT
+JWT_SECRET_KEY=
+JWT_TTL_SECONDS=86400
+
 # Postgres
 DATABASE_URL=postgresql+asyncpg://argus:argus@localhost:5432/argus
 
@@ -380,6 +398,13 @@ CELERY_BROKER_URL=redis://localhost:6379/1
 # LLM
 ANTHROPIC_API_KEY=
 
+# Qdrant (vector embeddings)
+QDRANT_URL=http://localhost:6333
+QDRANT_API_KEY=              # empty for local dev
+
+# Voyage AI (code embeddings)
+VOYAGE_API_KEY=
+
 # App
 ENV=development
 ```
@@ -390,16 +415,16 @@ ENV=development
 
 | Feature | Phase | Status |
 |---|---|---|
-| JWT auth / API keys | 3 | not started |
-| Multi-tenancy / RBAC | 3 | not started |
-| Billing / quota enforcement | 3 | not started |
-| GitLab integration | 2 | stub only |
+| JWT auth + GitHub OAuth | 3 | ✅ complete |
+| Multi-org / RBAC | 3 | ✅ complete |
+| Billing / quota enforcement | 3 | ✅ complete |
 | Fix engine | 3 | ✅ complete |
 | Inline GitHub review suggestions | 3 | ✅ complete |
-| Additional agents (performance, best_practices, documentation, ticket_compliance) | 3 | stub only |
-| Conflict resolution | 3 | stub only |
-| Qdrant context injection | 5 | not started |
-| Neo4j dependency graph | 5 | not started |
+| Qdrant context injection | 4 | ✅ complete |
+| AST-based chunking (9 languages) | 4 | ✅ complete |
+| Documentation agent (team/enterprise) | 3 | ✅ active |
+| Ticket compliance agent | 3 | ✅ active |
+| GitLab integration | — | stub only |
 | CLI commands | 7 | not started |
 | Web dashboard | 6 | not started |
 
