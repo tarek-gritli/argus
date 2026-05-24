@@ -8,6 +8,10 @@ from fastapi.testclient import TestClient
 os.environ["GITHUB_APP_ID"] = "12345"
 os.environ["GITHUB_WEBHOOK_SECRET"] = "test-secret"
 os.environ["GITHUB_PRIVATE_KEY_B64"] = "dGVzdF9rZXk="
+os.environ["GITLAB_WEBHOOK_SECRET"] = "test-secret"
+os.environ["GITLAB_BOT_USER_ID"] = "123"
+os.environ["GITLAB_ACCESS_TOKEN"] = "test-token"
+os.environ["GITLAB_SIGNING_TOKEN"] = "test-token"
 os.environ["REDIS_URL"] = "redis://localhost:6379/15"
 os.environ["CELERY_BROKER_URL"] = "redis://localhost:6379/15"
 
