@@ -74,6 +74,14 @@ class Settings(BaseSettings):
             raise ValueError("secret_encryption_key is not a valid Fernet key") from exc
         return v
 
+    # Stripe
+    stripe_secret_key: str | None = None
+    stripe_webhook_secret: str | None = None
+    stripe_pro_price_id: str | None = None
+    stripe_team_price_id: str | None = None
+    stripe_success_url: str = "http://localhost:3000/billing/success"
+    stripe_cancel_url: str = "http://localhost:3000/billing/cancel"
+
 
 @lru_cache
 def get_settings() -> Settings:
