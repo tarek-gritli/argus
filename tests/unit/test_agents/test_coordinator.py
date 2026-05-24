@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from shared.schemas import FindingSchema
@@ -171,3 +171,131 @@ def test_format_findings_empty_returns_clean():
 
     result = _format_findings([])
     assert "No issues" in result
+
+
+def test_run_persists_review_and_findings_when_org_id_present():
+    """When org_id is in payload, coordinator should persist Review + Findings to DB."""
+    mock_pr = _make_mock_pr()
+    mock_files = _make_mock_files()
+
+    mock_repo = MagicMock()
+    mock_repo.id = "repo-uuid"
+
+    mock_session = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_repo)))
+    mock_session.flush = AsyncMock()
+    mock_session.commit = AsyncMock()
+    mock_session.add = MagicMock()
+
+    mock_ctx = AsyncMock()
+    mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_ctx.__aexit__ = AsyncMock(return_value=False)
+
+    payload_with_org = {**VALID_PAYLOAD, "org_id": "org-123"}
+
+    with (
+        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
+        patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
+        patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
+        patch("orchestrator.coordinator.get_pr_file_content", return_value="code"),
+        patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]),
+        patch("orchestrator.coordinator.run_fix_pipeline", return_value=[SAMPLE_FINDING]),
+        patch("orchestrator.coordinator.post_findings_as_review"),
+        patch("orchestrator.coordinator.post_issue_comment"),
+        patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=True)),
+        patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
+        patch("orchestrator.coordinator.fresh_session_context", return_value=mock_ctx),
+    ):
+        from orchestrator.coordinator import run
+
+        run(payload_with_org)
+
+    assert mock_session.add.called
+    assert mock_session.commit.called
+
+
+def test_quota_exceeded_posts_comment_and_returns():
+    mock_pr = _make_mock_pr()
+
+    with (
+        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
+        patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
+        patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
+        patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=False)),
+        patch("orchestrator.coordinator.run_review") as mock_review,
+        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
+    ):
+        from orchestrator.coordinator import run
+
+        run({**VALID_PAYLOAD, "org_id": "o1"})
+
+    mock_review.assert_not_called()
+    mock_post.assert_called_once()
+    assert "quota" in mock_post.call_args[0][1].lower()
+
+
+def test_run_skips_review_when_head_sha_already_reviewed():
+    """Coordinator skips analysis entirely if head_sha was already reviewed."""
+    mock_pr = _make_mock_pr()
+
+    with (
+        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
+        patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
+        patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
+        patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=True)),
+        patch("orchestrator.coordinator.run_review") as mock_review,
+        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
+    ):
+        from orchestrator.coordinator import run
+
+        run({**VALID_PAYLOAD, "org_id": "org-1"})
+
+    mock_review.assert_not_called()
+    mock_post.assert_not_called()
+
+
+def test_run_proceeds_when_head_sha_not_yet_reviewed():
+    """Coordinator runs full review when head_sha has no completed review."""
+    mock_pr = _make_mock_pr()
+
+    with (
+        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
+        patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
+        patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
+        patch("orchestrator.coordinator.get_pr_file_content", return_value="code"),
+        patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
+        patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=True)),
+        patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]),
+        patch("orchestrator.coordinator.run_fix_pipeline", return_value=[SAMPLE_FINDING]),
+        patch("orchestrator.coordinator.post_findings_as_review"),
+        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
+        patch("orchestrator.coordinator._persist", new=AsyncMock()),
+    ):
+        from orchestrator.coordinator import run
+
+        run({**VALID_PAYLOAD, "org_id": "org-1"})
+
+    mock_post.assert_called_once()
+
+
+def test_run_skips_persist_when_no_org_id():
+    """When org_id is absent, coordinator skips DB writes."""
+    mock_pr = _make_mock_pr()
+    mock_files = _make_mock_files()
+
+    with (
+        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
+        patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
+        patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
+        patch("orchestrator.coordinator.get_pr_file_content", return_value="code"),
+        patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]),
+        patch("orchestrator.coordinator.run_fix_pipeline", return_value=[SAMPLE_FINDING]),
+        patch("orchestrator.coordinator.post_findings_as_review"),
+        patch("orchestrator.coordinator.post_issue_comment"),
+        patch("orchestrator.coordinator.fresh_session_context") as mock_sc,
+    ):
+        from orchestrator.coordinator import run
+
+        run(VALID_PAYLOAD)  # no org_id
+
+    mock_sc.assert_not_called()

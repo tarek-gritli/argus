@@ -53,6 +53,7 @@ class TestBuildReviewGraph:
             patch("orchestrator.graph.security_analyze", return_value=[sec_finding]),
             patch("orchestrator.graph.quality_analyze", return_value=[qual_finding]),
             patch("orchestrator.graph.testing_analyze", return_value=[test_finding]),
+            patch("orchestrator.graph.documentation_analyze", return_value=[]),
         ):
             from orchestrator.graph import run_review
 
@@ -71,6 +72,7 @@ class TestBuildReviewGraph:
             patch("orchestrator.graph.security_analyze", return_value=[]),
             patch("orchestrator.graph.quality_analyze", return_value=[]),
             patch("orchestrator.graph.testing_analyze", return_value=[]),
+            patch("orchestrator.graph.documentation_analyze", return_value=[]),
         ):
             from orchestrator.graph import run_review
 
@@ -159,6 +161,78 @@ class TestFormatFindings:
         result = _format_findings(findings)
         assert "Slow query" in result
         assert "Performance" in result
+
+
+class TestPlanGating:
+    def test_free_plan_runs_three_agents(self):
+        with (
+            patch("orchestrator.graph.security_analyze", return_value=[]) as mock_sec,
+            patch("orchestrator.graph.quality_analyze", return_value=[]) as mock_qual,
+            patch("orchestrator.graph.testing_analyze", return_value=[]) as mock_test,
+        ):
+            from orchestrator.graph import run_review
+
+            run_review(files=[], diff="", pr_payload=_make_pr_payload(), plan="free")
+
+        mock_sec.assert_called_once()
+        mock_qual.assert_called_once()
+        mock_test.assert_called_once()
+
+    def test_pro_plan_runs_three_agents(self):
+        with (
+            patch("orchestrator.graph.security_analyze", return_value=[]) as mock_sec,
+            patch("orchestrator.graph.quality_analyze", return_value=[]) as mock_qual,
+            patch("orchestrator.graph.testing_analyze", return_value=[]) as mock_test,
+        ):
+            from orchestrator.graph import run_review
+
+            run_review(files=[], diff="", pr_payload=_make_pr_payload(), plan="pro")
+
+        mock_sec.assert_called_once()
+        mock_qual.assert_called_once()
+        mock_test.assert_called_once()
+
+    def test_team_plan_runs_seven_agents(self):
+        with (
+            patch("orchestrator.graph.security_analyze", return_value=[]),
+            patch("orchestrator.graph.quality_analyze", return_value=[]),
+            patch("orchestrator.graph.testing_analyze", return_value=[]),
+            patch("specialized.performance.analyze", return_value=[]),
+            patch("specialized.best_practices.analyze", return_value=[]),
+            patch("specialized.documentation.analyze", return_value=[]),
+            patch("specialized.ticket_compliance.analyze", return_value=[]),
+        ):
+            from orchestrator.graph import build_review_graph
+
+            graph = build_review_graph(plan="team")
+
+        nodes = graph.get_graph().nodes
+        assert "security" in nodes
+        assert "quality" in nodes
+        assert "testing" in nodes
+        assert "performance" in nodes
+        assert "best_practices" in nodes
+        assert "documentation" in nodes
+        assert "ticket_compliance" in nodes
+
+    def test_unknown_plan_raises(self):
+        import pytest
+        from orchestrator.graph import build_review_graph
+
+        with pytest.raises(ValueError, match="Unknown plan"):
+            build_review_graph(plan="enterprise_plus")
+
+    def test_plan_normalized_case(self):
+        with (
+            patch("orchestrator.graph.security_analyze", return_value=[]),
+            patch("orchestrator.graph.quality_analyze", return_value=[]),
+            patch("orchestrator.graph.testing_analyze", return_value=[]),
+        ):
+            from orchestrator.graph import build_review_graph
+
+            graph = build_review_graph(plan="FREE")
+
+        assert "security" in graph.get_graph().nodes
 
 
 class TestPatchToSource:

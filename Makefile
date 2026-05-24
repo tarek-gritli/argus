@@ -25,24 +25,32 @@ help: ## Show this help
 # Install
 # ============================================================
 
-install: install-python install-web ## Install all dependencies
+install: install-python install-web install-pre-commit ## Install all dependencies and pre-commit hooks
 
 install-python: ## Install Python dependencies
 	$(UV) sync --all-packages
-	$(UV) run pre-commit install
 
 install-web: ## Install web dependencies
 	cd apps/web && $(PNPM) install
+
+install-pre-commit: ## Install pre-commit hooks
+	$(UV) run pre-commit install
 
 # ============================================================
 # Run
 # ============================================================
 
 run-gateway: ## Run the gateway service
-	$(UV) run --package gateway --env-file .env uvicorn gateway_main:app --reload
+	$(UV) run --package gateway --env-file .env uvicorn gateway_main:app --reload --reload-dir apps/gateway
 
-run-agents: ## Run the agents service
-	$(UV) run --env-file .env --package agents agents
+run-agents: ## Run agents with hot reload on source changes
+	$(UV) run --env-file .env --package agents watchmedo auto-restart \
+		--directory=apps/agents \
+		--directory=packages/shared \
+		--directory=packages/integrations \
+		--pattern="*.py" \
+		--recursive \
+		-- agents
 
 run-cli: ## Run the CLI
 	$(UV) run --env-file .env --package cli cli

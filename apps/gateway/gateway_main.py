@@ -5,6 +5,8 @@ import redis.asyncio as redis
 from api import api_router
 from celery import Celery
 from fastapi import FastAPI
+from middleware.auth import AuthMiddleware
+from middleware.rate_limit import RateLimitMiddleware
 from shared.config import get_settings
 
 settings = get_settings()
@@ -23,6 +25,8 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+app.add_middleware(AuthMiddleware)
+app.add_middleware(RateLimitMiddleware)
 
 
 @app.get("/ping")

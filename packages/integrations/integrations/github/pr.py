@@ -48,6 +48,13 @@ def post_issue_comment(pr: PullRequest, body: str) -> None:
     pr.create_issue_comment(body)
 
 
+def update_pr_body(pr: PullRequest, body: str) -> None:
+    """Update the PR description body."""
+    if not body or not body.strip():
+        return
+    pr.edit(body=body)
+
+
 def post_review_comment(
     pr: PullRequest,
     body: str,
