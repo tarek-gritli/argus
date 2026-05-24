@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from shared.models.org_billing import OrgBilling
 from sqlalchemy import select
@@ -17,7 +18,7 @@ _HANDLED_EVENTS = frozenset(
 )
 
 
-async def sync_subscription_event(session: AsyncSession, event: dict) -> None:
+async def sync_subscription_event(session: AsyncSession, event: Any) -> None:
     event_type = event.get("type", "")
     if event_type not in _HANDLED_EVENTS:
         return

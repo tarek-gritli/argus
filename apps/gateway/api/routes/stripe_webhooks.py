@@ -26,7 +26,7 @@ async def stripe_webhook(request: Request) -> Response:
 
     try:
         event = stripe.Webhook.construct_event(payload, sig, settings.stripe_webhook_secret)
-    except stripe.error.SignatureVerificationError:
+    except stripe.SignatureVerificationError:
         return Response(status_code=400, content="Invalid signature")
 
     async with session_context() as session:

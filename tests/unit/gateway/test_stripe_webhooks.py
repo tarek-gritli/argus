@@ -54,7 +54,7 @@ def test_stripe_webhook_invalid_signature_returns_400():
 
     with (
         patch("api.routes.stripe_webhooks.get_settings", return_value=_mock_settings()),
-        patch("api.routes.stripe_webhooks.stripe.Webhook.construct_event", side_effect=stripe.error.SignatureVerificationError("bad", "sig")),
+        patch("api.routes.stripe_webhooks.stripe.Webhook.construct_event", side_effect=stripe.SignatureVerificationError("bad", "sig")),
     ):
         client = TestClient(_make_app(), raise_server_exceptions=False)
         resp = client.post(
