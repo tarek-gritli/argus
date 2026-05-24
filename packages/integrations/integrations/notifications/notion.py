@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from notion_client import Client
 
-from .dispatcher import ReviewSummary
+from .schemas import ReviewSummary
 
 
 def append_to_notion_db(api_key: str, database_id: str, summary: ReviewSummary) -> None:

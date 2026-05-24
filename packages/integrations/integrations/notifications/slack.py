@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import httpx
 
-from .dispatcher import ReviewSummary
+from .schemas import ReviewSummary
 
 
 def post_to_slack(webhook_url: str, summary: ReviewSummary) -> None:

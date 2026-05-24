@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
-from integrations.notifications.dispatcher import ReviewSummary
 from integrations.notifications.notion import append_to_notion_db
+from integrations.notifications.schemas import ReviewSummary
 from integrations.notifications.slack import post_to_slack
 
 
