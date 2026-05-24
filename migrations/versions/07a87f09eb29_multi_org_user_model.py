@@ -51,5 +51,5 @@ def downgrade() -> None:
     """Downgrade schema."""
     op.drop_table("user_orgs")
     op.add_column("users", sa.Column("role", sa.VARCHAR(), server_default="member", nullable=False))
-    # org_id FK cannot be safely reconstructed with existing data; add as nullable
     op.add_column("users", sa.Column("org_id", sa.VARCHAR(), nullable=True))
+    op.create_foreign_key("users_org_id_fkey", "users", "orgs", ["org_id"], ["id"], use_alter=True)

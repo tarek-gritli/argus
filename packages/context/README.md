@@ -4,7 +4,7 @@ Semantic context retrieval for code review agents. Indexes repo code into Qdrant
 
 ## Components
 
-- **chunker** — AST-based code splitting (function/class level) via tree-sitter; 9 languages supported; Dart falls back to line-window
+- **chunker** — AST-based code splitting (function/class level) via tree-sitter; 10 languages supported; Dart falls back to line-window
 - **embeddings** — Voyage AI (`voyage-code-3`, 1024-dim) → Qdrant; blue-green collection swap for zero-downtime reindex
 - **cache** — Redis TTL cache (1h) for embedding lookups to avoid re-embedding identical chunks
 - **bundle** — `ContextBundle` passed read-only to each agent at review time

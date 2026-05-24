@@ -1,7 +1,7 @@
 [project]
 name = "context"
 version = "0.1.0"
-description = "Semantic context retrieval - AST-based chunking (tree-sitter, 9 languages), Voyage AI embeddings, Qdrant vector store, Redis embedding cache"
+description = "Semantic context retrieval - AST-based chunking (tree-sitter, 10 languages), Voyage AI embeddings, Qdrant vector store, Redis embedding cache"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

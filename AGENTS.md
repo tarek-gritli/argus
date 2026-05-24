@@ -355,9 +355,11 @@ Every agent outputs FindingSchema. No exceptions. No custom formats.
 
 ```python
 # packages/shared/shared/schemas/finding.py
+# AgentType = Literal["security", "quality", "testing", "documentation", "ticket_compliance"]
+# SeverityType = Literal["critical", "high", "medium", "low", "info"]
 class FindingSchema(BaseModel):
-    agent: str           # "security" | "quality" | "performance" | etc.
-    severity: str        # "critical" | "high" | "medium" | "low" | "info"
+    agent: AgentType     # see AgentType literal above
+    severity: SeverityType
     file: str            # repo-relative file path
     line_start: int
     line_end: int

@@ -12,6 +12,16 @@ if [ -f "$ROOT/.env" ]; then
   set +a
 fi
 
+DB_URL="${DATABASE_URL:-postgresql+asyncpg://argus:argus@localhost:5432/argus}"
+PSQL_URL="${DB_URL/postgresql+asyncpg/postgresql}"
+
+# Extract host and port from URL (e.g. postgresql://user:pass@host:port/db)
+DB_HOST="$(echo "$PSQL_URL" | sed -E 's|.*@([^:/]+).*|\1|')"
+DB_PORT="$(echo "$PSQL_URL" | sed -E 's|.*:([0-9]+)/.*|\1|')"
+DB_PORT="${DB_PORT:-5432}"
+
+export DATABASE_URL="$DB_URL"
+
 echo "WARNING: This will drop all tables and reapply migrations from scratch."
 read -r -p "Continue? [y/N] " confirm
 if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
@@ -19,9 +29,9 @@ if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
   exit 0
 fi
 
-echo "==> Checking PostgreSQL is reachable..."
+echo "==> Checking PostgreSQL is reachable at ${DB_HOST}:${DB_PORT}..."
 for i in $(seq 1 20); do
-  if pg_isready -h localhost -p 5432 -q 2>/dev/null; then
+  if pg_isready -h "$DB_HOST" -p "$DB_PORT" -q 2>/dev/null; then
     break
   fi
   if [ "$i" -eq 20 ]; then

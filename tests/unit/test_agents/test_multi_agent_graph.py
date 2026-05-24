@@ -172,7 +172,7 @@ class TestPlanGating:
         mock_qual.assert_called_once()
         mock_test.assert_called_once()
 
-    def test_team_plan_runs_seven_agents(self):
+    def test_team_plan_runs_five_agents(self):
         with (
             patch("orchestrator.graph.security_analyze", return_value=[]),
             patch("orchestrator.graph.quality_analyze", return_value=[]),
