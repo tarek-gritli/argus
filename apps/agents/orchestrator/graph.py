@@ -53,15 +53,7 @@ def build_review_graph(plan: str = "free"):
     graph.add_edge("testing", END)
 
     if plan in {"team", "enterprise"}:
-        from specialized.best_practices import analyze as bp_analyze
-        from specialized.performance import analyze as perf_analyze
         from specialized.ticket_compliance import analyze as tc_analyze
-
-        def _perf_node(state: ReviewState) -> dict:
-            return {"findings": perf_analyze(state["files"], state["diff"], state["pr_payload"])}
-
-        def _bp_node(state: ReviewState) -> dict:
-            return {"findings": bp_analyze(state["files"], state["diff"], state["pr_payload"])}
 
         def _doc_node(state: ReviewState) -> dict:
             return {"findings": documentation_analyze(state["files"], state["diff"], state["pr_payload"])}
@@ -70,8 +62,6 @@ def build_review_graph(plan: str = "free"):
             return {"findings": tc_analyze(state["files"], state["diff"], state["pr_payload"])}
 
         for name, node in [
-            ("performance", _perf_node),
-            ("best_practices", _bp_node),
             ("documentation", _doc_node),
             ("ticket_compliance", _tc_node),
         ]:
