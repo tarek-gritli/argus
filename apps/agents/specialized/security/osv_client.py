@@ -155,7 +155,7 @@ def _parse_vuln(vuln: dict, package: str, version: str) -> DependencyHit | None:
         version=version,
         cve_id=cve_id,
         cvss_score=cvss_score,
-        fix_version=fix_version or "",
+        fix_version=fix_version,
         severity_hint=severity,
     )
 

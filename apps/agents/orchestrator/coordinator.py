@@ -158,7 +158,8 @@ def _build_dashboard_url(repo_full_name: str, pr_number: int) -> str | None:
     if not settings.public_url:
         return None
     owner, repo = repo_full_name.split("/", 1)
-    token = dashboard_token.sign(settings.jwt_secret_key, repo_full_name, pr_number)
+    signing_secret = settings.dashboard_token_secret or settings.jwt_secret_key
+    token = dashboard_token.sign(signing_secret, repo_full_name, pr_number)
     return f"{settings.public_url.rstrip('/')}/dashboard/{owner}/{repo}/{pr_number}?token={token}"
 
 

@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     gemini_api_key: str | None = None
     public_url: str | None = None  # e.g. https://xxx.ngrok-free.app — enables dashboard links in PR comments
+    dashboard_token_secret: str | None = None  # separate signing key for dashboard tokens; falls back to jwt_secret_key
 
 
 @lru_cache

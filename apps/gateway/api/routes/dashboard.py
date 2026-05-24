@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from shared.config import get_settings
@@ -354,7 +356,8 @@ async def review_dashboard(
     settings = get_settings()
     repo_full_name = f"{owner}/{repo}"
 
-    if not verify(settings.jwt_secret_key, token, repo_full_name, pr_number):
+    signing_secret = settings.dashboard_token_secret or settings.jwt_secret_key
+    if not verify(signing_secret, token, repo_full_name, pr_number):
         raise HTTPException(status_code=403, detail="Invalid or expired dashboard token")
 
     async with session_context() as session:
@@ -378,7 +381,7 @@ def _render_dashboard(
     repo_full_name: str,
     pr_number: int,
     review: Review,
-    findings: list[FindingModel],
+    findings: Sequence[FindingModel],
 ) -> str:
     by_agent: dict[str, list[FindingModel]] = {}
     for f in findings:
@@ -435,11 +438,13 @@ def _render_dashboard(
         suggestion_html = ""
         if f.suggestion:
             suggestion_html = f'<div class="suggestion-block"><div class="suggestion-header">💡 Suggested change</div><div class="suggestion-body">{_esc(f.suggestion)}</div></div>'
+        sev_esc = _esc(sev)
+        agent_esc = _esc(f.agent)
         return (
-            f'<div class="finding-card" data-severity="{sev}" data-agent="{f.agent}"'
+            f'<div class="finding-card" data-severity="{sev_esc}" data-agent="{agent_esc}"'
             f' data-has-suggestion="{"true" if f.suggestion else "false"}">'
             f'<div class="card-meta">'
-            f'<span class="sev-badge sev-{sev}">{_SEVERITY_ICONS.get(sev, "⚪")} {sev.upper()}</span>'
+            f'<span class="sev-badge sev-{sev_esc}">{_SEVERITY_ICONS.get(sev, "⚪")} {sev_esc.upper()}</span>'
             f'<span class="agent-badge">{_AGENT_ICONS.get(f.agent, "🤖")} {_esc(agent_label)}</span>'
             f'<span class="file-chip">{file_loc}</span>'
             f"</div>"
