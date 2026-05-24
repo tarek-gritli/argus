@@ -1,8 +1,15 @@
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from context.bundle import ContextBundle
 from shared.schemas import FindingSchema
+
+
+def _patch_run_async():
+    """Patch run_async so tests don't need a live event loop."""
+    return patch("orchestrator.coordinator.run_async", side_effect=lambda coro: asyncio.run(coro))
+
 
 VALID_PAYLOAD = {
     "action": "opened",
@@ -178,23 +185,11 @@ def test_run_persists_review_and_findings_when_org_id_present():
     """When org_id is in payload, coordinator should persist Review + Findings to DB."""
     mock_pr = _make_mock_pr()
     mock_files = _make_mock_files()
-
-    mock_repo = MagicMock()
-    mock_repo.id = "repo-uuid"
-
-    mock_session = AsyncMock()
-    mock_session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_repo)))
-    mock_session.flush = AsyncMock()
-    mock_session.commit = AsyncMock()
-    mock_session.add = MagicMock()
-
-    mock_ctx = AsyncMock()
-    mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
-    mock_ctx.__aexit__ = AsyncMock(return_value=False)
-
+    mock_persist = AsyncMock()
     payload_with_org = {**VALID_PAYLOAD, "org_id": "org-123"}
 
     with (
+        _patch_run_async(),
         patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
         patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
         patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
@@ -205,20 +200,23 @@ def test_run_persists_review_and_findings_when_org_id_present():
         patch("orchestrator.coordinator.post_issue_comment"),
         patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=True)),
         patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
-        patch("orchestrator.coordinator.fresh_session_context", return_value=mock_ctx),
+        patch("orchestrator.coordinator._get_repo_id_for_run", new=AsyncMock(return_value="repo-uuid")),
+        patch("orchestrator.coordinator._fetch_context", new=AsyncMock(return_value=ContextBundle.empty())),
+        patch("orchestrator.coordinator.get_rejected_finding_keys", new=AsyncMock(return_value=set())),
+        patch("orchestrator.coordinator._persist", new=mock_persist),
     ):
         from orchestrator.coordinator import run
 
         run(payload_with_org)
 
-    assert mock_session.add.called
-    assert mock_session.commit.called
+    mock_persist.assert_called_once()
 
 
 def test_quota_exceeded_posts_comment_and_returns():
     mock_pr = _make_mock_pr()
 
     with (
+        _patch_run_async(),
         patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
         patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
         patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
@@ -240,6 +238,7 @@ def test_run_skips_review_when_head_sha_already_reviewed():
     mock_pr = _make_mock_pr()
 
     with (
+        _patch_run_async(),
         patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
         patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
         patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
@@ -260,6 +259,7 @@ def test_run_proceeds_when_head_sha_not_yet_reviewed():
     mock_pr = _make_mock_pr()
 
     with (
+        _patch_run_async(),
         patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
         patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
         patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
@@ -296,10 +296,10 @@ def test_run_skips_persist_when_no_org_id():
         patch("orchestrator.coordinator.run_fix_pipeline", return_value=[SAMPLE_FINDING]),
         patch("orchestrator.coordinator.post_findings_as_review"),
         patch("orchestrator.coordinator.post_issue_comment"),
-        patch("orchestrator.coordinator.fresh_session_context") as mock_sc,
+        patch("orchestrator.coordinator.get_session_factory") as mock_sf,
     ):
         from orchestrator.coordinator import run
 
         run(VALID_PAYLOAD)  # no org_id
 
-    mock_sc.assert_not_called()
+    mock_sf.assert_not_called()

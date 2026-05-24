@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -7,12 +6,12 @@ from context.embeddings import search_similar
 from context.history import get_rejected_finding_keys, suppress_duplicate_findings
 from fix_engine.pipeline import run_fix_pipeline
 from integrations.github import PullRequestPayload, get_pr, get_pr_diff, get_pr_file_content, get_pr_files, post_findings_as_review, post_issue_comment, update_pr_body
-from shared.db import fresh_session_context
 from shared.models import Finding as FindingModel
 from shared.models import Repo, Review
 from shared.schemas import FindingSchema
 from specialized.documentation.pr_description import generate_pr_description
 from sqlalchemy import select
+from workers.connections import get_session_factory, run_async
 
 from .graph import run_review
 from .quota import check_and_increment_quota, get_or_create_billing
@@ -43,23 +42,23 @@ def run(payload: dict) -> None:
             post_issue_comment(pr, "⚠️ No changes detected in this PR.")
             return
 
-        if org_id and asyncio.run(_already_reviewed(org_id, pr_payload.repo_full_name, pr_payload.installation_id, pr_payload.head_sha)):
+        if org_id and run_async(_already_reviewed(org_id, pr_payload.repo_full_name, pr_payload.installation_id, pr_payload.head_sha)):
             logger.info("Skipping review — head_sha %s already reviewed", pr_payload.head_sha[:8])
             return
 
         if org_id:
-            allowed = asyncio.run(_check_quota(org_id))
+            allowed = run_async(_check_quota(org_id))
             if not allowed:
                 post_issue_comment(pr, "⚠️ Argus review quota reached for this billing period. Upgrade your plan to continue.")
                 return
 
         diff = get_pr_diff(pr)
-        repo_id = asyncio.run(_get_repo_id_for_run(pr_payload)) if org_id else None
-        context = asyncio.run(_fetch_context(repo_id=repo_id, diff=diff)) if repo_id else ContextBundle.empty()
+        repo_id = run_async(_get_repo_id_for_run(pr_payload)) if org_id else None
+        context = run_async(_fetch_context(repo_id=repo_id, diff=diff)) if repo_id else ContextBundle.empty()
         findings = run_review(files=files, diff=diff, pr_payload=pr_payload, context=context)
 
         if org_id and repo_id:
-            rejected_keys = asyncio.run(get_rejected_finding_keys(org_id=org_id, repo_id=repo_id))
+            rejected_keys = run_async(get_rejected_finding_keys(org_id=org_id, repo_id=repo_id))
             findings = suppress_duplicate_findings(findings, rejected_keys)
 
         files_content: dict[str, str] = {}
@@ -71,7 +70,6 @@ def run(payload: dict) -> None:
 
         findings = run_fix_pipeline(findings, files_content)
 
-        # Auto-generate and update PR description if it's missing or too short
         pr_description = generate_pr_description(diff, pr.title, pr.body or "")
         if pr_description and pr_description != pr.body:
             try:
@@ -80,13 +78,12 @@ def run(payload: dict) -> None:
             except Exception:
                 logger.warning("Failed to update PR description — continuing", exc_info=True)
 
-        # Post inline review suggestions for findings with fixes; summary comment for all findings
         post_findings_as_review(pr, findings, pr_payload.head_sha)
         post_issue_comment(pr, _format_findings(findings))
 
         if org_id:
             try:
-                asyncio.run(_persist(org_id=org_id, pr_payload=pr_payload, findings=findings))
+                run_async(_persist(org_id=org_id, pr_payload=pr_payload, findings=findings))
             except Exception:
                 logger.exception("Review persisted to GitHub, but DB persistence failed")
 
@@ -96,7 +93,7 @@ def run(payload: dict) -> None:
 
 
 async def _already_reviewed(org_id: str, repo_full_name: str, installation_id: int, head_sha: str) -> bool:
-    async with fresh_session_context() as session:
+    async with get_session_factory()() as session:
         repo_result = await session.execute(select(Repo).where(Repo.installation_id == installation_id, Repo.full_name == repo_full_name))
         repo = repo_result.scalar_one_or_none()
         if not repo:
@@ -115,7 +112,7 @@ async def _already_reviewed(org_id: str, repo_full_name: str, installation_id: i
 
 
 async def _get_repo_id_for_run(pr_payload: PullRequestPayload) -> str | None:
-    async with fresh_session_context() as session:
+    async with get_session_factory()() as session:
         result = await session.execute(select(Repo).where(Repo.installation_id == pr_payload.installation_id, Repo.full_name == pr_payload.repo_full_name))
         repo = result.scalar_one_or_none()
         return repo.id if repo else None
@@ -131,13 +128,13 @@ async def _fetch_context(repo_id: str, diff: str) -> ContextBundle:
 
 
 async def _check_quota(org_id: str) -> bool:
-    async with fresh_session_context() as session:
+    async with get_session_factory()() as session:
         billing = await get_or_create_billing(session, org_id)
         return await check_and_increment_quota(session, billing)
 
 
 async def _persist(org_id: str, pr_payload: PullRequestPayload, findings: list[FindingSchema]) -> None:
-    async with fresh_session_context() as session:
+    async with get_session_factory()() as session:
         result = await session.execute(select(Repo).where(Repo.installation_id == pr_payload.installation_id, Repo.full_name == pr_payload.repo_full_name))
         repo = result.scalar_one_or_none()
         if not repo:
