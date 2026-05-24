@@ -6,14 +6,25 @@ import logging
 from context.chunker import chunk_file, extension_to_language
 from context.embeddings import embed_chunks
 from integrations.github.pr import get_repo_files
+from workers.connections import redis_client
 
 logger = logging.getLogger(__name__)
 
 
 def index_repo_task(repo_id: str, installation_id: int, repo_full_name: str, ref: str = "main") -> None:
-    """Celery-callable. Fetches all source files, chunks, and embeds into Qdrant."""
+    """Celery-callable. Reads the latest ref from Redis (set by the gateway at schedule time)
+    and indexes that commit. The gateway debounces scheduling so this task fires at most
+    once per 5-minute window, always for the most recent push in that window.
+    """
+    if redis_client is None:
+        logger.error("index_repo_task called before worker connections were initialized")
+        return
+
+    raw = redis_client.get(f"index:latest:{repo_id}")
+    latest_ref = str(raw) if raw is not None else ref
+
     try:
-        files = get_repo_files(repo_full_name, installation_id, ref)
+        files = get_repo_files(repo_full_name, installation_id, latest_ref)
         asyncio.run(_index_all(repo_id, files))
     except Exception:
         logger.exception("index_repo_task failed")

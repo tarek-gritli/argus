@@ -40,12 +40,11 @@ def review_pr(payload: dict) -> None:
 
 
 @celery_app.task(name=INDEX_REPO_TASK_NAME)
-def index_repo(repo_id: str, installation_id: int, repo_full_name: str, ref: str = "main") -> None:
+def index_repo(repo_id: str, installation_id: int, repo_full_name: str) -> None:
     from workers.index_task import index_repo_task
 
     index_repo_task(
         repo_id=repo_id,
         installation_id=installation_id,
         repo_full_name=repo_full_name,
-        ref=ref,
     )
