@@ -38,6 +38,7 @@ markers = [
 pythonpath = [
     "apps/gateway",
     "apps/agents",
+    "apps/cli",
     "packages/shared",
     "packages/integrations",
 ]
