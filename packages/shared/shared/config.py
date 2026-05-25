@@ -4,7 +4,19 @@ from cryptography.fernet import Fernet
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
-_REQUIRED_NON_EMPTY = ("github_webhook_secret", "github_app_id", "github_private_key_b64", "github_client_id", "github_client_secret", "jwt_secret_key", "secret_encryption_key")
+_REQUIRED_NON_EMPTY = (
+    "github_webhook_secret",
+    "github_app_id",
+    "github_private_key_b64",
+    "github_client_id",
+    "github_client_secret",
+    "jwt_secret_key",
+    "secret_encryption_key",
+    "stripe_secret_key",
+    "stripe_webhook_secret",
+    "stripe_pro_price_id",
+    "stripe_team_price_id",
+)
 
 
 class Settings(BaseSettings):
@@ -51,6 +63,14 @@ class Settings(BaseSettings):
     jira_client_id: str = ""
     jira_client_secret: str = ""
 
+    # Stripe
+    stripe_secret_key: str
+    stripe_webhook_secret: str
+    stripe_pro_price_id: str
+    stripe_team_price_id: str
+    stripe_success_url: str = "http://localhost:3000/billing/success"
+    stripe_cancel_url: str = "http://localhost:3000/billing/cancel"
+
     # App
     env: str = "development"
     api_prefix: str = "/api/v1"
@@ -73,14 +93,6 @@ class Settings(BaseSettings):
         except Exception as exc:
             raise ValueError("secret_encryption_key is not a valid Fernet key") from exc
         return v
-
-    # Stripe
-    stripe_secret_key: str | None = None
-    stripe_webhook_secret: str | None = None
-    stripe_pro_price_id: str | None = None
-    stripe_team_price_id: str | None = None
-    stripe_success_url: str = "http://localhost:3000/billing/success"
-    stripe_cancel_url: str = "http://localhost:3000/billing/cancel"
 
 
 @lru_cache

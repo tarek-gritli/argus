@@ -170,9 +170,9 @@ class TestQuotaGate:
         body = post_comment.call_args[0][1]
         assert "quota reached" not in body.lower()
 
-    def test_pro_plan_5_seats_allows_100_reviews(self):
-        """Pro plan with 5 seats has 100-review limit; at 99 → still allowed."""
-        billing = _billing(plan="pro", seat_count=5, reviews_used=99)
+    def test_pro_plan_5_seats_allows_500_reviews(self):
+        """Pro plan with 5 seats has 500-review limit (5×100); at 499 → still allowed."""
+        billing = _billing(plan="pro", seat_count=5, reviews_used=499)
         post_comment = MagicMock()
         _run({**BASE_PAYLOAD, "org_id": "org-1"}, billing, post_comment)
 
@@ -180,17 +180,17 @@ class TestQuotaGate:
         assert "quota reached" not in body.lower()
 
     def test_pro_plan_at_seat_limit_blocked(self):
-        """Pro plan with 5 seats at 100/100 → blocked."""
-        billing = _billing(plan="pro", seat_count=5, reviews_used=100)
+        """Pro plan with 5 seats at 500/500 → blocked."""
+        billing = _billing(plan="pro", seat_count=5, reviews_used=500)
         post_comment = MagicMock()
         _run({**BASE_PAYLOAD, "org_id": "org-1"}, billing, post_comment)
 
         body = post_comment.call_args[0][1]
         assert "quota reached" in body.lower()
 
-    def test_team_plan_10_seats_allows_200_reviews(self):
-        """Team plan with 10 seats has 200-review limit; at 199 → still allowed."""
-        billing = _billing(plan="team", seat_count=10, reviews_used=199)
+    def test_team_plan_10_seats_allows_1000_reviews(self):
+        """Team plan with 10 seats has 1000-review limit (10×100); at 999 → still allowed."""
+        billing = _billing(plan="team", seat_count=10, reviews_used=999)
         post_comment = MagicMock()
         _run({**BASE_PAYLOAD, "org_id": "org-1"}, billing, post_comment)
 
@@ -198,8 +198,8 @@ class TestQuotaGate:
         assert "quota reached" not in body.lower()
 
     def test_team_plan_at_seat_limit_blocked(self):
-        """Team plan with 10 seats at 200/200 → blocked."""
-        billing = _billing(plan="team", seat_count=10, reviews_used=200)
+        """Team plan with 10 seats at 1000/1000 → blocked."""
+        billing = _billing(plan="team", seat_count=10, reviews_used=1000)
         post_comment = MagicMock()
         _run({**BASE_PAYLOAD, "org_id": "org-1"}, billing, post_comment)
 

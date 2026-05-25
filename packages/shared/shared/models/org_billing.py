@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .base import Base
 
 _FREE_QUOTA = 50
-_REVIEWS_PER_SEAT = 20
+_REVIEWS_PER_SEAT = 100
 
 
 def _next_month_start() -> datetime:

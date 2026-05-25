@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Literal, NoReturn
 
-import stripe
 from fastapi import APIRouter, HTTPException, Request
+from integrations.billing.stripe_sync import (
+    StripeBillingError,
+    create_stripe_checkout_session,
+    create_stripe_customer,
+    create_stripe_portal_session,
+)
 from pydantic import BaseModel, Field
 from shared.config import get_settings
 from shared.db import session_context
@@ -13,6 +18,11 @@ from sqlalchemy import select
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _raise_stripe_http_error(exc: StripeBillingError) -> NoReturn:
+    logger.warning("Stripe billing request failed: %s", exc)
+    raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
 
 class CheckoutRequest(BaseModel):
@@ -29,8 +39,6 @@ async def create_checkout_session(body: CheckoutRequest, request: Request):
     if not price_id or not settings.stripe_secret_key:
         raise HTTPException(status_code=503, detail="Stripe not configured")
 
-    stripe.api_key = settings.stripe_secret_key
-
     async with session_context() as session:
         result = await session.execute(select(OrgBilling).where(OrgBilling.org_id == org_id))
         billing = result.scalar_one_or_none()
@@ -39,19 +47,26 @@ async def create_checkout_session(body: CheckoutRequest, request: Request):
 
         customer_id = billing.stripe_customer_id
         if not customer_id:
-            customer = stripe.Customer.create(metadata={"org_id": org_id})
+            try:
+                customer = await create_stripe_customer(settings.stripe_secret_key, org_id)
+            except StripeBillingError as exc:
+                _raise_stripe_http_error(exc)
             customer_id = customer.id
             billing.stripe_customer_id = customer_id
             await session.commit()
 
-    checkout = stripe.checkout.Session.create(
-        customer=customer_id,
-        mode="subscription",
-        line_items=[{"price": price_id, "quantity": body.seats}],
-        subscription_data={"metadata": {"plan": body.plan, "seat_count": str(body.seats)}},
-        success_url=settings.stripe_success_url,
-        cancel_url=settings.stripe_cancel_url,
-    )
+    try:
+        checkout = await create_stripe_checkout_session(
+            settings.stripe_secret_key,
+            customer_id,
+            price_id,
+            body.plan,
+            body.seats,
+            settings.stripe_success_url,
+            settings.stripe_cancel_url,
+        )
+    except StripeBillingError as exc:
+        _raise_stripe_http_error(exc)
     return {"checkout_url": checkout.url}
 
 
@@ -63,16 +78,18 @@ async def create_portal_session(request: Request):
     if not settings.stripe_secret_key:
         raise HTTPException(status_code=503, detail="Stripe not configured")
 
-    stripe.api_key = settings.stripe_secret_key
-
     async with session_context() as session:
         result = await session.execute(select(OrgBilling).where(OrgBilling.org_id == org_id))
         billing = result.scalar_one_or_none()
         if not billing or not billing.stripe_customer_id:
             raise HTTPException(status_code=400, detail="No active Stripe subscription")
 
-    portal = stripe.billing_portal.Session.create(
-        customer=billing.stripe_customer_id,
-        return_url=settings.stripe_cancel_url,
-    )
+    try:
+        portal = await create_stripe_portal_session(
+            settings.stripe_secret_key,
+            billing.stripe_customer_id,
+            settings.stripe_cancel_url,
+        )
+    except StripeBillingError as exc:
+        _raise_stripe_http_error(exc)
     return {"portal_url": portal.url}

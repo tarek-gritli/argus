@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+from collections.abc import Callable
 from typing import Any
 
+import stripe
 from shared.models.org_billing import OrgBilling
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +19,69 @@ _HANDLED_EVENTS = frozenset(
         "customer.subscription.deleted",
     ]
 )
+
+
+class StripeBillingError(Exception):
+    def __init__(self, status_code: int, detail: str) -> None:
+        self.status_code = status_code
+        self.detail = detail
+        super().__init__(detail)
+
+
+async def _run_stripe_call(api_key: str, func: Callable[..., Any], **kwargs: Any) -> Any:
+    def call() -> Any:
+        stripe.api_key = api_key
+        return func(**kwargs)
+
+    try:
+        return await asyncio.to_thread(call)
+    except stripe.StripeError as exc:
+        status_code = exc.http_status if exc.http_status and 400 <= exc.http_status < 500 else 502
+        detail = exc.user_message or str(exc) or "Stripe request failed"
+        raise StripeBillingError(status_code=status_code, detail=detail) from exc
+
+
+def parse_stripe_event(raw_body: bytes, sig_header: str, settings: Any) -> Any:
+    try:
+        return stripe.Webhook.construct_event(raw_body, sig_header, settings.stripe_webhook_secret)
+    except stripe.SignatureVerificationError as exc:
+        raise ValueError("Invalid signature") from exc
+    except ValueError as exc:
+        raise ValueError("Invalid payload") from exc
+
+
+async def create_stripe_customer(api_key: str, org_id: str) -> Any:
+    return await _run_stripe_call(api_key, stripe.Customer.create, metadata={"org_id": org_id})
+
+
+async def create_stripe_checkout_session(
+    api_key: str,
+    customer_id: str,
+    price_id: str,
+    plan: str,
+    seats: int,
+    success_url: str,
+    cancel_url: str,
+) -> Any:
+    return await _run_stripe_call(
+        api_key,
+        stripe.checkout.Session.create,
+        customer=customer_id,
+        mode="subscription",
+        line_items=[{"price": price_id, "quantity": seats}],
+        subscription_data={"metadata": {"plan": plan, "seat_count": str(seats)}},
+        success_url=success_url,
+        cancel_url=cancel_url,
+    )
+
+
+async def create_stripe_portal_session(api_key: str, customer_id: str, return_url: str) -> Any:
+    return await _run_stripe_call(
+        api_key,
+        stripe.billing_portal.Session.create,
+        customer=customer_id,
+        return_url=return_url,
+    )
 
 
 async def sync_subscription_event(session: AsyncSession, event: Any) -> None:
@@ -46,7 +112,7 @@ async def sync_subscription_event(session: AsyncSession, event: Any) -> None:
         plan = metadata.get("plan", "free")
         try:
             seat_count = int(metadata.get("seat_count", "1"))
-        except ValueError:
+        except (TypeError, ValueError):
             seat_count = 1
 
         billing.plan = plan
