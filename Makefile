@@ -53,7 +53,7 @@ run-agents: ## Run agents with hot reload on source changes
 		-- agents
 
 run-cli: ## Run the CLI
-	$(UV) run --env-file .env --package cli cli
+	$(UV) run --env-file .env --package cli argus
 
 run-web: ## Run the web dev server
 	cd apps/web && $(PNPM) dev
