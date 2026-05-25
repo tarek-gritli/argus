@@ -134,3 +134,24 @@ def test_jira_callback_invalid_state_returns_400():
         resp = asyncio.run(run())
 
     assert resp.status_code == 400
+
+
+def test_jira_callback_no_resources_returns_502():
+    app = _make_app()
+    with (
+        patch("api.routes.oauth.get_settings") as mock_settings,
+        patch("api.routes.oauth._pop_state", new=AsyncMock(return_value="org-1")),
+        patch(
+            "api.routes.oauth._exchange_jira_code",
+            new=AsyncMock(side_effect=ValueError("No accessible Jira cloud resource found for this token")),
+        ),
+    ):
+        mock_settings.return_value.app_base_url = "https://app.example.com"
+
+        async def run():
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                return await client.get("/api/v1/oauth/jira/callback?code=abc&state=nonce")
+
+        resp = asyncio.run(run())
+
+    assert resp.status_code == 502

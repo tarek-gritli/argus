@@ -56,8 +56,10 @@ async def _exchange_jira_code(code: str, redirect_uri: str) -> dict:
     settings = get_settings()
     data = await jira_oauth.exchange_code(code, settings.jira_client_id, settings.jira_client_secret, redirect_uri)
     resources = await jira_oauth.get_accessible_resources(data["access_token"])
-    site = resources[0] if resources else {}
-    cloud_id = site.get("id", "")
+    if not resources or not resources[0].get("id"):
+        raise ValueError("No accessible Jira cloud resource found for this token")
+    site = resources[0]
+    cloud_id = site["id"]
     data["cloud_id"] = cloud_id
     data["site_url"] = site.get("url", "")
     data["base_url"] = f"https://api.atlassian.com/ex/jira/{cloud_id}"
