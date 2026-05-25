@@ -95,7 +95,8 @@ def get_pr_file_content(pr: PullRequest, filename: str) -> str | None:
 def get_pr_diff(pr: PullRequest, files: Iterable[File] | None = None) -> str:
     """Return the full unified diff for a PR as a single string."""
     parts: list[str] = []
-    for f in _reviewable_files(files or pr.get_files()):
+    source_files = list(files) if files is not None else pr.get_files()
+    for f in _reviewable_files(source_files):
         if not f.patch:
             continue
         parts.append(f"--- a/{f.filename}")

@@ -115,6 +115,43 @@ def test_get_pr_diff_skips_files_without_patch():
     assert diff == ""
 
 
+def test_get_pr_diff_with_empty_files_iterable():
+    """Passing an empty iterable for `files` returns empty diff."""
+    from unittest.mock import MagicMock
+
+    from integrations.github.pr import get_pr_diff
+
+    pr = MagicMock()
+    # files argument is an empty list
+    diff = get_pr_diff(pr, files=[])
+    assert diff == ""
+
+
+def test_get_pr_diff_with_generator_and_patchless_items():
+    """Ensure generator inputs are handled and patchless items are skipped."""
+    from unittest.mock import MagicMock
+
+    from integrations.github.pr import get_pr_diff
+
+    file_with_patch = MagicMock()
+    file_with_patch.filename = "src/ok.py"
+    file_with_patch.patch = "@@ -1 +1 @@\n+ok"
+
+    file_without_patch = MagicMock()
+    file_without_patch.filename = "src/nope.py"
+    file_without_patch.patch = None
+
+    def gen():
+        yield file_without_patch
+        yield file_with_patch
+
+    pr = MagicMock()
+
+    diff = get_pr_diff(pr, files=gen())
+    assert "ok" in diff
+    assert "nope" not in diff
+
+
 def test_get_pr_diff_filters_ignored_paths():
     from unittest.mock import MagicMock
 
