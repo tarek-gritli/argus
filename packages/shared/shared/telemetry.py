@@ -44,6 +44,7 @@ def create_trace(name: str, **kwargs: Any) -> Any:
     """Create a root Langfuse trace, store its ID for thread propagation."""
     if not _enabled or _lf is None:
         return None
+    _active_trace_id.set(None)
     try:
         trace = _lf.trace(name=name, **kwargs)
         _active_trace_id.set(trace.id)

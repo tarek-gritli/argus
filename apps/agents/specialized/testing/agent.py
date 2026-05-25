@@ -100,10 +100,13 @@ def _build_user_prompt(
 def _call_claude(system: str, user: str) -> str:
     settings = get_settings()
     if langfuse_context is not None:
-        langfuse_context.update_current_observation(
-            model=_MODEL,
-            input={"system": system, "user": user},
-        )
+        try:
+            langfuse_context.update_current_observation(
+                model=_MODEL,
+                input={"system": system, "user": user},
+            )
+        except Exception:
+            logger.debug("telemetry update failed", exc_info=True)
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     message = client.messages.create(
         model=_MODEL,
@@ -115,7 +118,10 @@ def _call_claude(system: str, user: str) -> str:
         text = getattr(block, "text", None)
         if text:
             if langfuse_context is not None:
-                langfuse_context.update_current_observation(output=text)
+                try:
+                    langfuse_context.update_current_observation(output=text)
+                except Exception:
+                    logger.debug("telemetry update failed", exc_info=True)
             return text
 
     raise ValueError("Claude response did not include any text content")

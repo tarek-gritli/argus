@@ -101,10 +101,13 @@ def _build_user_prompt(agent_input: AgentInput, ticket: TicketData) -> str:
 def _call_claude(user_prompt: str) -> str:
     settings = get_settings()
     if langfuse_context is not None:
-        langfuse_context.update_current_observation(
-            model=_MODEL,
-            input={"system": TICKET_COMPLIANCE_SYSTEM_PROMPT, "user": user_prompt},
-        )
+        try:
+            langfuse_context.update_current_observation(
+                model=_MODEL,
+                input={"system": TICKET_COMPLIANCE_SYSTEM_PROMPT, "user": user_prompt},
+            )
+        except Exception:
+            logger.debug("telemetry update failed", exc_info=True)
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     message = client.messages.create(
         model=_MODEL,
@@ -116,7 +119,10 @@ def _call_claude(user_prompt: str) -> str:
         text = getattr(block, "text", None)
         if text:
             if langfuse_context is not None:
-                langfuse_context.update_current_observation(output=text)
+                try:
+                    langfuse_context.update_current_observation(output=text)
+                except Exception:
+                    logger.debug("telemetry update failed", exc_info=True)
             return text
     raise ValueError("Claude response contained no text")
 

@@ -376,10 +376,13 @@ def _generate_findings_llm(diff: str, hits: ScannerHits, ctx: SecurityContext, v
     user_prompt = _build_generation_prompt(diff, hits, ctx, vector_context or [])
 
     if langfuse_context is not None:
-        langfuse_context.update_current_observation(
-            model=_MODEL,
-            input={"system": ctx.system_prompt, "user": user_prompt},
-        )
+        try:
+            langfuse_context.update_current_observation(
+                model=_MODEL,
+                input={"system": ctx.system_prompt, "user": user_prompt},
+            )
+        except Exception:
+            logger.debug("telemetry update failed", exc_info=True)
 
     try:
         response = client.messages.parse(
@@ -397,7 +400,10 @@ def _generate_findings_llm(diff: str, hits: ScannerHits, ctx: SecurityContext, v
         )
         findings = cast(_GeneratedFindings, response.parsed_output).findings
         if langfuse_context is not None:
-            langfuse_context.update_current_observation(output={"findings_count": len(findings)})
+            try:
+                langfuse_context.update_current_observation(output={"findings_count": len(findings)})
+            except Exception:
+                logger.debug("telemetry update failed", exc_info=True)
         return findings
     except Exception as exc:
         logger.warning("LLM generation failed (%s); falling back to rule-based", exc)
@@ -420,10 +426,13 @@ def _reflect_findings_llm(raw_findings: list[RawFinding]) -> list[Finding]:
     user_prompt = _build_reflection_prompt(raw_findings)
 
     if langfuse_context is not None:
-        langfuse_context.update_current_observation(
-            model=_MODEL,
-            input={"system": REFLECTION_PROMPT, "user": user_prompt},
-        )
+        try:
+            langfuse_context.update_current_observation(
+                model=_MODEL,
+                input={"system": REFLECTION_PROMPT, "user": user_prompt},
+            )
+        except Exception:
+            logger.debug("telemetry update failed", exc_info=True)
 
     try:
         response = client.messages.parse(
@@ -436,7 +445,10 @@ def _reflect_findings_llm(raw_findings: list[RawFinding]) -> list[Finding]:
         parsed = cast(_ReflectionDecisions, response.parsed_output)
         result = _apply_decisions(raw_findings, parsed.decisions)
         if langfuse_context is not None:
-            langfuse_context.update_current_observation(output={"kept": len(result)})
+            try:
+                langfuse_context.update_current_observation(output={"kept": len(result)})
+            except Exception:
+                logger.debug("telemetry update failed", exc_info=True)
         return result
     except Exception as exc:
         logger.warning("LLM reflection failed (%s); falling back to rule-based", exc)
