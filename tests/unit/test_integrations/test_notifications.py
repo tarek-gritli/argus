@@ -95,3 +95,22 @@ class TestAppendToNotionDb:
         assert props["Findings"]["number"] == 5
         assert props["Critical"]["number"] == 1
         assert props["High"]["number"] == 2
+
+    def test_schema_patch_called_when_columns_missing(self):
+        # DB has only "Name" — all four required columns are absent
+        mock_ctx, mock_client = self._mock_httpx(existing_props=["Name"])
+        with patch("integrations.notifications.notion.httpx.AsyncClient", return_value=mock_ctx):
+            self._run(append_to_notion_db("secret_key", "db-uuid", _summary()))
+        mock_client.patch.assert_called_once()
+        patched_props = mock_client.patch.call_args.kwargs["json"]["properties"]
+        assert "Findings" in patched_props
+        assert "Critical" in patched_props
+        assert "High" in patched_props
+        assert "PR URL" in patched_props
+
+    def test_schema_patch_skipped_when_all_columns_present(self):
+        # DB already has all required columns
+        mock_ctx, mock_client = self._mock_httpx(existing_props=["Name", "PR URL", "Findings", "Critical", "High"])
+        with patch("integrations.notifications.notion.httpx.AsyncClient", return_value=mock_ctx):
+            self._run(append_to_notion_db("secret_key", "db-uuid", _summary()))
+        mock_client.patch.assert_not_called()
