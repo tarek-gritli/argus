@@ -47,6 +47,23 @@ def test_get_pr_files_returns_list():
     mock_pr.get_files.assert_called_once()
 
 
+def test_get_pr_files_filters_ignored_and_patchless_files():
+    """get_pr_files skips node_modules, generated, and patch-less files."""
+    mock_pr = _make_mock_pr()
+    keep_file = _make_mock_file("src/app.py")
+    ignored_dir_file = _make_mock_file("node_modules/pkg/index.js")
+    ignored_generated_file = _make_mock_file("dist/app.min.js")
+    patchless_file = _make_mock_file("src/image.png")
+    patchless_file.patch = None
+    mock_pr.get_files.return_value = [keep_file, ignored_dir_file, ignored_generated_file, patchless_file]
+
+    from integrations.github.pr import get_pr_files
+
+    result = get_pr_files(mock_pr)
+
+    assert result == [keep_file]
+
+
 def test_post_issue_comment_calls_create():
     """post_issue_comment delegates to pr.create_issue_comment."""
     mock_pr = _make_mock_pr()
@@ -96,6 +113,28 @@ def test_get_pr_diff_skips_files_without_patch():
 
     diff = get_pr_diff(pr)
     assert diff == ""
+
+
+def test_get_pr_diff_filters_ignored_paths():
+    from unittest.mock import MagicMock
+
+    from integrations.github.pr import get_pr_diff
+
+    ignored = MagicMock()
+    ignored.filename = "node_modules/pkg/index.js"
+    ignored.patch = "@@ -1 +1 @@\n+ignored"
+
+    kept = MagicMock()
+    kept.filename = "src/main.py"
+    kept.patch = "@@ -1 +1 @@\n+kept"
+
+    pr = MagicMock()
+    pr.get_files.return_value = [ignored, kept]
+
+    diff = get_pr_diff(pr)
+
+    assert "ignored" not in diff
+    assert "kept" in diff
 
 
 def test_post_review_comment_calls_create_review_comment():
