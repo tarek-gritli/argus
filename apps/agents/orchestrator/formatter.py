@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from shared.schemas import FindingSchema
 
 _AGENT_LABELS = {
@@ -29,6 +31,12 @@ _SEVERITY_ICONS = {
 }
 
 _AGENT_ORDER = ("security", "quality", "testing", "documentation", "ticket_compliance")
+
+
+def _build_fence(text: str, language: str = "") -> tuple[str, str]:
+    longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
+    fence = "`" * max(3, longest + 1)
+    return f"{fence}{language}", fence
 
 
 def _severity_badge(severity: str, count: int) -> str:
@@ -108,9 +116,10 @@ def format_findings(findings: list[FindingSchema]) -> str:
                     lines.append("<details>")
                     lines.append(f"<summary>🔧 Suggested fix — <i>{finding.fix.description}</i></summary>")
                     lines.append("")
-                    lines.append("```diff")
+                    open_fence, close_fence = _build_fence(finding.fix.diff, "diff")
+                    lines.append(open_fence)
                     lines.append(finding.fix.diff)
-                    lines.append("```")
+                    lines.append(close_fence)
                     lines.append("")
                     lines.append("</details>")
                     lines.append("")
