@@ -97,7 +97,6 @@ async def slack_callback(code: str, state: str, request: Request):
         raise HTTPException(status_code=502, detail="Slack token exchange failed") from exc
     webhook = data.get("incoming_webhook", {})
     config = {
-        "token": encrypt(data["access_token"]),
         "channel": webhook.get("channel", ""),
         "webhook_url": encrypt(webhook.get("url", "")),
     }

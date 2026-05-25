@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .notion import append_to_notion_db
 from .schemas import ReviewSummary
-from .slack import post_to_slack, post_to_slack_token
+from .slack import post_to_slack
 
 _SENSITIVE_KEYS = {"api_key", "webhook_url", "token"}
 
@@ -44,12 +44,9 @@ async def dispatch_review_completed(session: AsyncSession, summary: ReviewSummar
         try:
             config = _decrypt_config(integration.config)
             if integration.kind == "slack":
-                token = config.get("token", "")
-                channel = config.get("channel", "")
-                if token and channel:
-                    await asyncio.to_thread(post_to_slack_token, token, channel, summary)
-                elif config.get("webhook_url", ""):
-                    await asyncio.to_thread(post_to_slack, config["webhook_url"], summary)
+                webhook_url = config.get("webhook_url", "")
+                if webhook_url:
+                    await asyncio.to_thread(post_to_slack, webhook_url, summary)
             elif integration.kind == "notion":
                 api_key = config.get("api_key", "")
                 database_id = config.get("database_id", "")
