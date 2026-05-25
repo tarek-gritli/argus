@@ -48,9 +48,9 @@ async def dispatch_review_completed(session: AsyncSession, summary: ReviewSummar
                 if webhook_url:
                     await asyncio.to_thread(post_to_slack, webhook_url, summary)
             elif integration.kind == "notion":
-                api_key = config.get("api_key", "")
+                token = config.get("token", "")
                 database_id = config.get("database_id", "")
-                if api_key and database_id:
-                    await append_to_notion_db(api_key, database_id, summary)
+                if token and database_id:
+                    await append_to_notion_db(token, database_id, summary)
         except Exception:
             logger.exception("Notification failed for integration %s (%s)", integration.id, integration.kind)

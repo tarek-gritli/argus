@@ -45,7 +45,7 @@ async def test_dispatches_to_slack():
 
 @pytest.mark.asyncio
 async def test_dispatches_to_notion():
-    integration = _integration("notion", {"api_key": "secret", "database_id": "db-uuid"})
+    integration = _integration("notion", {"token": "secret", "database_id": "db-uuid"})
     session = _session_with([integration])
     with patch("integrations.notifications.dispatcher.append_to_notion_db") as mock_notion:
         await dispatch_review_completed(session, _summary())
@@ -64,7 +64,7 @@ async def test_skips_slack_when_no_webhook_url():
 @pytest.mark.asyncio
 async def test_swallows_error_and_continues():
     slack = _integration("slack", {"webhook_url": "https://hooks.slack.com/x"})
-    notion = _integration("notion", {"api_key": "k", "database_id": "d"})
+    notion = _integration("notion", {"token": "k", "database_id": "d"})
     session = _session_with([slack, notion])
     with (
         patch("integrations.notifications.dispatcher.post_to_slack", side_effect=RuntimeError("boom")),

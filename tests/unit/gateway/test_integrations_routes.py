@@ -29,12 +29,26 @@ def _session_returning(items) -> tuple[AsyncMock, AsyncMock]:
     session = AsyncMock()
     result = MagicMock()
     result.scalars.return_value.all.return_value = items
+    result.scalars.return_value.first.return_value = items[0] if items else None
     result.scalar_one_or_none.return_value = items[0] if items else None
     session.execute.return_value = result
     ctx = AsyncMock()
     ctx.__aenter__ = AsyncMock(return_value=session)
     ctx.__aexit__ = AsyncMock(return_value=False)
     return ctx, session
+
+
+def _notion_integration(database_id: str | None = None) -> MagicMock:
+    i = MagicMock()
+    i.id = "int-notion"
+    i.kind = "notion"
+    i.enabled = True
+    i.config = {"token": "enc:secret_tok", "workspace_id": "ws-1"}
+    if database_id:
+        i.config["database_id"] = database_id
+    i.created_at = None
+    i.updated_at = None
+    return i
 
 
 def _request_state(org_id: str = "org-1"):
@@ -147,5 +161,103 @@ async def test_delete_integration_404_when_not_found():
     with patch("api.routes.integrations.session_context", return_value=ctx):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.delete("/orgs/org-1/integrations/missing")
+
+    assert resp.status_code == 404
+
+
+# ─── Notion database selection ────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_list_notion_databases_returns_list():
+    app = _make_app()
+    ctx, _ = _session_returning([_notion_integration()])
+
+    from api.routes.integrations import _get_org_id
+
+    app.dependency_overrides[_get_org_id] = lambda: "org-1"
+
+    notion_resp = MagicMock()
+    notion_resp.raise_for_status = MagicMock()
+    notion_resp.json.return_value = {
+        "results": [
+            {"id": "db-abc", "title": [{"plain_text": "Reviews DB"}]},
+            {"id": "db-xyz", "title": [{"plain_text": "Bugs DB"}]},
+        ]
+    }
+
+    with (
+        patch("api.routes.integrations.session_context", return_value=ctx),
+        patch("api.routes.integrations.decrypt", return_value="secret_tok"),
+        patch("api.routes.integrations.httpx.AsyncClient") as mock_client_cls,
+    ):
+        mock_http = AsyncMock()
+        mock_http.post = AsyncMock(return_value=notion_resp)
+        mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_http)
+        mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/orgs/org-1/integrations/notion/databases")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 2
+    assert data[0] == {"id": "db-abc", "title": "Reviews DB"}
+    assert data[1] == {"id": "db-xyz", "title": "Bugs DB"}
+
+
+@pytest.mark.asyncio
+async def test_list_notion_databases_404_when_not_connected():
+    app = _make_app()
+    ctx, _ = _session_returning([])
+
+    from api.routes.integrations import _get_org_id
+
+    app.dependency_overrides[_get_org_id] = lambda: "org-1"
+
+    with patch("api.routes.integrations.session_context", return_value=ctx):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/orgs/org-1/integrations/notion/databases")
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_select_notion_database_saves_id():
+    app = _make_app()
+    notion_int = _notion_integration()
+    ctx, _ = _session_returning([notion_int])
+
+    from api.routes.integrations import _get_org_id
+
+    app.dependency_overrides[_get_org_id] = lambda: "org-1"
+
+    with patch("api.routes.integrations.session_context", return_value=ctx):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.patch(
+                "/orgs/org-1/integrations/notion/database",
+                json={"database_id": "db-abc"},
+            )
+
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok", "database_id": "db-abc"}
+    assert notion_int.config["database_id"] == "db-abc"
+
+
+@pytest.mark.asyncio
+async def test_select_notion_database_404_when_not_connected():
+    app = _make_app()
+    ctx, _ = _session_returning([])
+
+    from api.routes.integrations import _get_org_id
+
+    app.dependency_overrides[_get_org_id] = lambda: "org-1"
+
+    with patch("api.routes.integrations.session_context", return_value=ctx):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.patch(
+                "/orgs/org-1/integrations/notion/database",
+                json={"database_id": "db-abc"},
+            )
 
     assert resp.status_code == 404
