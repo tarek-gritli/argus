@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     notion_client_secret: str = ""
     app_base_url: str = "http://localhost:8000"
 
+    # Linear OAuth
+    linear_client_id: str = ""
+    linear_client_secret: str = ""
+
+    # Jira OAuth
+    jira_client_id: str = ""
+    jira_client_secret: str = ""
+
     # App
     env: str = "development"
     api_prefix: str = "/api/v1"
