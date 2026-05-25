@@ -94,6 +94,7 @@ async def test_create_integration_returns_201():
     with (
         patch("api.routes.integrations.session_context", return_value=ctx),
         patch("api.routes.integrations.OrgIntegration", return_value=created),
+        patch("api.routes.integrations.encrypt", side_effect=lambda v: f"enc:{v}"),
     ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(

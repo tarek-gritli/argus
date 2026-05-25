@@ -3,13 +3,30 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from shared.crypto import decrypt
 from shared.models.org_integration import OrgIntegration
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .notion import append_to_notion_db
 from .schemas import ReviewSummary
-from .slack import post_to_slack
+from .slack import post_to_slack, post_to_slack_token
+
+_SENSITIVE_KEYS = {"api_key", "webhook_url", "token"}
+
+
+def _decrypt_config(config: dict) -> dict:
+    result = {}
+    for k, v in config.items():
+        if k in _SENSITIVE_KEYS and isinstance(v, str) and v:
+            try:
+                result[k] = decrypt(v)
+            except Exception:
+                result[k] = v
+        else:
+            result[k] = v
+    return result
+
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +42,17 @@ async def dispatch_review_completed(session: AsyncSession, summary: ReviewSummar
 
     for integration in integrations:
         try:
+            config = _decrypt_config(integration.config)
             if integration.kind == "slack":
-                webhook_url = integration.config.get("webhook_url", "")
-                if webhook_url:
-                    await asyncio.to_thread(post_to_slack, webhook_url, summary)
+                token = config.get("token", "")
+                channel = config.get("channel", "")
+                if token and channel:
+                    await asyncio.to_thread(post_to_slack_token, token, channel, summary)
+                elif config.get("webhook_url", ""):
+                    await asyncio.to_thread(post_to_slack, config["webhook_url"], summary)
             elif integration.kind == "notion":
-                api_key = integration.config.get("api_key", "")
-                database_id = integration.config.get("database_id", "")
+                api_key = config.get("api_key", "")
+                database_id = config.get("database_id", "")
                 if api_key and database_id:
                     await append_to_notion_db(api_key, database_id, summary)
         except Exception:

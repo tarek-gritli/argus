@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+from shared.crypto import encrypt
 from shared.db import session_context
 from shared.models.org_integration import OrgIntegration
 from sqlalchemy import select
@@ -9,15 +10,19 @@ from sqlalchemy import select
 router = APIRouter()
 
 _VALID_KINDS = {"slack", "notion"}
-_MASKED_KEYS = {"api_key", "webhook_url", "token"}
+_SENSITIVE_KEYS = {"api_key", "webhook_url", "token"}
 
 
 def _get_org_id(request: Request) -> str:
     return request.state.org_id
 
 
+def _encrypt_config(config: dict) -> dict:
+    return {k: (encrypt(v) if k in _SENSITIVE_KEYS and isinstance(v, str) else v) for k, v in config.items()}
+
+
 def _mask_config(config: dict) -> dict:
-    return {k: ("***" if k in _MASKED_KEYS else v) for k, v in config.items()}
+    return {k: ("***" if k in _SENSITIVE_KEYS else v) for k, v in config.items()}
 
 
 class IntegrationCreate(BaseModel):
@@ -58,7 +63,7 @@ async def create_integration(org_id: str, body: IntegrationCreate, org_id_from_t
     if body.kind not in _VALID_KINDS:
         raise HTTPException(status_code=400, detail=f"kind must be one of {_VALID_KINDS}")
     async with session_context() as session:
-        integration = OrgIntegration(org_id=org_id, kind=body.kind, config=body.config, enabled=body.enabled)
+        integration = OrgIntegration(org_id=org_id, kind=body.kind, config=_encrypt_config(body.config), enabled=body.enabled)
         session.add(integration)
         await session.commit()
         await session.refresh(integration)
@@ -90,7 +95,7 @@ async def update_integration(
         if not integration:
             raise HTTPException(status_code=404, detail="Integration not found")
         if body.config is not None:
-            integration.config = body.config
+            integration.config = _encrypt_config(body.config)
         if body.enabled is not None:
             integration.enabled = body.enabled
         await session.commit()

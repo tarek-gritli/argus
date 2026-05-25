@@ -23,12 +23,8 @@ class Settings(BaseSettings):
     jwt_secret_key: str
     jwt_ttl_seconds: int = 86400
 
-    @field_validator(*_REQUIRED_NON_EMPTY, mode="before")
-    @classmethod
-    def _reject_blank(cls, v: str, info) -> str:
-        if not v or not v.strip():
-            raise ValueError(f"{info.field_name} must not be blank")
-        return v
+    # Encryption
+    secret_encryption_key: str
 
     # Context / vector store
     qdrant_url: str = "http://localhost:6333"
@@ -38,11 +34,25 @@ class Settings(BaseSettings):
     # Voyage AI
     voyage_api_key: str | None = None
 
+    # OAuth integrations
+    slack_client_id: str = ""
+    slack_client_secret: str = ""
+    notion_client_id: str = ""
+    notion_client_secret: str = ""
+    app_base_url: str = "http://localhost:8000"
+
     # App
     env: str = "development"
     api_prefix: str = "/api/v1"
     anthropic_api_key: str | None = None
     gemini_api_key: str | None = None
+
+    @field_validator(*_REQUIRED_NON_EMPTY, mode="before")
+    @classmethod
+    def _reject_blank(cls, v: str, info) -> str:
+        if not v or not v.strip():
+            raise ValueError(f"{info.field_name} must not be blank")
+        return v
 
 
 @lru_cache
