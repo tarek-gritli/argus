@@ -15,7 +15,7 @@ _JIRA_RE = re.compile(r"\b([A-Z][A-Z0-9]+-\d+)\b")
 _LINEAR_URL_RE = re.compile(r"https://linear\.app/[^/]+/issue/([A-Za-z0-9_-]+)")
 
 # Notion page: 32-char hex slug at end of notion.so or notion.site URLs
-_NOTION_RE = re.compile(r"https://www\.notion\.so/(?:[^/]+/)?[^/]*?([0-9a-f]{32})(?:[?#]|$)")
+_NOTION_RE = re.compile(r"https://(?:www\.)?notion\.(?:so|site)/(?:[^/\s]+/)?[^/\s]*?([0-9a-fA-F]{32})(?:[?#]|$)")
 
 
 def extract_ticket_refs(title: str, body: str) -> list[tuple[str, str]]:
