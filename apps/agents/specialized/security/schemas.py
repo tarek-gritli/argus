@@ -32,6 +32,7 @@ class AgentTask(BaseModel):
     pr_number: int
     repo_id: str
     repo_config: RepoConfig = Field(default_factory=RepoConfig)
+    vector_context: list[str] = Field(default_factory=list)
 
 
 class DiffLine(BaseModel):
