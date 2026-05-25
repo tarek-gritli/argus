@@ -41,9 +41,10 @@ async def _run_stripe_call(api_key: str, func: Callable[..., Any], **kwargs: Any
         raise StripeBillingError(status_code=status_code, detail=detail) from exc
 
 
-def parse_stripe_event(raw_body: bytes, sig_header: str, settings: Any) -> Any:
+def parse_stripe_event(raw_body: bytes, sig_header: str, settings: Any) -> dict:
     try:
-        return stripe.Webhook.construct_event(raw_body, sig_header, settings.stripe_webhook_secret)
+        event = stripe.Webhook.construct_event(raw_body, sig_header, settings.stripe_webhook_secret)
+        return event.to_dict()
     except stripe.SignatureVerificationError as exc:
         raise ValueError("Invalid signature") from exc
     except ValueError as exc:
@@ -104,11 +105,7 @@ async def sync_subscription_event(session: AsyncSession, event: Any) -> None:
         billing.seat_count = 1
         billing.stripe_subscription_id = None
     else:
-        items = obj.get("items", {}).get("data", [])
-        if not items:
-            logger.warning("Subscription %s has no items — skipping", sub_id)
-            return
-        metadata = items[0]["price"].get("metadata", {})
+        metadata = obj.get("metadata", {})
         plan = metadata.get("plan", "free")
         try:
             seat_count = int(metadata.get("seat_count", "1"))
