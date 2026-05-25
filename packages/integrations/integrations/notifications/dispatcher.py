@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from shared.models.org_integration import OrgIntegration
@@ -27,11 +28,11 @@ async def dispatch_review_completed(session: AsyncSession, summary: ReviewSummar
             if integration.kind == "slack":
                 webhook_url = integration.config.get("webhook_url", "")
                 if webhook_url:
-                    post_to_slack(webhook_url, summary)
+                    await asyncio.to_thread(post_to_slack, webhook_url, summary)
             elif integration.kind == "notion":
                 api_key = integration.config.get("api_key", "")
                 database_id = integration.config.get("database_id", "")
                 if api_key and database_id:
-                    append_to_notion_db(api_key, database_id, summary)
+                    await append_to_notion_db(api_key, database_id, summary)
         except Exception:
             logger.exception("Notification failed for integration %s (%s)", integration.id, integration.kind)
