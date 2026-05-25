@@ -166,3 +166,14 @@ async def test_unknown_event_type_is_noop():
     event = {"type": "invoice.payment_succeeded", "data": {"object": {}}}
     await sync_subscription_event(session, event)
     session.commit.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_unsupported_plan_value_is_noop():
+    billing = OrgBilling(org_id="org-1", plan="pro", seat_count=2, stripe_customer_id="cus_123")
+    session = _make_session(billing)
+    event = _make_event("customer.subscription.updated", "cus_123", "sub_abc", "hacker_plan", 99)
+    await sync_subscription_event(session, event)
+    assert billing.plan == "pro"
+    assert billing.seat_count == 2
+    session.commit.assert_not_called()

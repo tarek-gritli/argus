@@ -111,6 +111,9 @@ async def sync_subscription_event(session: AsyncSession, event: Any) -> None:
             return
         metadata = obj.get("metadata", {})
         plan = metadata.get("plan", "free")
+        if plan not in {"free", "pro", "team", "enterprise"}:
+            logger.warning("Ignoring subscription %s with unsupported plan=%r", sub_id, plan)
+            return
         try:
             seat_count = int(metadata.get("seat_count", "1"))
         except (TypeError, ValueError):
