@@ -108,7 +108,7 @@ class TestNotionTicketProvider:
     def test_fetch_returns_ticket_data(self):
         provider, mock_client = self._provider()
         mock_client.pages.retrieve.return_value = {
-            "properties": {"Name": {"title": [{"plain_text": "My Task"}]}},
+            "properties": {"Name": {"type": "title", "title": [{"plain_text": "My Task"}]}},
             "url": "https://www.notion.so/My-Task-abc123",
         }
         result = provider.fetch("abc123")

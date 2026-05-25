@@ -17,7 +17,10 @@ class NotionTicketProvider:
         try:
             page = self._client.pages.retrieve(page_id=ticket_id)
             props = page.get("properties", {})  # type: ignore[union-attr]
-            title_prop = props.get("title") or props.get("Name") or {}
+            title_prop = next(
+                (p for p in props.values() if isinstance(p, dict) and p.get("type") == "title"),
+                {},
+            )
             title_parts = title_prop.get("title", [])
             title = "".join(part.get("plain_text", "") for part in title_parts)
             url = page.get("url", "")  # type: ignore[union-attr]
