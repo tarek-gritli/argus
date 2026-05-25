@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     github_client_secret: str
     jwt_secret_key: str
     jwt_ttl_seconds: int = 86400
+    dashboard_token_secret: str = ""
 
     # Encryption
     secret_encryption_key: str
