@@ -62,11 +62,18 @@ class TestAppendToNotionDb:
     def _run(self, coro):
         return asyncio.run(coro)
 
-    def _mock_httpx(self):
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+    def _mock_httpx(self, existing_props: list[str] | None = None):
+        schema_resp = MagicMock()
+        schema_resp.raise_for_status = MagicMock()
+        schema_resp.json.return_value = {"properties": {k: {} for k in (existing_props or [])}}
+        patch_resp = MagicMock()
+        patch_resp.raise_for_status = MagicMock()
+        page_resp = MagicMock()
+        page_resp.raise_for_status = MagicMock()
         mock_client = AsyncMock()
-        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client.get = AsyncMock(return_value=schema_resp)
+        mock_client.patch = AsyncMock(return_value=patch_resp)
+        mock_client.post = AsyncMock(return_value=page_resp)
         mock_ctx = MagicMock()
         mock_ctx.__aenter__ = AsyncMock(return_value=mock_client)
         mock_ctx.__aexit__ = AsyncMock(return_value=False)

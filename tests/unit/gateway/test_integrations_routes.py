@@ -78,6 +78,43 @@ async def test_list_integrations_returns_masked_config():
     data = resp.json()
     assert len(data) == 1
     assert data[0]["config"]["webhook_url"] == "***"
+    assert data[0]["ready"] is True
+
+
+@pytest.mark.asyncio
+async def test_list_integrations_ready_false_when_incomplete():
+    app = _make_app()
+    incomplete = _notion_integration()  # no database_id
+    ctx, _ = _session_returning([incomplete])
+
+    from api.routes.integrations import _get_org_id
+
+    app.dependency_overrides[_get_org_id] = lambda: "org-1"
+
+    with patch("api.routes.integrations.session_context", return_value=ctx):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/orgs/org-1/integrations")
+
+    assert resp.status_code == 200
+    assert resp.json()[0]["ready"] is False
+
+
+@pytest.mark.asyncio
+async def test_list_integrations_ready_true_when_notion_has_database_id():
+    app = _make_app()
+    complete = _notion_integration(database_id="db-abc")
+    ctx, _ = _session_returning([complete])
+
+    from api.routes.integrations import _get_org_id
+
+    app.dependency_overrides[_get_org_id] = lambda: "org-1"
+
+    with patch("api.routes.integrations.session_context", return_value=ctx):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/orgs/org-1/integrations")
+
+    assert resp.status_code == 200
+    assert resp.json()[0]["ready"] is True
 
 
 @pytest.mark.asyncio
@@ -197,7 +234,7 @@ async def test_list_notion_databases_returns_list():
         mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.get("/orgs/org-1/integrations/notion/databases")
+            resp = await client.get("/orgs/org-1/integrations/int-notion/notion/databases")
 
     assert resp.status_code == 200
     data = resp.json()
@@ -207,7 +244,7 @@ async def test_list_notion_databases_returns_list():
 
 
 @pytest.mark.asyncio
-async def test_list_notion_databases_404_when_not_connected():
+async def test_list_notion_databases_404_when_not_found():
     app = _make_app()
     ctx, _ = _session_returning([])
 
@@ -217,7 +254,7 @@ async def test_list_notion_databases_404_when_not_connected():
 
     with patch("api.routes.integrations.session_context", return_value=ctx):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.get("/orgs/org-1/integrations/notion/databases")
+            resp = await client.get("/orgs/org-1/integrations/int-notion/notion/databases")
 
     assert resp.status_code == 404
 
@@ -235,7 +272,7 @@ async def test_select_notion_database_saves_id():
     with patch("api.routes.integrations.session_context", return_value=ctx):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.patch(
-                "/orgs/org-1/integrations/notion/database",
+                "/orgs/org-1/integrations/int-notion/notion/database",
                 json={"database_id": "db-abc"},
             )
 
@@ -245,7 +282,7 @@ async def test_select_notion_database_saves_id():
 
 
 @pytest.mark.asyncio
-async def test_select_notion_database_404_when_not_connected():
+async def test_select_notion_database_404_when_not_found():
     app = _make_app()
     ctx, _ = _session_returning([])
 
@@ -256,7 +293,7 @@ async def test_select_notion_database_404_when_not_connected():
     with patch("api.routes.integrations.session_context", return_value=ctx):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.patch(
-                "/orgs/org-1/integrations/notion/database",
+                "/orgs/org-1/integrations/int-notion/notion/database",
                 json={"database_id": "db-abc"},
             )
 

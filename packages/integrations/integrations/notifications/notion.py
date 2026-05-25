@@ -18,8 +18,32 @@ def fetch_page(api_key: str, page_id: str) -> dict:
     return resp.json()
 
 
+_REQUIRED_PROPERTIES = {
+    "PR URL": {"url": {}},
+    "Findings": {"number": {"format": "number"}},
+    "Critical": {"number": {"format": "number"}},
+    "High": {"number": {"format": "number"}},
+}
+
+
+async def _ensure_schema(client: httpx.AsyncClient, token: str, database_id: str) -> None:
+    headers = {"Authorization": f"Bearer {token}", "Notion-Version": _NOTION_VERSION}
+    resp = await client.get(f"{_NOTION_API}/databases/{database_id}", headers=headers)
+    resp.raise_for_status()
+    existing = set(resp.json().get("properties", {}).keys())
+    missing = {k: v for k, v in _REQUIRED_PROPERTIES.items() if k not in existing}
+    if missing:
+        patch = await client.patch(
+            f"{_NOTION_API}/databases/{database_id}",
+            headers=headers,
+            json={"properties": missing},
+        )
+        patch.raise_for_status()
+
+
 async def append_to_notion_db(api_key: str, database_id: str, summary: ReviewSummary) -> None:
     async with httpx.AsyncClient() as client:
+        await _ensure_schema(client, api_key, database_id)
         resp = await client.post(
             f"{_NOTION_API}/pages",
             headers={"Authorization": f"Bearer {api_key}", "Notion-Version": _NOTION_VERSION},
