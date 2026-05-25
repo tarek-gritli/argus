@@ -104,7 +104,12 @@ async def notion_callback(code: str, state: str, request: Request):
     if not org_id:
         raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
     redirect_uri = f"{settings.app_base_url}/api/v1/oauth/notion/callback"
-    data = await _exchange_notion_code(code, redirect_uri)
+    try:
+        data = await _exchange_notion_code(code, redirect_uri)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Notion token exchange failed") from exc
     config = {
         "token": encrypt(data["access_token"]),
         "workspace_id": data.get("workspace_id", ""),

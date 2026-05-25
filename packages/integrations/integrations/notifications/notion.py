@@ -8,6 +8,16 @@ _NOTION_API = "https://api.notion.com/v1"
 _NOTION_VERSION = "2022-06-28"
 
 
+def fetch_page(api_key: str, page_id: str) -> dict:
+    resp = httpx.get(
+        f"{_NOTION_API}/pages/{page_id}",
+        headers={"Authorization": f"Bearer {api_key}", "Notion-Version": _NOTION_VERSION},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
 async def append_to_notion_db(api_key: str, database_id: str, summary: ReviewSummary) -> None:
     async with httpx.AsyncClient() as client:
         resp = await client.post(

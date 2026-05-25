@@ -2,24 +2,11 @@ from __future__ import annotations
 
 import logging
 
-import httpx
+from integrations.linear import fetch_issue
 
 from .base import TicketData
 
 logger = logging.getLogger(__name__)
-
-_GRAPHQL_URL = "https://api.linear.app/graphql"
-
-_QUERY = """
-query IssueByIdentifier($identifier: String!) {
-  issue(id: $identifier) {
-    identifier
-    title
-    description
-    url
-  }
-}
-"""
 
 
 class LinearProvider:
@@ -28,14 +15,7 @@ class LinearProvider:
 
     def fetch(self, ticket_id: str) -> TicketData | None:
         try:
-            resp = httpx.post(
-                _GRAPHQL_URL,
-                headers={"Authorization": self._api_key, "Content-Type": "application/json"},
-                json={"query": _QUERY, "variables": {"identifier": ticket_id}},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            issue = resp.json().get("data", {}).get("issue")
+            issue = fetch_issue(self._api_key, ticket_id)
             if not issue:
                 return None
             return TicketData(

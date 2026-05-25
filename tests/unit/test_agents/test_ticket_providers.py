@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from specialized.ticket_compliance.extractor import extract_ticket_refs
 from specialized.ticket_compliance.providers.jira import JiraProvider
@@ -49,17 +49,17 @@ class TestJiraProvider:
         return JiraProvider("https://myorg.atlassian.net", "user@example.com", "token")
 
     def test_fetch_returns_ticket_data(self):
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json.return_value = {"fields": {"summary": "Fix login bug", "description": "Details here"}}
-        with patch("specialized.ticket_compliance.providers.jira.httpx.get", return_value=mock_resp):
+        with patch(
+            "specialized.ticket_compliance.providers.jira.fetch_issue",
+            return_value={"fields": {"summary": "Fix login bug", "description": "Details here"}},
+        ):
             result = self._provider().fetch("PROJ-1")
         assert result is not None
         assert result.title == "Fix login bug"
         assert result.url == "https://myorg.atlassian.net/browse/PROJ-1"
 
     def test_fetch_returns_none_on_error(self):
-        with patch("specialized.ticket_compliance.providers.jira.httpx.get", side_effect=Exception("timeout")):
+        with patch("specialized.ticket_compliance.providers.jira.fetch_issue", side_effect=Exception("timeout")):
             result = self._provider().fetch("PROJ-1")
         assert result is None
 
@@ -72,24 +72,21 @@ class TestLinearProvider:
         return LinearProvider("lin_api_test123")
 
     def test_fetch_returns_ticket_data(self):
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json.return_value = {"data": {"issue": {"identifier": "ENG-5", "title": "Build widget", "description": "Details", "url": "https://linear.app/t/issue/ENG-5"}}}
-        with patch("specialized.ticket_compliance.providers.linear.httpx.post", return_value=mock_resp):
+        with patch(
+            "specialized.ticket_compliance.providers.linear.fetch_issue",
+            return_value={"identifier": "ENG-5", "title": "Build widget", "description": "Details", "url": "https://linear.app/t/issue/ENG-5"},
+        ):
             result = self._provider().fetch("ENG-5")
         assert result is not None
         assert result.title == "Build widget"
 
     def test_fetch_returns_none_when_issue_not_in_response(self):
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json.return_value = {"data": {"issue": None}}
-        with patch("specialized.ticket_compliance.providers.linear.httpx.post", return_value=mock_resp):
+        with patch("specialized.ticket_compliance.providers.linear.fetch_issue", return_value=None):
             result = self._provider().fetch("ENG-99")
         assert result is None
 
     def test_fetch_returns_none_on_error(self):
-        with patch("specialized.ticket_compliance.providers.linear.httpx.post", side_effect=Exception("timeout")):
+        with patch("specialized.ticket_compliance.providers.linear.fetch_issue", side_effect=Exception("timeout")):
             result = self._provider().fetch("ENG-1")
         assert result is None
 
@@ -99,19 +96,19 @@ class TestLinearProvider:
 
 class TestNotionTicketProvider:
     def test_fetch_returns_ticket_data(self):
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
-        mock_response.json.return_value = {
-            "properties": {"Name": {"type": "title", "title": [{"plain_text": "My Task"}]}},
-            "url": "https://www.notion.so/My-Task-abc123",
-        }
-        with patch("specialized.ticket_compliance.providers.notion_ticket.httpx.get", return_value=mock_response):
+        with patch(
+            "specialized.ticket_compliance.providers.notion_ticket.fetch_page",
+            return_value={
+                "properties": {"Name": {"type": "title", "title": [{"plain_text": "My Task"}]}},
+                "url": "https://www.notion.so/My-Task-abc123",
+            },
+        ):
             result = NotionTicketProvider("secret_key").fetch("abc123")
         assert result is not None
         assert result.title == "My Task"
         assert result.url == "https://www.notion.so/My-Task-abc123"
 
     def test_fetch_returns_none_on_error(self):
-        with patch("specialized.ticket_compliance.providers.notion_ticket.httpx.get", side_effect=Exception("API error")):
+        with patch("specialized.ticket_compliance.providers.notion_ticket.fetch_page", side_effect=Exception("API error")):
             result = NotionTicketProvider("secret_key").fetch("abc123")
         assert result is None
