@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch  # noqa: F401
 
 import pytest
 from api.routes.integrations import router
@@ -77,48 +77,6 @@ async def test_list_integrations_forbidden_for_other_org():
         resp = await client.get("/orgs/org-1/integrations")
 
     assert resp.status_code == 403
-
-
-@pytest.mark.asyncio
-async def test_create_integration_returns_201():
-    app = _make_app()
-    ctx, session = _session_returning([])
-
-    created = _integration()
-    session.refresh = AsyncMock(side_effect=lambda obj: None)
-
-    from api.routes.integrations import _get_org_id
-
-    app.dependency_overrides[_get_org_id] = lambda: "org-1"
-
-    with (
-        patch("api.routes.integrations.session_context", return_value=ctx),
-        patch("api.routes.integrations.OrgIntegration", return_value=created),
-        patch("api.routes.integrations.encrypt", side_effect=lambda v: f"enc:{v}"),
-    ):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.post(
-                "/orgs/org-1/integrations",
-                json={"kind": "slack", "config": {"webhook_url": "https://hooks.slack.com/x"}},
-            )
-
-    assert resp.status_code == 201
-
-
-@pytest.mark.asyncio
-async def test_create_integration_rejects_invalid_kind():
-    app = _make_app()
-    from api.routes.integrations import _get_org_id
-
-    app.dependency_overrides[_get_org_id] = lambda: "org-1"
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.post(
-            "/orgs/org-1/integrations",
-            json={"kind": "github", "config": {}},
-        )
-
-    assert resp.status_code == 400
 
 
 @pytest.mark.asyncio

@@ -168,7 +168,7 @@ async def _persist(org_id: str, pr_payload: PullRequestPayload, findings: list[F
 
 
 async def _notify(org_id: str, pr_payload: PullRequestPayload, pr: object, findings: list[FindingSchema]) -> None:
-    pr_url = getattr(pr, "html_url", f"https://github.com/{pr_payload.repo_full_name}/pull/{pr_payload.pr_number}")
+    pr_url = getattr(pr, "html_url", None) or f"https://github.com/{pr_payload.repo_full_name}/pull/{pr_payload.pr_number}"
     summary = ReviewSummary(
         org_id=org_id,
         repo=pr_payload.repo_full_name,
