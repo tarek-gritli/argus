@@ -10,12 +10,12 @@ logger = logging.getLogger(__name__)
 
 
 class LinearProvider:
-    def __init__(self, api_key: str) -> None:
-        self._api_key = api_key
+    def __init__(self, access_token: str) -> None:
+        self._access_token = access_token
 
     def fetch(self, ticket_id: str) -> TicketData | None:
         try:
-            issue = fetch_issue(self._api_key, ticket_id)
+            issue = fetch_issue(self._access_token, ticket_id)
             if not issue:
                 return None
             return TicketData(

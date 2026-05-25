@@ -16,10 +16,10 @@ query IssueByIdentifier($identifier: String!) {
 """
 
 
-def fetch_issue(api_key: str, identifier: str) -> dict | None:
+def fetch_issue(access_token: str, identifier: str) -> dict | None:
     resp = httpx.post(
         _GRAPHQL_URL,
-        headers={"Authorization": api_key, "Content-Type": "application/json"},
+        headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
         json={"query": _QUERY, "variables": {"identifier": identifier}},
         timeout=10,
     )

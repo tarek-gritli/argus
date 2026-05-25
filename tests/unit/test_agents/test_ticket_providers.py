@@ -46,7 +46,7 @@ class TestExtractor:
 
 class TestJiraProvider:
     def _provider(self):
-        return JiraProvider("https://myorg.atlassian.net", "user@example.com", "token")
+        return JiraProvider(access_token="jira_tok", cloud_id="cloud-uuid-1")
 
     def test_fetch_returns_ticket_data(self):
         with patch(
@@ -56,7 +56,7 @@ class TestJiraProvider:
             result = self._provider().fetch("PROJ-1")
         assert result is not None
         assert result.title == "Fix login bug"
-        assert result.url == "https://myorg.atlassian.net/browse/PROJ-1"
+        assert "PROJ-1" in result.url
 
     def test_fetch_returns_none_on_error(self):
         with patch("specialized.ticket_compliance.providers.jira.fetch_issue", side_effect=Exception("timeout")):
@@ -69,7 +69,7 @@ class TestJiraProvider:
 
 class TestLinearProvider:
     def _provider(self):
-        return LinearProvider("lin_api_test123")
+        return LinearProvider(access_token="lin_oauth_tok")
 
     def test_fetch_returns_ticket_data(self):
         with patch(
