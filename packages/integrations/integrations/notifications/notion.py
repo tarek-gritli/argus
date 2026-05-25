@@ -42,7 +42,7 @@ async def _ensure_schema(client: httpx.AsyncClient, token: str, database_id: str
 
 
 async def append_to_notion_db(api_key: str, database_id: str, summary: ReviewSummary) -> None:
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10) as client:
         await _ensure_schema(client, api_key, database_id)
         resp = await client.post(
             f"{_NOTION_API}/pages",
