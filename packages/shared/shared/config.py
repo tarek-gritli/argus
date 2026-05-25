@@ -74,6 +74,11 @@ class Settings(BaseSettings):
             raise ValueError("secret_encryption_key is not a valid Fernet key") from exc
         return v
 
+    # Observability
+    langfuse_secret_key: str | None = None
+    langfuse_public_key: str | None = None
+    langfuse_base_url: str = "https://cloud.langfuse.com"
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 from shared.config import get_settings
+from shared.telemetry import langfuse_context, observe
 
 from .schemas import (
     AgentTask,
@@ -358,6 +359,7 @@ def _build_reflection_prompt(raw_findings: list[RawFinding]) -> str:
     return f"## Findings to Review\n{findings_json}\n\n## Task\nFor each finding (0-indexed), decide KEEP, DROP, or DOWNGRADE. Return a JSON object with a `decisions` array. Each decision must include: finding_index, action, reason, and revised_severity (only when action is DOWNGRADE)."
 
 
+@observe(as_type="generation")
 def _generate_findings_llm(diff: str, hits: ScannerHits, ctx: SecurityContext, vector_context: list[str] | None = None) -> list[RawFinding]:
     """Call Claude to produce structured findings; fall back to rule-based output on failure."""
     settings = get_settings()
@@ -373,6 +375,12 @@ def _generate_findings_llm(diff: str, hits: ScannerHits, ctx: SecurityContext, v
     client = Anthropic(api_key=settings.anthropic_api_key)
     user_prompt = _build_generation_prompt(diff, hits, ctx, vector_context or [])
 
+    if langfuse_context is not None:
+        langfuse_context.update_current_observation(
+            model=_MODEL,
+            input={"system": ctx.system_prompt, "user": user_prompt},
+        )
+
     try:
         response = client.messages.parse(
             model=_MODEL,
@@ -387,12 +395,16 @@ def _generate_findings_llm(diff: str, hits: ScannerHits, ctx: SecurityContext, v
             messages=[{"role": "user", "content": user_prompt}],
             output_format=_GeneratedFindings,
         )
-        return cast(_GeneratedFindings, response.parsed_output).findings
+        findings = cast(_GeneratedFindings, response.parsed_output).findings
+        if langfuse_context is not None:
+            langfuse_context.update_current_observation(output={"findings_count": len(findings)})
+        return findings
     except Exception as exc:
         logger.warning("LLM generation failed (%s); falling back to rule-based", exc)
         return _fallback_generate_findings(hits)
 
 
+@observe(as_type="generation")
 def _reflect_findings_llm(raw_findings: list[RawFinding]) -> list[Finding]:
     """Call Claude to reflect on findings; fall back to rule-based filtering on failure."""
     if not raw_findings:
@@ -407,6 +419,12 @@ def _reflect_findings_llm(raw_findings: list[RawFinding]) -> list[Finding]:
     client = Anthropic(api_key=settings.anthropic_api_key)
     user_prompt = _build_reflection_prompt(raw_findings)
 
+    if langfuse_context is not None:
+        langfuse_context.update_current_observation(
+            model=_MODEL,
+            input={"system": REFLECTION_PROMPT, "user": user_prompt},
+        )
+
     try:
         response = client.messages.parse(
             model=_MODEL,
@@ -416,7 +434,10 @@ def _reflect_findings_llm(raw_findings: list[RawFinding]) -> list[Finding]:
             output_format=_ReflectionDecisions,
         )
         parsed = cast(_ReflectionDecisions, response.parsed_output)
-        return _apply_decisions(raw_findings, parsed.decisions)
+        result = _apply_decisions(raw_findings, parsed.decisions)
+        if langfuse_context is not None:
+            langfuse_context.update_current_observation(output={"kept": len(result)})
+        return result
     except Exception as exc:
         logger.warning("LLM reflection failed (%s); falling back to rule-based", exc)
         return _fallback_reflect_findings(raw_findings)

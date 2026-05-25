@@ -11,6 +11,7 @@ from integrations.notifications.schemas import ReviewSummary
 from shared.models import Finding as FindingModel
 from shared.models import Repo, Review
 from shared.schemas import FindingSchema
+from shared.telemetry import langfuse_context, observe
 from specialized.documentation.pr_description import generate_pr_description
 from sqlalchemy import select
 from workers.connections import get_session_factory, run_async
@@ -22,10 +23,25 @@ from .quota import check_and_increment_quota, get_or_create_billing
 logger = logging.getLogger(__name__)
 
 
+@observe(name="pr-review")
 def run(payload: dict) -> None:
     try:
         org_id = payload.get("org_id", "")
         pr_payload = PullRequestPayload(**payload)
+
+        if langfuse_context:
+            langfuse_context.update_current_trace(
+                name=f"PR #{pr_payload.pr_number} — {pr_payload.repo_full_name}",
+                user_id=org_id or "anonymous",
+                tags=["pr-review"],
+                metadata={
+                    "repo": pr_payload.repo_full_name,
+                    "pr_number": pr_payload.pr_number,
+                    "head_sha": pr_payload.head_sha,
+                    "plan": payload.get("plan", "free"),
+                },
+            )
+
         pr = get_pr(pr_payload.repo_full_name, pr_payload.pr_number, pr_payload.installation_id)
         pr_payload.pr_title = pr.title or ""
         pr_payload.pr_body = pr.body or ""
