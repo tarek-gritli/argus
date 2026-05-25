@@ -151,7 +151,7 @@ async def _fetch_context(repo_id: str, diff: str) -> ContextBundle:
         return ContextBundle.empty()
 
 
-async def _check_quota(org_id: str) -> bool:
+async def _check_quota(org_id: str) -> tuple[bool, str]:
     async with get_session_factory()() as session:
         billing = await get_or_create_billing(session, org_id)
         return await check_and_increment_quota(session, billing)
