@@ -1,9 +1,9 @@
 #!/usr/bin/env sh
 # install.sh — Install the Argus CLI
-# Usage: curl -fsSL https://raw.githubusercontent.com/YOUR_ORG/argus/main/install.sh | sh
+# Usage: curl -fsSL https://raw.githubusercontent.com/tarek-gritli/argus/main/install.sh | sh
 set -e
 
-REPO="YOUR_ORG/argus"
+REPO="tarek-gritli/argus"
 BINARY_NAME="argus"
 INSTALL_DIR="/usr/local/bin"
 
