@@ -7,6 +7,7 @@ from context.bundle import ContextBundle
 from integrations.github import PullRequestPayload
 from langgraph.graph import END, START, StateGraph
 from shared.schemas import FindingSchema
+from shared.telemetry import get_callback_handler
 from specialized.documentation import analyze as documentation_analyze
 from specialized.quality import analyze as quality_analyze
 from specialized.security import analyze as security_analyze
@@ -80,6 +81,10 @@ def run_review(
     context: ContextBundle | None = None,
 ) -> list[FindingSchema]:
     app = build_review_graph(plan=plan)
+    cb = get_callback_handler()
+    invoke_kwargs: dict = {}
+    if cb is not None:
+        invoke_kwargs["config"] = {"callbacks": [cb]}
     result = app.invoke(
         {
             "files": files,
@@ -87,6 +92,7 @@ def run_review(
             "pr_payload": pr_payload,
             "findings": [],
             "context": context or ContextBundle.empty(),
-        }
+        },
+        **invoke_kwargs,
     )
     return result.get("findings", [])

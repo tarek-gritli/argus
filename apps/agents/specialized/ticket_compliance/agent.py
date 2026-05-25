@@ -9,6 +9,7 @@ from typing import Any
 import anthropic
 from shared.config import get_settings
 from shared.schemas.finding import FindingSchema
+from shared.telemetry import langfuse_context, observe
 
 from .extractor import extract_ticket_refs
 from .prompts.system import TICKET_COMPLIANCE_SYSTEM_PROMPT
@@ -96,8 +97,17 @@ def _build_user_prompt(agent_input: AgentInput, ticket: TicketData) -> str:
     )
 
 
+@observe(as_type="generation")
 def _call_claude(user_prompt: str) -> str:
     settings = get_settings()
+    if langfuse_context is not None:
+        try:
+            langfuse_context.update_current_observation(
+                model=_MODEL,
+                input={"system": TICKET_COMPLIANCE_SYSTEM_PROMPT, "user": user_prompt},
+            )
+        except Exception:
+            logger.debug("telemetry update failed", exc_info=True)
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     message = client.messages.create(
         model=_MODEL,
@@ -108,6 +118,11 @@ def _call_claude(user_prompt: str) -> str:
     for block in message.content:
         text = getattr(block, "text", None)
         if text:
+            if langfuse_context is not None:
+                try:
+                    langfuse_context.update_current_observation(output=text)
+                except Exception:
+                    logger.debug("telemetry update failed", exc_info=True)
             return text
     raise ValueError("Claude response contained no text")
 

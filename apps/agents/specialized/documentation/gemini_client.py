@@ -9,6 +9,7 @@ import time
 from google import genai
 from google.genai.errors import ClientError
 from shared.config import get_settings
+from shared.telemetry import langfuse_context, observe
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,7 @@ def _is_daily_quota_exhausted(exc: ClientError) -> bool:
     return False
 
 
+@observe(as_type="generation")
 def call_gemini(system: str, user: str, fallback: str = "[]") -> str:
     """Call Gemini with automatic retry on transient per-minute rate limits.
 
@@ -75,13 +77,22 @@ def call_gemini(system: str, user: str, fallback: str = "[]") -> str:
         logger.warning("GEMINI_API_KEY not set — skipping Gemini call.")
         return fallback
 
+    if langfuse_context is not None:
+        langfuse_context.update_current_observation(
+            model=_MODEL,
+            input={"system": system, "user": user},
+        )
+
     contents = f"{system}\n\n{user}"
 
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
             client = genai.Client(api_key=settings.gemini_api_key)
             response = client.models.generate_content(model=_MODEL, contents=contents)
-            return response.text or fallback
+            text = response.text or fallback
+            if langfuse_context is not None:
+                langfuse_context.update_current_observation(output=text)
+            return text
         except ClientError as exc:
             if _status_code(exc) != 429:
                 logger.warning("Gemini ClientError (non-rate-limit): %s", exc)

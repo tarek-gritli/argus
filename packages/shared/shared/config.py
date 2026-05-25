@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     github_client_secret: str
     jwt_secret_key: str
     jwt_ttl_seconds: int = 86400
+    dashboard_token_secret: str = ""
 
     # Encryption
     secret_encryption_key: str
@@ -93,6 +94,11 @@ class Settings(BaseSettings):
         except Exception as exc:
             raise ValueError("secret_encryption_key is not a valid Fernet key") from exc
         return v
+
+    # Observability
+    langfuse_secret_key: str | None = None
+    langfuse_public_key: str | None = None
+    langfuse_base_url: str = "https://cloud.langfuse.com"
 
 
 @lru_cache

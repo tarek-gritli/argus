@@ -11,6 +11,8 @@ from integrations.notifications.schemas import ReviewSummary
 from shared.models import Finding as FindingModel
 from shared.models import Repo, Review
 from shared.schemas import FindingSchema
+from shared.telemetry import create_trace, langfuse_context
+from shared.telemetry import flush as flush_telemetry
 from specialized.documentation.pr_description import generate_pr_description
 from sqlalchemy import select
 from workers.connections import get_session_factory, run_async
@@ -26,6 +28,21 @@ def run(payload: dict) -> None:
     try:
         org_id = payload.get("org_id", "")
         pr_payload = PullRequestPayload(**payload)
+
+        trace = None
+        if langfuse_context:
+            trace = create_trace(
+                name=f"PR #{pr_payload.pr_number} — {pr_payload.repo_full_name}",
+                user_id=org_id or "anonymous",
+                tags=["pr-review"],
+                metadata={
+                    "repo": pr_payload.repo_full_name,
+                    "pr_number": pr_payload.pr_number,
+                    "head_sha": pr_payload.head_sha,
+                    "plan": payload.get("plan", "free"),
+                },
+            )
+
         pr = get_pr(pr_payload.repo_full_name, pr_payload.pr_number, pr_payload.installation_id)
         pr_payload.pr_title = pr.title or ""
         pr_payload.pr_body = pr.body or ""
@@ -86,9 +103,17 @@ def run(payload: dict) -> None:
                 except Exception:
                     logger.exception("Notifications failed — review still posted")
 
+        if trace is not None:
+            try:
+                trace.update(output={"findings_count": len(findings), "agents_run": list({f.agent for f in findings})})
+            except Exception:
+                pass
+
     except Exception:
         logger.exception("Orchestration failed")
         raise
+    finally:
+        flush_telemetry()
 
 
 async def _already_reviewed(org_id: str, repo_full_name: str, installation_id: int, head_sha: str) -> bool:
