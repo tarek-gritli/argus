@@ -1,5 +1,5 @@
 from celery import Celery
-from celery.signals import worker_process_init, worker_process_shutdown
+from celery.signals import worker_process_init, worker_shutdown
 from shared.config import get_settings
 from shared.queue.tasks import INDEX_REPO_TASK_NAME, REVIEW_PR_TASK_NAME
 
@@ -24,7 +24,7 @@ def on_worker_init(**_) -> None:
     init_connections()
 
 
-@worker_process_shutdown.connect
+@worker_shutdown.connect
 def on_worker_shutdown(**_) -> None:
     from workers.connections import close_connections
 
