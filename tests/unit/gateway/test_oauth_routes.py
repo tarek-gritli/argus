@@ -5,12 +5,13 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 
-def _make_app():
-    from api.routes.oauth import router
+def _make_app(org_id: str = "org-1"):
+    from api.routes.oauth import _get_org_id, router
 
     app = FastAPI()
     app.state.redis = AsyncMock()
     app.include_router(router, prefix="/api/v1/oauth")
+    app.dependency_overrides[_get_org_id] = lambda: org_id
     return app
 
 
@@ -35,6 +36,17 @@ def test_slack_authorize_redirects():
 
     assert resp.status_code == 302
     assert "slack.com/oauth/v2/authorize" in resp.headers["location"]
+
+
+def test_slack_authorize_forbidden_for_other_org():
+    app = _make_app(org_id="org-other")
+
+    async def run():
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            return await client.get("/api/v1/oauth/slack/authorize?org_id=org-1", follow_redirects=False)
+
+    resp = asyncio.run(run())
+    assert resp.status_code == 403
 
 
 def test_slack_callback_saves_integration():

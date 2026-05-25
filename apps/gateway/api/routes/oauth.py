@@ -3,7 +3,7 @@ from __future__ import annotations
 import secrets
 import urllib.parse
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from integrations.oauth import jira as jira_oauth
 from integrations.oauth import linear as linear_oauth
@@ -15,6 +15,10 @@ from shared.db import session_context
 from shared.models.org_integration import OrgIntegration
 
 router = APIRouter()
+
+
+def _get_org_id(request: Request) -> str:
+    return request.state.org_id
 
 
 async def _store_state(request: Request, key: str, org_id: str) -> None:
@@ -60,7 +64,9 @@ async def _exchange_jira_code(code: str, redirect_uri: str) -> dict:
 
 
 @router.get("/slack/authorize")
-async def slack_authorize(org_id: str, request: Request):
+async def slack_authorize(org_id: str, request: Request, org_id_from_token: str = Depends(_get_org_id)):
+    if org_id_from_token != org_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     settings = get_settings()
     nonce = secrets.token_urlsafe(16)
     await _store_state(request, f"oauth:slack:{nonce}", org_id)
@@ -98,7 +104,9 @@ async def slack_callback(code: str, state: str, request: Request):
 
 
 @router.get("/notion/authorize")
-async def notion_authorize(org_id: str, request: Request):
+async def notion_authorize(org_id: str, request: Request, org_id_from_token: str = Depends(_get_org_id)):
+    if org_id_from_token != org_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     settings = get_settings()
     nonce = secrets.token_urlsafe(16)
     await _store_state(request, f"oauth:notion:{nonce}", org_id)
@@ -137,7 +145,9 @@ async def notion_callback(code: str, state: str, request: Request):
 
 
 @router.get("/linear/authorize")
-async def linear_authorize(org_id: str, request: Request):
+async def linear_authorize(org_id: str, request: Request, org_id_from_token: str = Depends(_get_org_id)):
+    if org_id_from_token != org_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     settings = get_settings()
     nonce = secrets.token_urlsafe(16)
     await _store_state(request, f"oauth:linear:{nonce}", org_id)
@@ -171,7 +181,9 @@ async def linear_callback(code: str, state: str, request: Request):
 
 
 @router.get("/jira/authorize")
-async def jira_authorize(org_id: str, request: Request):
+async def jira_authorize(org_id: str, request: Request, org_id_from_token: str = Depends(_get_org_id)):
+    if org_id_from_token != org_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     settings = get_settings()
     nonce = secrets.token_urlsafe(16)
     await _store_state(request, f"oauth:jira:{nonce}", org_id)

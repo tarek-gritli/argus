@@ -5,12 +5,13 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 
-def _make_app():
-    from api.routes.oauth import router
+def _make_app(org_id: str = "org-1"):
+    from api.routes.oauth import _get_org_id, router
 
     app = FastAPI()
     app.state.redis = AsyncMock()
     app.include_router(router, prefix="/api/v1/oauth")
+    app.dependency_overrides[_get_org_id] = lambda: org_id
     return app
 
 
