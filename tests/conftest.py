@@ -13,6 +13,7 @@ os.environ["CELERY_BROKER_URL"] = "redis://localhost:6379/15"
 os.environ["GITHUB_CLIENT_ID"] = "github_client_id"
 os.environ["GITHUB_CLIENT_SECRET"] = "github_client_secret"
 os.environ["JWT_SECRET_KEY"] = "jwt_secret_key"
+os.environ["SECRET_ENCRYPTION_KEY"] = "Oy-9hVTGzq-XfkjHqVNmO7wRJQnBdQlEzPMktfVi5dI="
 
 
 @pytest.fixture

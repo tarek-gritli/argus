@@ -12,6 +12,7 @@ dependencies = [
     "asyncpg>=0.31.0",
     "alembic>=1.18.4",
     "psycopg2-binary>=2.9.12",
+    "cryptography>=48.0.0",
 ]
 
 [build-system]

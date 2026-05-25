@@ -6,6 +6,8 @@ from context.embeddings import search_similar
 from context.history import get_rejected_finding_keys, suppress_duplicate_findings
 from fix_engine.pipeline import run_fix_pipeline
 from integrations.github import PullRequestPayload, get_pr, get_pr_diff, get_pr_file_content, get_pr_files, post_findings_as_review, post_issue_comment, update_pr_body
+from integrations.notifications.dispatcher import dispatch_review_completed
+from integrations.notifications.schemas import ReviewSummary
 from shared.models import Finding as FindingModel
 from shared.models import Repo, Review
 from shared.schemas import FindingSchema
@@ -77,6 +79,10 @@ def run(payload: dict) -> None:
                 run_async(_persist(org_id=org_id, pr_payload=pr_payload, findings=findings))
             except Exception:
                 logger.exception("Review persisted to GitHub, but DB persistence failed")
+            try:
+                run_async(_notify(org_id=org_id, pr_payload=pr_payload, pr=pr, findings=findings))
+            except Exception:
+                logger.exception("Notifications failed — review still posted")
 
     except Exception:
         logger.exception("Orchestration failed")
@@ -159,3 +165,18 @@ async def _persist(org_id: str, pr_payload: PullRequestPayload, findings: list[F
                 )
             )
         await session.commit()
+
+
+async def _notify(org_id: str, pr_payload: PullRequestPayload, pr: object, findings: list[FindingSchema]) -> None:
+    pr_url = getattr(pr, "html_url", None) or f"https://github.com/{pr_payload.repo_full_name}/pull/{pr_payload.pr_number}"
+    summary = ReviewSummary(
+        org_id=org_id,
+        repo=pr_payload.repo_full_name,
+        pr_number=pr_payload.pr_number,
+        pr_url=pr_url,
+        finding_count=len(findings),
+        critical_count=sum(1 for f in findings if f.severity == "critical"),
+        high_count=sum(1 for f in findings if f.severity == "high"),
+    )
+    async with get_session_factory()() as session:
+        await dispatch_review_completed(session, summary)
