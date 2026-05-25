@@ -1332,6 +1332,35 @@
           "severity_hint": "HIGH"
         }
       ]
+    },
+    "setuptools@68@PyPI": {
+      "cached_at": "2026-05-25T20:08:47.808597+00:00",
+      "hits": [
+        {
+          "package": "setuptools",
+          "version": "68",
+          "cve_id": "GHSA-5rjg-fvgr-3xxf",
+          "cvss_score": 7.5,
+          "fix_version": "",
+          "severity_hint": "HIGH"
+        },
+        {
+          "package": "setuptools",
+          "version": "68",
+          "cve_id": "GHSA-cx63-2mw6-8hw5",
+          "cvss_score": 7.5,
+          "fix_version": "",
+          "severity_hint": "HIGH"
+        },
+        {
+          "package": "setuptools",
+          "version": "68",
+          "cve_id": "PYSEC-2025-49",
+          "cvss_score": 7.5,
+          "fix_version": "",
+          "severity_hint": "HIGH"
+        }
+      ]
     }
   }
 }
