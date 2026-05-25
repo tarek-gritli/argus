@@ -1,4 +1,5 @@
-from unittest.mock import MagicMock, patch
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from integrations.notifications.notion import append_to_notion_db
 from integrations.notifications.schemas import ReviewSummary
@@ -19,12 +20,14 @@ def _summary() -> ReviewSummary:
 
 class TestPostToSlack:
     def test_sends_post_to_webhook_url(self):
-        with patch("integrations.notifications.slack.httpx.post") as mock_post:
+        mock_response = MagicMock()
+        with patch("integrations.notifications.slack.httpx.post", return_value=mock_response) as mock_post:
             post_to_slack("https://hooks.slack.com/test", _summary())
             mock_post.assert_called_once()
             args, kwargs = mock_post.call_args
             assert args[0] == "https://hooks.slack.com/test"
             assert "text" in kwargs["json"]
+            mock_response.raise_for_status.assert_called_once()
 
     def test_message_contains_repo_and_pr(self):
         with patch("integrations.notifications.slack.httpx.post") as mock_post:
@@ -36,19 +39,26 @@ class TestPostToSlack:
 
 
 class TestAppendToNotionDb:
+    def _run(self, coro):
+        return asyncio.run(coro)
+
     def test_creates_page_in_database(self):
-        mock_client = MagicMock()
-        with patch("integrations.notifications.notion.Client", return_value=mock_client):
-            append_to_notion_db("secret_key", "db-uuid", _summary())
-            mock_client.pages.create.assert_called_once()
-            call_kwargs = mock_client.pages.create.call_args.kwargs
-            assert call_kwargs["parent"] == {"database_id": "db-uuid"}
+        mock_client = AsyncMock()
+        with patch("integrations.notifications.notion.AsyncClient") as mock_cls:
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+            self._run(append_to_notion_db("secret_key", "db-uuid", _summary()))
+        mock_client.pages.create.assert_called_once()
+        call_kwargs = mock_client.pages.create.call_args.kwargs
+        assert call_kwargs["parent"] == {"database_id": "db-uuid"}
 
     def test_page_properties_include_findings(self):
-        mock_client = MagicMock()
-        with patch("integrations.notifications.notion.Client", return_value=mock_client):
-            append_to_notion_db("secret_key", "db-uuid", _summary())
-            props = mock_client.pages.create.call_args.kwargs["properties"]
-            assert props["Findings"]["number"] == 5
-            assert props["Critical"]["number"] == 1
-            assert props["High"]["number"] == 2
+        mock_client = AsyncMock()
+        with patch("integrations.notifications.notion.AsyncClient") as mock_cls:
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+            self._run(append_to_notion_db("secret_key", "db-uuid", _summary()))
+        props = mock_client.pages.create.call_args.kwargs["properties"]
+        assert props["Findings"]["number"] == 5
+        assert props["Critical"]["number"] == 1
+        assert props["High"]["number"] == 2
