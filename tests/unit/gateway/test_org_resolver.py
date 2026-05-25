@@ -44,11 +44,16 @@ async def test_get_or_create_org_new_installation():
 
     assert mock_session.flush.called
     assert mock_session.commit.called
-    assert len(added_objects) == 2
+    assert len(added_objects) == 3
     org_obj = added_objects[0]
     repo_obj = added_objects[1]
+    billing_obj = added_objects[2]
     assert isinstance(org_obj, Org)
     assert isinstance(repo_obj, Repo)
+    from shared.models.org_billing import OrgBilling
+
+    assert isinstance(billing_obj, OrgBilling)
+    assert billing_obj.org_id == org_obj.id
     assert repo_obj.installation_id == 42
     assert repo_obj.full_name == "acme/service"
     assert repo_obj.org_id == org_obj.id

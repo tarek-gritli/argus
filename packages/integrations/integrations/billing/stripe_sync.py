@@ -105,6 +105,10 @@ async def sync_subscription_event(session: AsyncSession, event: Any) -> None:
         billing.seat_count = 1
         billing.stripe_subscription_id = None
     else:
+        status = obj.get("status", "")
+        if status not in {"active", "trialing"}:
+            logger.warning("Ignoring subscription %s with status=%r", sub_id, status)
+            return
         metadata = obj.get("metadata", {})
         plan = metadata.get("plan", "free")
         try:
