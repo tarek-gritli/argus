@@ -38,6 +38,9 @@ async def get_or_create_org(session: AsyncSession, installation_id: int, repo_fu
             raise
         try:
             session.add(Repo(org_id=org.id, full_name=repo_full_name, installation_id=installation_id))
+            billing_result = await session.execute(select(OrgBilling).where(OrgBilling.org_id == org.id))
+            if billing_result.scalar_one_or_none() is None:
+                session.add(OrgBilling(org_id=org.id))
             await session.commit()
             return org.id
         except IntegrityError:
