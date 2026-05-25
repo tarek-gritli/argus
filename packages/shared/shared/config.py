@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from cryptography.fernet import Fernet
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
@@ -60,6 +61,15 @@ class Settings(BaseSettings):
     def _reject_blank(cls, v: str, info) -> str:
         if not v or not v.strip():
             raise ValueError(f"{info.field_name} must not be blank")
+        return v
+
+    @field_validator("secret_encryption_key", mode="after")
+    @classmethod
+    def _validate_fernet_key(cls, v: str) -> str:
+        try:
+            Fernet(v.encode())
+        except Exception as exc:
+            raise ValueError("secret_encryption_key is not a valid Fernet key") from exc
         return v
 
 
