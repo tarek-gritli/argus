@@ -10,7 +10,7 @@ _EXEMPT_EXACT = frozenset(["/ping"])
 
 def _build_exempt_prefixes() -> tuple[str, ...]:
     p = get_settings().api_prefix
-    return (f"{p}/webhooks/", f"{p}/auth/github/", f"{p}/auth/logout", "/dashboard/")
+    return (f"{p}/webhooks/", f"{p}/auth/github/", f"{p}/auth/logout", f"{p}/auth/cli/", "/dashboard/")
 
 
 class AuthMiddleware(BaseHTTPMiddleware):

@@ -34,6 +34,7 @@ async def github_callback(
     code: str,
     state: str,
     request: Request,
+    cli_session_id: str | None = None,
     settings: Settings = Depends(get_settings),
     session: AsyncSession = Depends(get_session),
 ):
@@ -90,6 +91,8 @@ async def github_callback(
         org = result3.scalar_one()
 
     token = create_jwt(user_id=user.id, org_id=org.id, role=membership.role)
+    if cli_session_id:
+        await request.app.state.redis.set(f"cli_session:{cli_session_id}", token, ex=300)
     response = Response(content=f'{{"token":"{token}"}}', media_type="application/json")
     response.set_cookie(
         "argus_token",
