@@ -31,17 +31,9 @@ def _make_event(event_type: str, customer_id: str, sub_id: str, plan: str, seat_
                 "id": sub_id,
                 "customer": customer_id,
                 "status": status,
-                "items": {
-                    "data": [
-                        {
-                            "price": {
-                                "metadata": {
-                                    "plan": plan,
-                                    "seat_count": str(seat_count),
-                                }
-                            }
-                        }
-                    ]
+                "metadata": {
+                    "plan": plan,
+                    "seat_count": str(seat_count),
                 },
             }
         },
@@ -50,11 +42,13 @@ def _make_event(event_type: str, customer_id: str, sub_id: str, plan: str, seat_
 
 def test_parse_stripe_event_delegates_to_stripe_webhook():
     settings = MagicMock(stripe_webhook_secret="whsec_test")
-    event = {"type": "customer.subscription.created", "data": {"object": {}}}
-    with patch("integrations.billing.stripe_sync.stripe.Webhook.construct_event", return_value=event) as mock_construct:
+    event_dict = {"type": "customer.subscription.created", "data": {"object": {}}}
+    mock_event = MagicMock()
+    mock_event.to_dict.return_value = event_dict
+    with patch("integrations.billing.stripe_sync.stripe.Webhook.construct_event", return_value=mock_event) as mock_construct:
         parsed = parse_stripe_event(b'{"type":"x"}', "t=1,v1=abc", settings)
 
-    assert parsed is event
+    assert parsed == event_dict
     mock_construct.assert_called_once_with(b'{"type":"x"}', "t=1,v1=abc", "whsec_test")
 
 
@@ -137,7 +131,7 @@ async def test_updated_event_with_null_seat_count_defaults_to_one():
     billing = OrgBilling(org_id="org-1", plan="pro", seat_count=3, stripe_customer_id="cus_123", stripe_subscription_id="sub_abc")
     session = _make_session(billing)
     event = _make_event("customer.subscription.updated", "cus_123", "sub_abc", "team", 10)
-    event["data"]["object"]["items"]["data"][0]["price"]["metadata"]["seat_count"] = None
+    event["data"]["object"]["metadata"]["seat_count"] = None
 
     await sync_subscription_event(session, event)
 
