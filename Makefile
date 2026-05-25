@@ -1,6 +1,6 @@
 .PHONY: help \
 	install install-python install-web \
-	run-gateway run-agents run-cli run-web \
+	run-gateway run-agents run-cli run-web build-cli \
 	add-dep remove-dep lock upgrade \
 	build up down logs restart \
 	lint fmt fix typecheck \
@@ -54,6 +54,9 @@ run-agents: ## Run agents with hot reload on source changes
 
 run-cli: ## Run the CLI
 	$(UV) run --env-file .env --package cli argus
+
+build-cli: ## Build standalone argus binary (output: apps/cli/dist/argus)
+	apps/cli/build_binary.sh
 
 run-web: ## Run the web dev server
 	cd apps/web && $(PNPM) dev
