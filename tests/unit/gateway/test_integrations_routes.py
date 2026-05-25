@@ -260,6 +260,26 @@ async def test_list_notion_databases_404_when_not_found():
 
 
 @pytest.mark.asyncio
+async def test_list_notion_databases_400_on_decrypt_failure():
+    app = _make_app()
+    ctx, _ = _session_returning([_notion_integration()])
+
+    from api.routes.integrations import _get_org_id
+
+    app.dependency_overrides[_get_org_id] = lambda: "org-1"
+
+    with (
+        patch("api.routes.integrations.session_context", return_value=ctx),
+        patch("api.routes.integrations.decrypt", side_effect=Exception("bad ciphertext")),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/orgs/org-1/integrations/int-notion/notion/databases")
+
+    assert resp.status_code == 400
+    assert "Invalid Notion token" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_select_notion_database_saves_id():
     app = _make_app()
     notion_int = _notion_integration()

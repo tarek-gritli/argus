@@ -136,9 +136,13 @@ async def list_notion_databases(
         integration = result.scalar_one_or_none()
     if not integration:
         raise HTTPException(status_code=404, detail="Notion integration not found")
-    token = decrypt(integration.config.get("token", ""))
-    if not token:
+    raw_token = integration.config.get("token", "")
+    if not raw_token:
         raise HTTPException(status_code=400, detail="Notion token missing")
+    try:
+        token = decrypt(raw_token)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid Notion token configuration") from exc
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
