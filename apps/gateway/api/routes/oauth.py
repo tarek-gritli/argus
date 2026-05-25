@@ -93,6 +93,8 @@ async def slack_callback(code: str, state: str, request: Request):
         data = await _exchange_slack_code(code, redirect_uri)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Slack token exchange failed") from exc
     webhook = data.get("incoming_webhook", {})
     config = {
         "token": encrypt(data["access_token"]),
