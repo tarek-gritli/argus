@@ -408,3 +408,143 @@ async def test_webhook_celery_payload_includes_org_id(patch_gateway_deps):
     mock_org.assert_called_once()
     task_payload = mock_celery.send_task.call_args[1]["args"][0]
     assert task_payload["org_id"] == "org-uuid-123"
+
+
+# ---------------------------------------------------------------------------
+# Push event tests
+# ---------------------------------------------------------------------------
+
+VALID_PUSH_PAYLOAD = {
+    "ref": "refs/heads/main",
+    "repository": {"full_name": "acme/api", "default_branch": "main"},
+    "installation": {"id": 123},
+    "head_commit": {"id": "abc123"},
+}
+
+
+@pytest.mark.asyncio
+async def test_push_on_default_branch_enqueues_index(patch_gateway_deps):
+    """push on default branch → enqueues index_repo task, returns 200."""
+    app, mock_redis, mock_celery = patch_gateway_deps
+    payload = json.dumps(VALID_PUSH_PAYLOAD).encode()
+    signature = generate_signature(payload, "test-secret")
+    mock_redis.set.return_value = True
+
+    with patch("api.routes.webhooks._get_repo_id", new=AsyncMock(return_value="repo_abc")):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/webhooks/github",
+                headers={
+                    "X-Hub-Signature-256": signature,
+                    "X-GitHub-Event": "push",
+                    "X-GitHub-Delivery": "push-delivery-1",
+                },
+                content=payload,
+            )
+
+    assert response.status_code == 200
+    mock_celery.send_task.assert_called_once()
+    call = mock_celery.send_task.call_args
+    assert call.kwargs["kwargs"]["repo_id"] == "repo_abc"
+    assert call.kwargs["kwargs"]["repo_full_name"] == "acme/api"
+    assert call.kwargs["kwargs"]["ref"] == "main"
+    assert call.kwargs["countdown"] == 300
+
+
+@pytest.mark.asyncio
+async def test_push_redis_failure_still_enqueues_with_ref_fallback(patch_gateway_deps):
+    """Redis unavailable → still enqueues index task with ref_name as direct kwarg, returns 200."""
+    app, mock_redis, mock_celery = patch_gateway_deps
+    payload = json.dumps(VALID_PUSH_PAYLOAD).encode()
+    signature = generate_signature(payload, "test-secret")
+    mock_redis.set.side_effect = Exception("Redis down")
+
+    with patch("api.routes.webhooks._get_repo_id", new=AsyncMock(return_value="repo_abc")):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/webhooks/github",
+                headers={
+                    "X-Hub-Signature-256": signature,
+                    "X-GitHub-Event": "push",
+                    "X-GitHub-Delivery": "push-delivery-1",
+                },
+                content=payload,
+            )
+
+    assert response.status_code == 200
+    mock_celery.send_task.assert_called_once()
+    call = mock_celery.send_task.call_args
+    assert call.kwargs["kwargs"]["repo_id"] == "repo_abc"
+    assert call.kwargs["kwargs"]["ref"] == "main"
+
+
+@pytest.mark.asyncio
+async def test_push_celery_failure_cleans_up_scheduled_key(patch_gateway_deps):
+    """Celery enqueue failure → attempts to delete scheduled_key, returns 200."""
+    app, mock_redis, mock_celery = patch_gateway_deps
+    payload = json.dumps(VALID_PUSH_PAYLOAD).encode()
+    signature = generate_signature(payload, "test-secret")
+    mock_redis.set.return_value = True
+    mock_celery.send_task.side_effect = Exception("Celery error")
+
+    with patch("api.routes.webhooks._get_repo_id", new=AsyncMock(return_value="repo_abc")):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/webhooks/github",
+                headers={
+                    "X-Hub-Signature-256": signature,
+                    "X-GitHub-Event": "push",
+                    "X-GitHub-Delivery": "push-delivery-1",
+                },
+                content=payload,
+            )
+
+    assert response.status_code == 200
+    mock_redis.delete.assert_called_with("index:scheduled:repo_abc")
+
+
+@pytest.mark.asyncio
+async def test_push_on_non_default_branch_is_ignored(patch_gateway_deps):
+    """push on feature branch → 200, no task enqueued."""
+    app, mock_redis, mock_celery = patch_gateway_deps
+    payload_data = {**VALID_PUSH_PAYLOAD, "ref": "refs/heads/feature/xyz"}
+    payload = json.dumps(payload_data).encode()
+    signature = generate_signature(payload, "test-secret")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/webhooks/github",
+            headers={
+                "X-Hub-Signature-256": signature,
+                "X-GitHub-Event": "push",
+                "X-GitHub-Delivery": "push-delivery-2",
+            },
+            content=payload,
+        )
+
+    assert response.status_code == 200
+    mock_celery.send_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_push_without_repo_id_skips_index(patch_gateway_deps):
+    """push on default branch but repo not in DB → 200, no task enqueued."""
+    app, mock_redis, mock_celery = patch_gateway_deps
+    payload = json.dumps(VALID_PUSH_PAYLOAD).encode()
+    signature = generate_signature(payload, "test-secret")
+    mock_redis.set.return_value = True
+
+    with patch("api.routes.webhooks._get_repo_id", new=AsyncMock(return_value=None)):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/webhooks/github",
+                headers={
+                    "X-Hub-Signature-256": signature,
+                    "X-GitHub-Event": "push",
+                    "X-GitHub-Delivery": "push-delivery-3",
+                },
+                content=payload,
+            )
+
+    assert response.status_code == 200
+    mock_celery.send_task.assert_not_called()

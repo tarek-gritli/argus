@@ -10,6 +10,7 @@ from .agent import run_testing_agent
 from .schemas import AgentInput
 
 if TYPE_CHECKING:
+    from context.bundle import ContextBundle
     from integrations.github.schemas import PullRequestPayload
 
 __all__ = ["analyze", "run_testing_agent"]
@@ -33,7 +34,19 @@ def _patch_to_source(patch: str) -> str:
     return "\n".join(lines)
 
 
-def analyze(files: list[Any], diff: str, pr_payload: "PullRequestPayload") -> list[FindingSchema]:
+def _format_vector_context(chunks: list[dict]) -> list[str]:
+    out = []
+    for c in chunks:
+        header = f"{c.get('filepath', '?')}:{c.get('start_line', '?')}-{c.get('end_line', '?')}"
+        if c.get("function_name"):
+            header += f"  fn={c['function_name']}"
+        if c.get("class_name"):
+            header += f"  class={c['class_name']}"
+        out.append(f"# {header}\n{c.get('content', '')}")
+    return out
+
+
+def analyze(files: list[Any], diff: str, pr_payload: "PullRequestPayload", context: ContextBundle | None = None) -> list[FindingSchema]:
     """Adapter: build AgentInput from coordinator inputs and run the testing agent."""
     changed_files = {f.filename: _patch_to_source(f.patch or "") for f in files}
     agent_input = AgentInput(
@@ -43,5 +56,6 @@ def analyze(files: list[Any], diff: str, pr_payload: "PullRequestPayload") -> li
         pr_number=pr_payload.pr_number,
         head_sha=pr_payload.head_sha,
         base_sha=pr_payload.base_sha,
+        vector_context=_format_vector_context(context.similar_chunks) if context else [],
     )
     return run_testing_agent(agent_input)

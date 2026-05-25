@@ -4,7 +4,7 @@
 	add-dep remove-dep lock upgrade \
 	build up down logs restart \
 	lint fmt fix typecheck \
-	migrate migrate-up migrate-down \
+	migrate migrate-up migrate-down db-setup db-purge \
 	test test-debug test-cov \
 	clean deps-tree
 
@@ -127,6 +127,12 @@ migrate-down: ## Rollback last migration
 
 migrate-history: ## Show migration history
 	$(UV) run alembic history --verbose
+
+db-setup: ## Apply all migrations (sets up DB from scratch)
+	@bash scripts/db_setup.sh
+
+db-purge: ## Drop all tables and reapply migrations (clean slate)
+	@bash scripts/db_purge.sh
 
 # ============================================================
 # Tests

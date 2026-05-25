@@ -17,6 +17,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from shared.models.org_billing import OrgBilling
 
+
+def _make_factory(billing: OrgBilling):
+    """Return a callable that acts as async_sessionmaker, creating a fresh session each call."""
+
+    def factory():
+        return _make_session_ctx(billing)
+
+    return factory
+
+
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
@@ -82,12 +92,14 @@ def _make_session_ctx(billing: OrgBilling):
 
 def _run(payload: dict, billing: OrgBilling, post_comment: MagicMock, post_review: MagicMock | None = None):
     """Run coordinator.run() with all external deps patched."""
+    mock_factory = _make_factory(billing)
     with (
         patch("orchestrator.coordinator.get_pr", return_value=_make_pr()),
         patch("orchestrator.coordinator.get_pr_files", return_value=_make_files()),
         patch("orchestrator.coordinator.get_pr_diff", return_value=DIFF),
         patch("orchestrator.coordinator.get_pr_file_content", return_value="mock content"),
-        patch("orchestrator.coordinator.fresh_session_context", side_effect=lambda: _make_session_ctx(billing)),
+        patch("orchestrator.coordinator.run_async", side_effect=lambda coro, **_: _run_coro(coro)),
+        patch("orchestrator.coordinator.get_session_factory", return_value=mock_factory),
         patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
         patch("orchestrator.coordinator.get_or_create_billing", return_value=billing),
         patch("orchestrator.coordinator.check_and_increment_quota", side_effect=_real_check(billing)),
@@ -106,21 +118,17 @@ def _run(payload: dict, billing: OrgBilling, post_comment: MagicMock, post_revie
         run(payload)
 
 
-def _real_check(billing: OrgBilling):
-    """Delegate to the real check_and_increment_quota logic using billing directly."""
+def _run_coro(coro):
+    """Run a coroutine synchronously — test stand-in for run_async()."""
     import asyncio
 
+    return asyncio.run(coro)
+
+
+def _real_check(billing: OrgBilling):
+    """Delegate to the real check_and_increment_quota logic using billing directly."""
     from orchestrator.quota import check_and_increment_quota
 
-    async def _inner(session, b):
-        return await check_and_increment_quota(session, b)
-
-    def side_effect(session, b):
-        return asyncio.get_event_loop().run_until_complete(_inner(session, b))
-
-    # Return a simple sync callable that mirrors the async bool result
-    # coordinator calls asyncio.run(_check_quota(org_id)) which calls get_or_create_billing
-    # then check_and_increment_quota — we patch check_and_increment_quota directly
     async def async_check(session, b):
         return await check_and_increment_quota(session, b)
 

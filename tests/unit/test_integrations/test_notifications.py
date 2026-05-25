@@ -1,0 +1,116 @@
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from integrations.notifications.notion import append_to_notion_db
+from integrations.notifications.schemas import ReviewSummary
+from integrations.notifications.slack import post_to_slack, post_to_slack_token
+
+
+def _summary() -> ReviewSummary:
+    return ReviewSummary(
+        org_id="org-1",
+        repo="acme/api",
+        pr_number=42,
+        pr_url="https://github.com/acme/api/pull/42",
+        finding_count=5,
+        critical_count=1,
+        high_count=2,
+    )
+
+
+class TestPostToSlack:
+    def test_sends_post_to_webhook_url(self):
+        mock_response = MagicMock()
+        with patch("integrations.notifications.slack.httpx.post", return_value=mock_response) as mock_post:
+            post_to_slack("https://hooks.slack.com/test", _summary())
+            mock_post.assert_called_once()
+            args, kwargs = mock_post.call_args
+            assert args[0] == "https://hooks.slack.com/test"
+            assert "text" in kwargs["json"]
+            mock_response.raise_for_status.assert_called_once()
+
+    def test_message_contains_repo_and_pr(self):
+        with patch("integrations.notifications.slack.httpx.post") as mock_post:
+            post_to_slack("https://hooks.slack.com/test", _summary())
+            text = mock_post.call_args.kwargs["json"]["text"]
+            assert "acme/api" in text
+            assert "42" in text
+            assert "5" in text
+
+
+class TestPostToSlackToken:
+    def test_raises_on_ok_false(self):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"ok": False, "error": "channel_not_found"}
+        with patch("integrations.notifications.slack.httpx.post", return_value=mock_response):
+            try:
+                post_to_slack_token("xoxb-tok", "C123", _summary())
+                assert False, "expected ValueError"
+            except ValueError as exc:
+                assert "channel_not_found" in str(exc)
+
+    def test_succeeds_on_ok_true(self):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"ok": True}
+        with patch("integrations.notifications.slack.httpx.post", return_value=mock_response):
+            post_to_slack_token("xoxb-tok", "C123", _summary())
+
+
+class TestAppendToNotionDb:
+    def _run(self, coro):
+        return asyncio.run(coro)
+
+    def _mock_httpx(self, existing_props: list[str] | None = None):
+        schema_resp = MagicMock()
+        schema_resp.raise_for_status = MagicMock()
+        schema_resp.json.return_value = {"properties": {k: {} for k in (existing_props or [])}}
+        patch_resp = MagicMock()
+        patch_resp.raise_for_status = MagicMock()
+        page_resp = MagicMock()
+        page_resp.raise_for_status = MagicMock()
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=schema_resp)
+        mock_client.patch = AsyncMock(return_value=patch_resp)
+        mock_client.post = AsyncMock(return_value=page_resp)
+        mock_ctx = MagicMock()
+        mock_ctx.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_ctx.__aexit__ = AsyncMock(return_value=False)
+        return mock_ctx, mock_client
+
+    def test_creates_page_in_database(self):
+        mock_ctx, mock_client = self._mock_httpx()
+        with patch("integrations.notifications.notion.httpx.AsyncClient", return_value=mock_ctx):
+            self._run(append_to_notion_db("secret_key", "db-uuid", _summary()))
+        mock_client.post.assert_called_once()
+        _, kwargs = mock_client.post.call_args
+        assert kwargs["json"]["parent"] == {"database_id": "db-uuid"}
+
+    def test_page_properties_include_findings(self):
+        mock_ctx, mock_client = self._mock_httpx()
+        with patch("integrations.notifications.notion.httpx.AsyncClient", return_value=mock_ctx):
+            self._run(append_to_notion_db("secret_key", "db-uuid", _summary()))
+        props = mock_client.post.call_args.kwargs["json"]["properties"]
+        assert props["Findings"]["number"] == 5
+        assert props["Critical"]["number"] == 1
+        assert props["High"]["number"] == 2
+
+    def test_schema_patch_called_when_columns_missing(self):
+        # DB has only "Name" — all four required columns are absent
+        mock_ctx, mock_client = self._mock_httpx(existing_props=["Name"])
+        with patch("integrations.notifications.notion.httpx.AsyncClient", return_value=mock_ctx):
+            self._run(append_to_notion_db("secret_key", "db-uuid", _summary()))
+        mock_client.patch.assert_called_once()
+        patched_props = mock_client.patch.call_args.kwargs["json"]["properties"]
+        assert "Findings" in patched_props
+        assert "Critical" in patched_props
+        assert "High" in patched_props
+        assert "PR URL" in patched_props
+
+    def test_schema_patch_skipped_when_all_columns_present(self):
+        # DB already has all required columns
+        mock_ctx, mock_client = self._mock_httpx(existing_props=["Name", "PR URL", "Findings", "Critical", "High"])
+        with patch("integrations.notifications.notion.httpx.AsyncClient", return_value=mock_ctx):
+            self._run(append_to_notion_db("secret_key", "db-uuid", _summary()))
+        mock_client.patch.assert_not_called()

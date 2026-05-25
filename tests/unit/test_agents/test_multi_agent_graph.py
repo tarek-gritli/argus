@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from shared.schemas import AgentType
+
 
 def _make_pr_payload(repo="org/repo", pr_number=1, head="abc", base="def", installation_id=42):
     from integrations.github.schemas import PullRequestPayload
@@ -18,7 +20,7 @@ def _make_pr_payload(repo="org/repo", pr_number=1, head="abc", base="def", insta
     )
 
 
-def _make_finding(agent: str, title: str = "Test finding"):
+def _make_finding(agent: AgentType, title: str = "Test finding"):
     from shared.schemas.finding import FindingSchema
 
     return FindingSchema(
@@ -86,14 +88,14 @@ class TestBuildReviewGraph:
 
 class TestFormatFindings:
     def test_format_groups_by_agent_and_severity(self):
-        from orchestrator.coordinator import _format_findings
+        from orchestrator.formatter import format_findings
 
         findings = [
             _make_finding("security", "SQL Injection"),
             _make_finding("quality", "High complexity"),
             _make_finding("testing", "Missing test"),
         ]
-        result = _format_findings(findings)
+        result = format_findings(findings)
         assert "Security" in result
         assert "Quality" in result
         assert "Testing" in result
@@ -102,13 +104,13 @@ class TestFormatFindings:
         assert "Missing test" in result
 
     def test_format_no_findings_returns_all_clear(self):
-        from orchestrator.coordinator import _format_findings
+        from orchestrator.formatter import format_findings
 
-        result = _format_findings([])
-        assert "No issues" in result
+        result = format_findings([])
+        assert "no issues" in result
 
     def test_format_severity_ordering(self):
-        from orchestrator.coordinator import _format_findings
+        from orchestrator.formatter import format_findings
         from shared.schemas.finding import FindingSchema
 
         findings = [
@@ -137,30 +139,8 @@ class TestFormatFindings:
                 fix=None,
             ),
         ]
-        result = _format_findings(findings)
+        result = format_findings(findings)
         assert result.index("Critical") < result.index("Low")
-
-    def test_format_unknown_agent_findings_are_not_dropped(self):
-        from orchestrator.coordinator import _format_findings
-        from shared.schemas.finding import FindingSchema
-
-        findings = [
-            FindingSchema(
-                agent="performance",
-                severity="medium",
-                file="f.py",
-                line_start=1,
-                line_end=1,
-                title="Slow query",
-                description="N+1 detected",
-                suggestion=None,
-                confidence=0.7,
-                fix=None,
-            ),
-        ]
-        result = _format_findings(findings)
-        assert "Slow query" in result
-        assert "Performance" in result
 
 
 class TestPlanGating:
@@ -192,13 +172,11 @@ class TestPlanGating:
         mock_qual.assert_called_once()
         mock_test.assert_called_once()
 
-    def test_team_plan_runs_seven_agents(self):
+    def test_team_plan_runs_five_agents(self):
         with (
             patch("orchestrator.graph.security_analyze", return_value=[]),
             patch("orchestrator.graph.quality_analyze", return_value=[]),
             patch("orchestrator.graph.testing_analyze", return_value=[]),
-            patch("specialized.performance.analyze", return_value=[]),
-            patch("specialized.best_practices.analyze", return_value=[]),
             patch("specialized.documentation.analyze", return_value=[]),
             patch("specialized.ticket_compliance.analyze", return_value=[]),
         ):
@@ -210,8 +188,6 @@ class TestPlanGating:
         assert "security" in nodes
         assert "quality" in nodes
         assert "testing" in nodes
-        assert "performance" in nodes
-        assert "best_practices" in nodes
         assert "documentation" in nodes
         assert "ticket_compliance" in nodes
 

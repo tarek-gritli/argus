@@ -1,10 +1,13 @@
 [project]
 name = "integrations"
 version = "0.1.0"
-description = "GitHub App and GitLab MR clients, Slack and Notion notification adapters"
+description = "GitHub App client - PR diff/comments/review posting, webhook signature validation; GitLab stub"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["PyGithub", "shared"]
+dependencies = [
+    "PyGithub",
+    "shared",
+]
 
 [build-system]
 requires = ["hatchling"]

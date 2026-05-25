@@ -1,19 +1,18 @@
 # Argus Integrations
 
-External service integrations for code platforms and notifications.
+External API clients. No business logic — pure I/O adapters.
 
-## Services
+## Active
 
-- **GitHub** - GitHub App client, PR comments, webhook handling
-- **GitLab** - Merge Request client, comments, events
-- **Slack** - Notification adapter for review results
-- **Notion** - Documentation sync adapter
+- **github/client.py** — `get_installation_client(installation_id)` → PyGithub client; installation tokens cached in-memory with TTL (3600s, refreshed 60s before expiry)
+- **github/pr.py** — `get_pr()`, `get_pr_diff()`, `get_pr_files()`, `get_pr_file_content()`, `post_issue_comment()`, `post_findings_as_review()`, `update_pr_body()`
+- **github/webhook.py** — `validate_signature(payload, signature, secret)` → bool
 
-## Usage
+## Stubs
 
-```python
-from integrations import GitHubClient, GitLabClient, SlackNotifier
+- **gitlab/** — Phase 2, not implemented
 
-gh = GitHubClient(app_id=..., private_key=...)
-slack = SlackNotifier(webhook_url=...)
-```
+## GitHub App Rules
+
+- Private key loaded from `GITHUB_PRIVATE_KEY_B64` env var (base64) via `get_settings()` — never read from `.pem` at request time
+- Use `Auth.AppAuth` + `GithubIntegration(auth=…)` — never the deprecated `integration_id=` style
