@@ -35,12 +35,13 @@ class Settings(BaseSettings):
     # Voyage AI
     voyage_api_key: str | None = None
 
-    # OAuth integrations
+    # Slack OAuth
     slack_client_id: str = ""
     slack_client_secret: str = ""
+
+    # Notion OAuth
     notion_client_id: str = ""
     notion_client_secret: str = ""
-    app_base_url: str = "http://localhost:8000"
 
     # Linear OAuth
     linear_client_id: str = ""
@@ -55,6 +56,7 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     anthropic_api_key: str | None = None
     gemini_api_key: str | None = None
+    app_base_url: str = "http://localhost:8000"
 
     @field_validator(*_REQUIRED_NON_EMPTY, mode="before")
     @classmethod
