@@ -106,7 +106,7 @@ def test_run_no_findings_posts_clean_message():
         run(VALID_PAYLOAD)
 
     body = mock_post.call_args[0][1]
-    assert "No issues" in body
+    assert "no issues" in body
 
 
 def test_run_raises_on_get_pr_failure():
@@ -143,9 +143,9 @@ def test_format_findings_groups_by_severity():
         ),
     ]
 
-    from orchestrator.coordinator import _format_findings
+    from orchestrator.formatter import format_findings
 
-    result = _format_findings(findings)
+    result = format_findings(findings)
 
     assert result.index("CRITICAL") < result.index("LOW")
     assert "Critical bug" in result
@@ -166,19 +166,19 @@ def test_format_findings_includes_suggestion():
         confidence=0.8,
     )
 
-    from orchestrator.coordinator import _format_findings
+    from orchestrator.formatter import format_findings
 
-    result = _format_findings([finding])
+    result = format_findings([finding])
 
     assert "Escape HTML." in result
 
 
 def test_format_findings_empty_returns_clean():
     """Empty findings list returns clean message."""
-    from orchestrator.coordinator import _format_findings
+    from orchestrator.formatter import format_findings
 
-    result = _format_findings([])
-    assert "No issues" in result
+    result = format_findings([])
+    assert "no issues" in result
 
 
 def test_run_persists_review_and_findings_when_org_id_present():

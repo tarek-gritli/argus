@@ -13,20 +13,11 @@ from specialized.documentation.pr_description import generate_pr_description
 from sqlalchemy import select
 from workers.connections import get_session_factory, run_async
 
+from .formatter import format_findings
 from .graph import run_review
 from .quota import check_and_increment_quota, get_or_create_billing
 
 logger = logging.getLogger(__name__)
-
-_AGENT_LABELS = {
-    "security": "Security",
-    "quality": "Quality",
-    "testing": "Testing",
-    "documentation": "Documentation",
-    "ticket_compliance": "Ticket Compliance",
-}
-
-_SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"]
 
 
 def run(payload: dict) -> None:
@@ -79,7 +70,7 @@ def run(payload: dict) -> None:
                 logger.warning("Failed to update PR description — continuing", exc_info=True)
 
         post_findings_as_review(pr, findings, pr_payload.head_sha)
-        post_issue_comment(pr, _format_findings(findings))
+        post_issue_comment(pr, format_findings(findings))
 
         if org_id:
             try:
@@ -168,37 +159,3 @@ async def _persist(org_id: str, pr_payload: PullRequestPayload, findings: list[F
                 )
             )
         await session.commit()
-
-
-def _format_findings(findings: list[FindingSchema]) -> str:
-    if not findings:
-        return "✅ No issues found across all review agents."
-
-    by_agent: dict[str, dict[str, list[FindingSchema]]] = {}
-    for f in findings:
-        by_agent.setdefault(f.agent, {}).setdefault(f.severity, []).append(f)
-
-    lines = ["## Argus Code Review\n"]
-
-    _AGENT_ORDER = ("security", "quality", "testing", "documentation")
-    ordered = [k for k in _AGENT_ORDER if k in by_agent]
-    ordered += [k for k in by_agent if k not in _AGENT_ORDER]
-
-    for agent_key in ordered:
-        lines.append(f"### {_AGENT_LABELS.get(agent_key, agent_key.title())} Review\n")
-        for severity in _SEVERITY_ORDER:
-            bucket = by_agent[agent_key].get(severity, [])
-            if not bucket:
-                continue
-            lines.append(f"#### {severity.upper()}\n")
-            for finding in bucket:
-                lines.append(f"**{finding.title}** (`{finding.file}:{finding.line_start}-{finding.line_end}`)\n")
-                lines.append(f"{finding.description}\n")
-                if finding.suggestion:
-                    lines.append(f"> Suggestion: {finding.suggestion}\n")
-                if finding.fix:
-                    lines.append(f"<details>\n<summary>💡 Suggested Fix: <i>{finding.fix.description}</i></summary>\n")
-                    lines.append(f"```\n{finding.fix.diff}\n```\n</details>\n")
-                lines.append("")
-
-    return "\n".join(lines)

@@ -20,11 +20,26 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _constraint_exists(conn, name: str, table: str) -> bool:
+    result = conn.execute(
+        sa.text("SELECT 1 FROM pg_constraint c JOIN pg_class t ON c.conrelid = t.oid WHERE c.conname = :name AND t.relname = :table"),
+        {"name": name, "table": table},
+    )
+    return result.scalar() is not None
+
+
 def upgrade() -> None:
     """Upgrade schema."""
-    op.drop_constraint(op.f("repos_installation_id_key"), "repos", type_="unique")
-    op.create_unique_constraint("uq_repos_installation_id_full_name", "repos", ["installation_id", "full_name"])
-    # uq_user_orgs_user_id_org_id already created inline in the user_orgs table definition
+    conn = op.get_bind()
+
+    if _constraint_exists(conn, "repos_installation_id_key", "repos"):
+        op.drop_constraint(op.f("repos_installation_id_key"), "repos", type_="unique")
+
+    if not _constraint_exists(conn, "uq_repos_installation_id_full_name", "repos"):
+        op.create_unique_constraint("uq_repos_installation_id_full_name", "repos", ["installation_id", "full_name"])
+
+    if not _constraint_exists(conn, "uq_user_orgs_user_id_org_id", "user_orgs"):
+        op.create_unique_constraint("uq_user_orgs_user_id_org_id", "user_orgs", ["user_id", "org_id"])
 
 
 def downgrade() -> None:
