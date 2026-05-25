@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -71,7 +70,9 @@ def _build_providers(installation_id: int, repo_full_name: str, org_id: str) -> 
             logger.debug("ticket_compliance: GitHub Issues provider unavailable", exc_info=True)
     if org_id:
         try:
-            providers.update(asyncio.run(_load_ticket_integrations(org_id)))
+            from workers.connections import run_async
+
+            providers.update(run_async(_load_ticket_integrations(org_id)))
         except Exception:
             logger.debug("ticket_compliance: failed to load DB ticket integrations", exc_info=True)
     return providers
