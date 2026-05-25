@@ -49,7 +49,11 @@ async def _load_ticket_integrations(org_id: str) -> dict:
                 cloud_id = config.get("cloud_id", "")
                 if token and cloud_id:
                     try:
-                        providers["jira"] = JiraProvider(access_token=decrypt(token), cloud_id=cloud_id)
+                        providers["jira"] = JiraProvider(
+                            access_token=decrypt(token),
+                            cloud_id=cloud_id,
+                            site_url=config.get("site_url", ""),
+                        )
                     except Exception:
                         logger.debug("ticket_compliance: failed to load Jira provider", exc_info=True)
     return providers

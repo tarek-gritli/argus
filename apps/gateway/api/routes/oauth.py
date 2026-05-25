@@ -59,6 +59,7 @@ async def _exchange_jira_code(code: str, redirect_uri: str) -> dict:
     site = resources[0] if resources else {}
     cloud_id = site.get("id", "")
     data["cloud_id"] = cloud_id
+    data["site_url"] = site.get("url", "")
     data["base_url"] = f"https://api.atlassian.com/ex/jira/{cloud_id}"
     return data
 
@@ -217,6 +218,7 @@ async def jira_callback(code: str, state: str, request: Request):
     config = {
         "access_token": encrypt(data["access_token"]),
         "cloud_id": data.get("cloud_id", ""),
+        "site_url": data.get("site_url", ""),
         "base_url": data.get("base_url", ""),
     }
     await _save_integration(org_id, "jira", config)
