@@ -10,6 +10,7 @@ _GH_ISSUE_RE = re.compile(
 
 # Jira: PROJECT-123 (uppercase letters + digits, e.g. PROJ-42, MYTEAM-1000)
 _JIRA_RE = re.compile(r"\b([A-Z][A-Z0-9]+-\d+)\b")
+_URL_RE = re.compile(r"https?://\S+")
 
 # Linear: linear.app/…/issue/<IDENTIFIER> URLs
 _LINEAR_URL_RE = re.compile(r"https://linear\.app/[^/]+/issue/([A-Za-z0-9_-]+)")
@@ -44,8 +45,10 @@ def extract_ticket_refs(title: str, body: str) -> list[tuple[str, str]]:
     for m in _GH_ISSUE_RE.finditer(text):
         _add("github_issues", m.group(1))
 
-    # Jira: only match outside Linear/Notion URLs to avoid false positives
+    url_spans = [m.span() for m in _URL_RE.finditer(text)]
     for m in _JIRA_RE.finditer(text):
-        _add("jira", m.group(1))
+        start, end = m.span()
+        if not any(us <= start and end <= ue for us, ue in url_spans):
+            _add("jira", m.group(1))
 
     return results
