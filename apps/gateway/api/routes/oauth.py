@@ -3,22 +3,16 @@ from __future__ import annotations
 import secrets
 import urllib.parse
 
-import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
+from integrations.oauth import notion as notion_oauth
+from integrations.oauth import slack as slack_oauth
 from shared.config import get_settings
 from shared.crypto import encrypt
 from shared.db import session_context
 from shared.models.org_integration import OrgIntegration
 
 router = APIRouter()
-
-_SLACK_AUTHORIZE_URL = "https://slack.com/oauth/v2/authorize"
-_SLACK_TOKEN_URL = "https://slack.com/api/oauth.v2.access"
-_SLACK_SCOPES = "incoming-webhook"
-
-_NOTION_AUTHORIZE_URL = "https://api.notion.com/v1/oauth/authorize"
-_NOTION_TOKEN_URL = "https://api.notion.com/v1/oauth/token"
 
 
 async def _store_state(request: Request, key: str, org_id: str) -> None:
@@ -39,33 +33,12 @@ async def _save_integration(org_id: str, kind: str, config: dict) -> None:
 
 async def _exchange_slack_code(code: str, redirect_uri: str) -> dict:
     settings = get_settings()
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            _SLACK_TOKEN_URL,
-            data={
-                "code": code,
-                "client_id": settings.slack_client_id,
-                "client_secret": settings.slack_client_secret,
-                "redirect_uri": redirect_uri,
-            },
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        if not data.get("ok"):
-            raise ValueError(f"Slack OAuth error: {data.get('error')}")
-        return data
+    return await slack_oauth.exchange_code(code, settings.slack_client_id, settings.slack_client_secret, redirect_uri)
 
 
 async def _exchange_notion_code(code: str, redirect_uri: str) -> dict:
     settings = get_settings()
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            _NOTION_TOKEN_URL,
-            auth=(settings.notion_client_id, settings.notion_client_secret),
-            json={"grant_type": "authorization_code", "code": code, "redirect_uri": redirect_uri},
-        )
-        resp.raise_for_status()
-        return resp.json()
+    return await notion_oauth.exchange_code(code, settings.notion_client_id, settings.notion_client_secret, redirect_uri)
 
 
 @router.get("/slack/authorize")
@@ -77,12 +50,12 @@ async def slack_authorize(org_id: str, request: Request):
     params = urllib.parse.urlencode(
         {
             "client_id": settings.slack_client_id,
-            "scope": _SLACK_SCOPES,
+            "scope": slack_oauth.SCOPES,
             "redirect_uri": redirect_uri,
             "state": nonce,
         }
     )
-    return RedirectResponse(f"{_SLACK_AUTHORIZE_URL}?{params}", status_code=302)
+    return RedirectResponse(f"{slack_oauth.AUTHORIZE_URL}?{params}", status_code=302)
 
 
 @router.get("/slack/callback")
@@ -92,7 +65,10 @@ async def slack_callback(code: str, state: str, request: Request):
     if not org_id:
         raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
     redirect_uri = f"{settings.app_base_url}/api/v1/oauth/slack/callback"
-    data = await _exchange_slack_code(code, redirect_uri)
+    try:
+        data = await _exchange_slack_code(code, redirect_uri)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     webhook = data.get("incoming_webhook", {})
     config = {
         "token": encrypt(data["access_token"]),
@@ -118,7 +94,7 @@ async def notion_authorize(org_id: str, request: Request):
             "state": nonce,
         }
     )
-    return RedirectResponse(f"{_NOTION_AUTHORIZE_URL}?{params}", status_code=302)
+    return RedirectResponse(f"{notion_oauth.AUTHORIZE_URL}?{params}", status_code=302)
 
 
 @router.get("/notion/callback")

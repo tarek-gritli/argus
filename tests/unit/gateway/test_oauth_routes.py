@@ -67,6 +67,29 @@ def test_slack_callback_saves_integration():
     assert resp.json() == {"status": "connected"}
 
 
+def test_slack_callback_ok_false_returns_400():
+    app = _make_app()
+
+    with (
+        patch("api.routes.oauth.get_settings") as mock_settings,
+        patch("api.routes.oauth._pop_state", new=AsyncMock(return_value="org-1")),
+        patch(
+            "api.routes.oauth._exchange_slack_code",
+            new=AsyncMock(side_effect=ValueError("Slack OAuth error: invalid_code")),
+        ),
+    ):
+        mock_settings.return_value.app_base_url = "https://app.example.com"
+
+        async def run():
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                return await client.get("/api/v1/oauth/slack/callback?code=bad&state=nonce123")
+
+        resp = asyncio.run(run())
+
+    assert resp.status_code == 400
+    assert "invalid_code" in resp.json()["detail"]
+
+
 def test_slack_callback_invalid_state_returns_400():
     app = _make_app()
 

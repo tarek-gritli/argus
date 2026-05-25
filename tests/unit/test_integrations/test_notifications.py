@@ -42,23 +42,29 @@ class TestAppendToNotionDb:
     def _run(self, coro):
         return asyncio.run(coro)
 
-    def test_creates_page_in_database(self):
+    def _mock_httpx(self):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
         mock_client = AsyncMock()
-        with patch("integrations.notifications.notion.AsyncClient") as mock_cls:
-            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_ctx = MagicMock()
+        mock_ctx.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_ctx.__aexit__ = AsyncMock(return_value=False)
+        return mock_ctx, mock_client
+
+    def test_creates_page_in_database(self):
+        mock_ctx, mock_client = self._mock_httpx()
+        with patch("integrations.notifications.notion.httpx.AsyncClient", return_value=mock_ctx):
             self._run(append_to_notion_db("secret_key", "db-uuid", _summary()))
-        mock_client.pages.create.assert_called_once()
-        call_kwargs = mock_client.pages.create.call_args.kwargs
-        assert call_kwargs["parent"] == {"database_id": "db-uuid"}
+        mock_client.post.assert_called_once()
+        _, kwargs = mock_client.post.call_args
+        assert kwargs["json"]["parent"] == {"database_id": "db-uuid"}
 
     def test_page_properties_include_findings(self):
-        mock_client = AsyncMock()
-        with patch("integrations.notifications.notion.AsyncClient") as mock_cls:
-            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_ctx, mock_client = self._mock_httpx()
+        with patch("integrations.notifications.notion.httpx.AsyncClient", return_value=mock_ctx):
             self._run(append_to_notion_db("secret_key", "db-uuid", _summary()))
-        props = mock_client.pages.create.call_args.kwargs["properties"]
+        props = mock_client.post.call_args.kwargs["json"]["properties"]
         assert props["Findings"]["number"] == 5
         assert props["Critical"]["number"] == 1
         assert props["High"]["number"] == 2

@@ -98,26 +98,20 @@ class TestLinearProvider:
 
 
 class TestNotionTicketProvider:
-    def _provider(self):
-        mock_client = MagicMock()
-        with patch("specialized.ticket_compliance.providers.notion_ticket.Client", return_value=mock_client):
-            provider = NotionTicketProvider("secret_key")
-        provider._client = mock_client
-        return provider, mock_client
-
     def test_fetch_returns_ticket_data(self):
-        provider, mock_client = self._provider()
-        mock_client.pages.retrieve.return_value = {
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {
             "properties": {"Name": {"type": "title", "title": [{"plain_text": "My Task"}]}},
             "url": "https://www.notion.so/My-Task-abc123",
         }
-        result = provider.fetch("abc123")
+        with patch("specialized.ticket_compliance.providers.notion_ticket.httpx.get", return_value=mock_response):
+            result = NotionTicketProvider("secret_key").fetch("abc123")
         assert result is not None
         assert result.title == "My Task"
         assert result.url == "https://www.notion.so/My-Task-abc123"
 
     def test_fetch_returns_none_on_error(self):
-        provider, mock_client = self._provider()
-        mock_client.pages.retrieve.side_effect = Exception("API error")
-        result = provider.fetch("abc123")
+        with patch("specialized.ticket_compliance.providers.notion_ticket.httpx.get", side_effect=Exception("API error")):
+            result = NotionTicketProvider("secret_key").fetch("abc123")
         assert result is None
