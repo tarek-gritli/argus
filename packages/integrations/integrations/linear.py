@@ -24,4 +24,7 @@ def fetch_issue(access_token: str, identifier: str) -> dict | None:
         timeout=10,
     )
     resp.raise_for_status()
-    return resp.json().get("data", {}).get("issue")
+    body = resp.json()
+    if body.get("errors"):
+        raise ValueError(f"Linear GraphQL error: {body['errors']}")
+    return body.get("data", {}).get("issue")

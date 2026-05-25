@@ -23,3 +23,28 @@ async def test_exchange_code_returns_access_token():
     _, kwargs = mock_client.post.call_args
     assert kwargs["data"]["grant_type"] == "authorization_code"
     assert kwargs["data"]["code"] == "code123"
+
+
+def test_fetch_issue_raises_on_graphql_errors():
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_response.json.return_value = {"errors": [{"message": "Unauthorized"}], "data": None}
+
+    with patch("integrations.linear.httpx.post", return_value=mock_response):
+        from integrations.linear import fetch_issue
+
+        with pytest.raises(ValueError, match="Linear GraphQL error"):
+            fetch_issue("bad_token", "ENG-1")
+
+
+def test_fetch_issue_returns_none_when_data_issue_is_null():
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_response.json.return_value = {"data": {"issue": None}}
+
+    with patch("integrations.linear.httpx.post", return_value=mock_response):
+        from integrations.linear import fetch_issue
+
+        result = fetch_issue("tok", "ENG-404")
+
+    assert result is None
