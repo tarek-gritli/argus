@@ -107,15 +107,15 @@ def test_pipeline_detects_findings_and_posts_comment():
     mock_post.assert_called_once()
     body: str = mock_post.call_args[0][1]
 
-    assert "Security Review" in body
-    assert "No issues found" not in body
+    assert "Argus Code Review" in body
+    assert "no issues" not in body
     assert "Hardcoded Secret" in body
     assert any(term in body for term in ["Injection", "SUBPROCESS", "SQL"])
 
     # Assert fix formatting
     assert "<details>" in body
-    assert "💡 Suggested Fix: <i>Fixed injection</i>" in body
-    assert "```\nsafe code\n```" in body
+    assert "🔧 Suggested fix — <i>Fixed injection</i>" in body
+    assert "```diff\nsafe code\n```" in body
 
 
 def test_pipeline_clean_diff_posts_no_issues():
@@ -140,7 +140,7 @@ def test_pipeline_clean_diff_posts_no_issues():
 
     mock_post.assert_called_once()
     body: str = mock_post.call_args[0][1]
-    assert "No issues found" in body
+    assert "no issues" in body
 
 
 def test_pipeline_comment_severity_ordering():

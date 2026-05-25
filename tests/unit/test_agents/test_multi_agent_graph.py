@@ -88,14 +88,14 @@ class TestBuildReviewGraph:
 
 class TestFormatFindings:
     def test_format_groups_by_agent_and_severity(self):
-        from orchestrator.coordinator import _format_findings
+        from orchestrator.formatter import format_findings
 
         findings = [
             _make_finding("security", "SQL Injection"),
             _make_finding("quality", "High complexity"),
             _make_finding("testing", "Missing test"),
         ]
-        result = _format_findings(findings)
+        result = format_findings(findings)
         assert "Security" in result
         assert "Quality" in result
         assert "Testing" in result
@@ -104,13 +104,13 @@ class TestFormatFindings:
         assert "Missing test" in result
 
     def test_format_no_findings_returns_all_clear(self):
-        from orchestrator.coordinator import _format_findings
+        from orchestrator.formatter import format_findings
 
-        result = _format_findings([])
-        assert "No issues" in result
+        result = format_findings([])
+        assert "no issues" in result
 
     def test_format_severity_ordering(self):
-        from orchestrator.coordinator import _format_findings
+        from orchestrator.formatter import format_findings
         from shared.schemas.finding import FindingSchema
 
         findings = [
@@ -139,7 +139,7 @@ class TestFormatFindings:
                 fix=None,
             ),
         ]
-        result = _format_findings(findings)
+        result = format_findings(findings)
         assert result.index("Critical") < result.index("Low")
 
 
