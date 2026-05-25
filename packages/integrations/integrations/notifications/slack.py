@@ -14,9 +14,13 @@ def post_to_slack(webhook_url: str, summary: ReviewSummary) -> None:
 
 
 def post_to_slack_token(token: str, channel: str, summary: ReviewSummary) -> None:
-    httpx.post(
+    resp = httpx.post(
         "https://slack.com/api/chat.postMessage",
         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
         json={"channel": channel, "text": _build_message(summary)},
         timeout=10,
-    ).raise_for_status()
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if not data.get("ok"):
+        raise ValueError(f"Slack API error: {data.get('error')}")

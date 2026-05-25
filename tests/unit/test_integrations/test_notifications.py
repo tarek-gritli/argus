@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from integrations.notifications.notion import append_to_notion_db
 from integrations.notifications.schemas import ReviewSummary
-from integrations.notifications.slack import post_to_slack
+from integrations.notifications.slack import post_to_slack, post_to_slack_token
 
 
 def _summary() -> ReviewSummary:
@@ -36,6 +36,26 @@ class TestPostToSlack:
             assert "acme/api" in text
             assert "42" in text
             assert "5" in text
+
+
+class TestPostToSlackToken:
+    def test_raises_on_ok_false(self):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"ok": False, "error": "channel_not_found"}
+        with patch("integrations.notifications.slack.httpx.post", return_value=mock_response):
+            try:
+                post_to_slack_token("xoxb-tok", "C123", _summary())
+                assert False, "expected ValueError"
+            except ValueError as exc:
+                assert "channel_not_found" in str(exc)
+
+    def test_succeeds_on_ok_true(self):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"ok": True}
+        with patch("integrations.notifications.slack.httpx.post", return_value=mock_response):
+            post_to_slack_token("xoxb-tok", "C123", _summary())
 
 
 class TestAppendToNotionDb:
