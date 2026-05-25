@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from shared.models import Org, Repo
+from shared.models.org_billing import OrgBilling
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +20,7 @@ async def get_or_create_org(session: AsyncSession, installation_id: int, repo_fu
         await session.flush()
         repo = Repo(org_id=org.id, full_name=repo_full_name, installation_id=installation_id)
         session.add(repo)
+        session.add(OrgBilling(org_id=org.id))
         await session.commit()
         return org.id
     except IntegrityError:
@@ -36,6 +38,9 @@ async def get_or_create_org(session: AsyncSession, installation_id: int, repo_fu
             raise
         try:
             session.add(Repo(org_id=org.id, full_name=repo_full_name, installation_id=installation_id))
+            billing_result = await session.execute(select(OrgBilling).where(OrgBilling.org_id == org.id))
+            if billing_result.scalar_one_or_none() is None:
+                session.add(OrgBilling(org_id=org.id))
             await session.commit()
             return org.id
         except IntegrityError:

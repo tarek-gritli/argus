@@ -36,9 +36,9 @@ def test_free_plan_quota():
 
 def test_pro_plan_quota_per_seat():
     billing = OrgBilling(org_id="b", plan="pro", seat_count=5)
-    assert billing.monthly_limit == 100
+    assert billing.monthly_limit == 500  # 5 × 100
 
 
 def test_team_plan_quota_per_seat():
     billing = OrgBilling(org_id="c", plan="team", seat_count=10)
-    assert billing.monthly_limit == 200
+    assert billing.monthly_limit == 1000  # 10 × 100

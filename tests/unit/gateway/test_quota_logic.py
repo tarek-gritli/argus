@@ -109,9 +109,10 @@ class TestCheckAndIncrementQuota:
 
         from orchestrator.quota import check_and_increment_quota
 
-        allowed = await check_and_increment_quota(session, billing)
+        allowed, plan = await check_and_increment_quota(session, billing)
 
         assert allowed is True
+        assert plan == "free"
         assert billing.reviews_used_this_month == 11
         session.commit.assert_called_once()
 
@@ -122,9 +123,10 @@ class TestCheckAndIncrementQuota:
 
         from orchestrator.quota import check_and_increment_quota
 
-        allowed = await check_and_increment_quota(session, billing)
+        allowed, plan = await check_and_increment_quota(session, billing)
 
         assert allowed is False
+        assert plan == "free"
         assert billing.reviews_used_this_month == 50  # not incremented
         session.commit.assert_not_called()
 
@@ -135,7 +137,7 @@ class TestCheckAndIncrementQuota:
 
         from orchestrator.quota import check_and_increment_quota
 
-        allowed = await check_and_increment_quota(session, billing)
+        allowed, _ = await check_and_increment_quota(session, billing)
 
         assert allowed is False
 
@@ -147,7 +149,7 @@ class TestCheckAndIncrementQuota:
 
         from orchestrator.quota import check_and_increment_quota
 
-        allowed = await check_and_increment_quota(session, billing)
+        allowed, _ = await check_and_increment_quota(session, billing)
 
         assert allowed is True
         assert billing.reviews_used_this_month == 1  # reset to 0, then incremented
@@ -170,35 +172,36 @@ class TestCheckAndIncrementQuota:
 
     @pytest.mark.asyncio
     async def test_pro_plan_seat_based_limit(self):
-        billing = _billing(plan="pro", seat_count=5, reviews_used=99)  # limit=100
+        billing = _billing(plan="pro", seat_count=5, reviews_used=499)  # limit=500 (5×100)
         session = _session(billing)
 
         from orchestrator.quota import check_and_increment_quota
 
-        allowed = await check_and_increment_quota(session, billing)
+        allowed, plan = await check_and_increment_quota(session, billing)
 
         assert allowed is True
-        assert billing.reviews_used_this_month == 100
+        assert plan == "pro"
+        assert billing.reviews_used_this_month == 500
 
     @pytest.mark.asyncio
     async def test_pro_plan_at_seat_limit_blocked(self):
-        billing = _billing(plan="pro", seat_count=5, reviews_used=100)  # limit=100
+        billing = _billing(plan="pro", seat_count=5, reviews_used=500)  # limit=500 (5×100)
         session = _session(billing)
 
         from orchestrator.quota import check_and_increment_quota
 
-        allowed = await check_and_increment_quota(session, billing)
+        allowed, _ = await check_and_increment_quota(session, billing)
 
         assert allowed is False
 
     @pytest.mark.asyncio
     async def test_team_plan_seat_based_limit(self):
-        billing = _billing(plan="team", seat_count=10, reviews_used=199)  # limit=200
+        billing = _billing(plan="team", seat_count=10, reviews_used=999)  # limit=1000 (10×100)
         session = _session(billing)
 
         from orchestrator.quota import check_and_increment_quota
 
-        allowed = await check_and_increment_quota(session, billing)
+        allowed, _ = await check_and_increment_quota(session, billing)
 
         assert allowed is True
 
@@ -209,7 +212,7 @@ class TestCheckAndIncrementQuota:
 
         from orchestrator.quota import check_and_increment_quota
 
-        allowed = await check_and_increment_quota(session, billing)
+        allowed, _ = await check_and_increment_quota(session, billing)
 
         assert allowed is True
         assert billing.reviews_used_this_month == 1

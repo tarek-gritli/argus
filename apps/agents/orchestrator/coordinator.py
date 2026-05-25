@@ -56,8 +56,9 @@ def run(payload: dict) -> None:
             logger.info("Skipping review — head_sha %s already reviewed", pr_payload.head_sha[:8])
             return
 
+        plan = "free"
         if org_id:
-            allowed = run_async(_check_quota(org_id))
+            allowed, plan = run_async(_check_quota(org_id))
             if not allowed:
                 post_issue_comment(pr, "⚠️ Argus review quota reached for this billing period. Upgrade your plan to continue.")
                 return
@@ -65,7 +66,7 @@ def run(payload: dict) -> None:
         diff = get_pr_diff(pr)
         repo_id = run_async(_get_repo_id_for_run(pr_payload)) if org_id else None
         context = run_async(_fetch_context(repo_id=repo_id, diff=diff)) if repo_id else ContextBundle.empty()
-        findings = run_review(files=files, diff=diff, pr_payload=pr_payload, context=context)
+        findings = run_review(files=files, diff=diff, pr_payload=pr_payload, plan=plan, context=context)
 
         if org_id and repo_id:
             rejected_keys = run_async(get_rejected_finding_keys(org_id=org_id, repo_id=repo_id))
@@ -96,10 +97,11 @@ def run(payload: dict) -> None:
                 run_async(_persist(org_id=org_id, pr_payload=pr_payload, findings=findings))
             except Exception:
                 logger.exception("Review persisted to GitHub, but DB persistence failed")
-            try:
-                run_async(_notify(org_id=org_id, pr_payload=pr_payload, pr=pr, findings=findings))
-            except Exception:
-                logger.exception("Notifications failed — review still posted")
+            if plan in {"team", "enterprise"}:
+                try:
+                    run_async(_notify(org_id=org_id, pr_payload=pr_payload, pr=pr, findings=findings))
+                except Exception:
+                    logger.exception("Notifications failed — review still posted")
 
         if trace is not None:
             try:
@@ -149,7 +151,7 @@ async def _fetch_context(repo_id: str, diff: str) -> ContextBundle:
         return ContextBundle.empty()
 
 
-async def _check_quota(org_id: str) -> bool:
+async def _check_quota(org_id: str) -> tuple[bool, str]:
     async with get_session_factory()() as session:
         billing = await get_or_create_billing(session, org_id)
         return await check_and_increment_quota(session, billing)

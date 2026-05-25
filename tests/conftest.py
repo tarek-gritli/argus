@@ -14,6 +14,10 @@ os.environ["GITHUB_CLIENT_ID"] = "github_client_id"
 os.environ["GITHUB_CLIENT_SECRET"] = "github_client_secret"
 os.environ["JWT_SECRET_KEY"] = "jwt_secret_key"
 os.environ["SECRET_ENCRYPTION_KEY"] = "Oy-9hVTGzq-XfkjHqVNmO7wRJQnBdQlEzPMktfVi5dI="
+os.environ["STRIPE_SECRET_KEY"] = "sk_test_placeholder"
+os.environ["STRIPE_WEBHOOK_SECRET"] = "whsec_test_placeholder"
+os.environ["STRIPE_PRO_PRICE_ID"] = "price_pro_placeholder"
+os.environ["STRIPE_TEAM_PRICE_ID"] = "price_team_placeholder"
 
 
 @pytest.fixture

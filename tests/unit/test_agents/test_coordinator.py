@@ -194,11 +194,11 @@ def test_run_persists_review_and_findings_when_org_id_present():
         patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
         patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
         patch("orchestrator.coordinator.get_pr_file_content", return_value="code"),
-        patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]),
+        patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]) as mock_review,
         patch("orchestrator.coordinator.run_fix_pipeline", return_value=[SAMPLE_FINDING]),
         patch("orchestrator.coordinator.post_findings_as_review"),
         patch("orchestrator.coordinator.post_issue_comment"),
-        patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=True)),
+        patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=(True, "pro"))),
         patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
         patch("orchestrator.coordinator._get_repo_id_for_run", new=AsyncMock(return_value="repo-uuid")),
         patch("orchestrator.coordinator._fetch_context", new=AsyncMock(return_value=ContextBundle.empty())),
@@ -210,6 +210,7 @@ def test_run_persists_review_and_findings_when_org_id_present():
         run(payload_with_org)
 
     mock_persist.assert_called_once()
+    assert mock_review.call_args.kwargs["plan"] == "pro"
 
 
 def test_quota_exceeded_posts_comment_and_returns():
@@ -220,7 +221,7 @@ def test_quota_exceeded_posts_comment_and_returns():
         patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
         patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
         patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
-        patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=False)),
+        patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=(False, "free"))),
         patch("orchestrator.coordinator.run_review") as mock_review,
         patch("orchestrator.coordinator.post_issue_comment") as mock_post,
     ):
@@ -265,7 +266,7 @@ def test_run_proceeds_when_head_sha_not_yet_reviewed():
         patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
         patch("orchestrator.coordinator.get_pr_file_content", return_value="code"),
         patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
-        patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=True)),
+        patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=(True, "pro"))),
         patch("orchestrator.coordinator._get_repo_id_for_run", new=AsyncMock(return_value="repo_abc")),
         patch("orchestrator.coordinator._fetch_context", new=AsyncMock(return_value=ContextBundle.empty())),
         patch("orchestrator.coordinator.get_rejected_finding_keys", new=AsyncMock(return_value=set())),
@@ -280,6 +281,59 @@ def test_run_proceeds_when_head_sha_not_yet_reviewed():
         run({**VALID_PAYLOAD, "org_id": "org-1"})
 
     mock_post.assert_called_once()
+
+
+def test_notify_called_for_team_plan():
+    """_notify is invoked for team plan but not for pro."""
+    mock_pr = _make_mock_pr()
+
+    # team plan → notify should be called
+    with (
+        _patch_run_async(),
+        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
+        patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
+        patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
+        patch("orchestrator.coordinator.get_pr_file_content", return_value="code"),
+        patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
+        patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=(True, "team"))),
+        patch("orchestrator.coordinator._get_repo_id_for_run", new=AsyncMock(return_value="repo_abc")),
+        patch("orchestrator.coordinator._fetch_context", new=AsyncMock(return_value=ContextBundle.empty())),
+        patch("orchestrator.coordinator.get_rejected_finding_keys", new=AsyncMock(return_value=set())),
+        patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]),
+        patch("orchestrator.coordinator.run_fix_pipeline", return_value=[SAMPLE_FINDING]),
+        patch("orchestrator.coordinator.post_findings_as_review"),
+        patch("orchestrator.coordinator.post_issue_comment"),
+        patch("orchestrator.coordinator._persist", new=AsyncMock()),
+        patch("orchestrator.coordinator._notify", new=AsyncMock()) as mock_notify,
+    ):
+        from orchestrator.coordinator import run
+
+        run({**VALID_PAYLOAD, "org_id": "org-1"})
+
+    mock_notify.assert_called_once()
+
+    # pro plan → notify should NOT be called
+    with (
+        _patch_run_async(),
+        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
+        patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
+        patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
+        patch("orchestrator.coordinator.get_pr_file_content", return_value="code"),
+        patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
+        patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=(True, "pro"))),
+        patch("orchestrator.coordinator._get_repo_id_for_run", new=AsyncMock(return_value="repo_abc")),
+        patch("orchestrator.coordinator._fetch_context", new=AsyncMock(return_value=ContextBundle.empty())),
+        patch("orchestrator.coordinator.get_rejected_finding_keys", new=AsyncMock(return_value=set())),
+        patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]),
+        patch("orchestrator.coordinator.run_fix_pipeline", return_value=[SAMPLE_FINDING]),
+        patch("orchestrator.coordinator.post_findings_as_review"),
+        patch("orchestrator.coordinator.post_issue_comment"),
+        patch("orchestrator.coordinator._persist", new=AsyncMock()),
+        patch("orchestrator.coordinator._notify", new=AsyncMock()) as mock_notify_pro,
+    ):
+        run({**VALID_PAYLOAD, "org_id": "org-1"})
+
+    mock_notify_pro.assert_not_called()
 
 
 def test_run_skips_persist_when_no_org_id():

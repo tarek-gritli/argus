@@ -24,8 +24,8 @@ async def get_or_create_billing(session: AsyncSession, org_id: str) -> OrgBillin
     return billing
 
 
-async def check_and_increment_quota(session: AsyncSession, billing: OrgBilling) -> bool:
-    """Return True if review is allowed, False if quota exceeded. Resets monthly count if needed."""
+async def check_and_increment_quota(session: AsyncSession, billing: OrgBilling) -> tuple[bool, str]:
+    """Return (allowed, plan). Resets monthly count if needed."""
     now = datetime.now(timezone.utc)
     if now >= billing.quota_reset_at:
         billing.reviews_used_this_month = 0
@@ -33,8 +33,8 @@ async def check_and_increment_quota(session: AsyncSession, billing: OrgBilling) 
         await session.commit()
 
     if billing.reviews_used_this_month >= billing.monthly_limit:
-        return False
+        return False, billing.plan
 
     billing.reviews_used_this_month += 1
     await session.commit()
-    return True
+    return True, billing.plan

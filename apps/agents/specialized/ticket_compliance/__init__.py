@@ -72,7 +72,12 @@ def _build_providers(installation_id: int, repo_full_name: str, org_id: str) -> 
         try:
             from workers.connections import run_async
 
-            providers.update(run_async(_load_ticket_integrations(org_id)))
+            coro = _load_ticket_integrations(org_id)
+            try:
+                providers.update(run_async(coro))
+            except RuntimeError:
+                coro.close()
+                raise
         except Exception:
             logger.debug("ticket_compliance: failed to load DB ticket integrations", exc_info=True)
     return providers
@@ -89,6 +94,8 @@ def analyze(files: list[Any], diff: str, pr_payload: "PullRequestPayload") -> li
         pr_title=getattr(pr_payload, "pr_title", None) or "",
         pr_description=getattr(pr_payload, "pr_body", None) or "",
     )
-    org_id = getattr(pr_payload, "org_id", None) or ""
+    org_id = getattr(pr_payload, "org_id", None)
+    if not isinstance(org_id, str):
+        org_id = ""
     providers = _build_providers(pr_payload.installation_id, pr_payload.repo_full_name, org_id)
     return run_ticket_compliance_agent(agent_input, providers)
