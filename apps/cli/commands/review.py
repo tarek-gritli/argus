@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import subprocess
+import time
 from typing import Optional
 
 import typer
@@ -18,6 +20,9 @@ _SEVERITY_COLOR = {
     "low": "cyan",
     "info": "dim",
 }
+
+_POLL_INTERVALS = [0.5, 1, 2, 3, 5, 5, 5, 5, 5, 5]
+_POLL_TIMEOUT = 120
 
 
 def review(files: Optional[list[str]] = typer.Argument(default=None)):
@@ -41,16 +46,72 @@ def review(files: Optional[list[str]] = typer.Argument(default=None)):
     if resp.status_code == 401:
         typer.echo("Session expired. Run `argus login` again.", err=True)
         raise typer.Exit(code=1)
-    if resp.status_code != 200:
+    if resp.status_code != 202:
         typer.echo(f"Review failed ({resp.status_code}): {resp.text}", err=True)
         raise typer.Exit(code=1)
 
-    findings = resp.json().get("findings", [])
+    data = resp.json()
+    stream_url = data["stream_url"]
+    status_url = data["status_url"]
+
+    findings: list[dict] = []
+    sse_ok = False
+    event = ""
+
+    try:
+        with client.stream("GET", stream_url) as stream_resp:
+            if stream_resp.status_code == 200:
+                sse_ok = True
+                for line in stream_resp.iter_lines():
+                    if not line:
+                        continue
+                    if line.startswith("event: "):
+                        event = line[7:].strip()
+                    elif line.startswith("data: "):
+                        raw = line[6:].strip()
+                        payload = json.loads(raw)
+                        if event == "finding":
+                            findings.append(payload)
+                            _print_finding_live(payload)
+                        elif event == "done":
+                            break
+                        elif event == "error":
+                            typer.echo(f"Review error: {payload.get('message', 'unknown')}", err=True)
+                            raise typer.Exit(code=1)
+    except typer.Exit:
+        raise
+    except Exception:
+        sse_ok = False
+
+    if not sse_ok:
+        findings = _poll_for_result(client, status_url)
+
     if not findings:
         typer.echo("No issues found.")
         return
 
-    _print_findings(findings)
+    if sse_ok:
+        typer.echo(f"\n{len(findings)} finding(s) found.")
+    else:
+        _print_findings(findings)
+
+
+def _poll_for_result(client, status_url: str) -> list[dict]:
+    typer.echo("Streaming unavailable, polling for results...")
+    elapsed = 0.0
+    intervals = list(_POLL_INTERVALS)
+    while elapsed <= _POLL_TIMEOUT:
+        interval = intervals.pop(0) if intervals else 5.0
+        time.sleep(interval)
+        elapsed += interval
+        resp = client.get(status_url)
+        if resp.status_code == 200:
+            return resp.json().get("findings", [])
+        if resp.status_code != 202:
+            typer.echo(f"Polling error ({resp.status_code}): {resp.text}", err=True)
+            raise typer.Exit(code=1)
+    typer.echo("Review timed out after 120s.", err=True)
+    raise typer.Exit(code=1)
 
 
 def _get_diff(files: list[str] | None = None) -> str:
@@ -62,6 +123,12 @@ def _get_diff(files: list[str] | None = None) -> str:
         return result.stdout
     except subprocess.CalledProcessError:
         return ""
+
+
+def _print_finding_live(f: dict) -> None:
+    sev = f.get("severity", "info").lower()
+    color = _SEVERITY_COLOR.get(sev, "white")
+    console.print(f"[{color}]{sev.upper()}[/{color}] [{f.get('file', '')}:{f.get('line_start', '')}] {f.get('title', '')} — {f.get('suggestion') or ''}")
 
 
 def _print_findings(findings: list[dict]) -> None:
