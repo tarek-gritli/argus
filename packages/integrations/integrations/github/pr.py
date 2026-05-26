@@ -6,6 +6,27 @@ from github.PullRequest import PullRequest
 
 from .client import get_installation_client
 
+_MAX_ISSUE_COMMENT_LENGTH = 60000
+
+
+def _chunk_comment_body(body: str, max_length: int = _MAX_ISSUE_COMMENT_LENGTH) -> list[str]:
+    if len(body) <= max_length:
+        return [body]
+
+    chunks: list[str] = []
+    current = ""
+    for line in body.splitlines(keepends=True):
+        if current and len(current) + len(line) > max_length:
+            chunks.append(current.rstrip("\n"))
+            current = line
+        else:
+            current += line
+
+    if current:
+        chunks.append(current.rstrip("\n"))
+
+    return chunks or [body[:max_length]]
+
 
 def get_pr(repo_full_name: str, pr_number: int, installation_id: int) -> PullRequest:
     gh: Github = get_installation_client(installation_id)
@@ -45,7 +66,14 @@ def get_pr_diff(pr: PullRequest) -> str:
 
 def post_issue_comment(pr: PullRequest, body: str) -> None:
     """Post a comment on a PR."""
-    pr.create_issue_comment(body)
+    chunks = _chunk_comment_body(body)
+    if len(chunks) == 1:
+        pr.create_issue_comment(chunks[0])
+        return
+
+    total = len(chunks)
+    for index, chunk in enumerate(chunks, start=1):
+        pr.create_issue_comment(f"Review summary part {index}/{total}\n\n{chunk}")
 
 
 def update_pr_body(pr: PullRequest, body: str) -> None:
