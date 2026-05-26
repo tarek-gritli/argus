@@ -64,7 +64,7 @@ Multi-agent AI platform that automates code review at the pull-request level.
 Deploys specialized agents in parallel, synthesizes findings into actionable feedback,
 and learns from accepted/rejected suggestions over time.
 
-**Current build phase: Phase 4 complete**
+**Current build phase: Phase 5 (CLI — login + review)**
 - API gateway + GitHub webhook handler ✅
 - Orchestrator with three parallel agents (Security, Quality, Testing) — full loop end-to-end ✅
 - Fix engine (generator → validator → scorer → pipeline) ✅
@@ -76,7 +76,8 @@ and learns from accepted/rejected suggestions over time.
 - Semantic context injection via Qdrant + Voyage AI ✅
 - AST-based code chunking (9 languages) ✅
 - Blue-green Qdrant collection swap for zero-downtime reindex ✅
-- No CLI, no dashboard yet
+- CLI `argus login` + `argus review` — browser OAuth flow + async local review via SSE ✅
+- No dashboard yet
 
 ---
 
@@ -141,7 +142,7 @@ argus/
 ├── apps/
 │   ├── gateway/        # FastAPI — ONLY public-facing HTTP service
 │   ├── agents/         # All AI execution: orchestration, agents, fix engine
-│   ├── cli/            # Typer CLI (Phase 7 — do not build)
+│   ├── cli/            # Typer CLI — login + review commands active ✅
 │   └── web/            # Next.js dashboard (Phase 6 — do not build)
 ├── packages/
 │   ├── shared/         # Cross-app models, schemas, DB session, queue interface
@@ -169,30 +170,40 @@ It does NOT process findings.
 
 ```
 apps/gateway/
-├── main.py                  # FastAPI app init, router registration, lifespan hooks
-├── routers/
-│   ├── webhooks.py          # POST /api/v1/webhooks/github — ONLY active route in Phase 1
-│   ├── reviews.py           # Review endpoints (Phase 2 — stub only)
-│   └── auth.py              # OAuth routes (Phase 3 — stub only)
-├── middleware/
-│   ├── auth.py              # JWT validation (Phase 3 — stub, do nothing)
-│   ├── rate_limit.py        # Redis rate limiter (Phase 3 — stub, do nothing)
-│   └── quota.py             # Quota enforcement (Phase 3 — stub, do nothing)
-└── schemas/
-    └── github.py            # Pydantic models for GitHub webhook payloads
+├── gateway_main.py          # FastAPI app init, router registration, lifespan hooks
+├── auth_utils.py            # JWT decode helpers
+├── org_resolver.py          # Org resolution from JWT claims
+├── api/
+│   ├── __init__.py          # api_router — aggregates all sub-routers
+│   └── routes/
+│       ├── webhooks.py      # POST /api/v1/webhooks/github — GitHub PR webhook
+│       ├── stripe_webhooks.py # POST /api/v1/webhooks/stripe — Stripe events
+│       ├── auth.py          # JWT auth endpoints
+│       ├── auth_cli.py      # CLI session: POST /session, GET /token/{session_id}
+│       ├── oauth.py         # GitHub OAuth callback
+│       ├── reviews.py       # GET /api/v1/reviews/
+│       ├── reviews_local.py # POST/GET/SSE /api/v1/reviews/local — async local review
+│       ├── billing.py       # Billing + quota endpoints
+│       ├── integrations.py  # Integration management
+│       ├── admin.py         # Admin endpoints
+│       └── dashboard.py     # Dashboard data endpoints
+└── middleware/
+    ├── auth.py              # JWT validation middleware — active ✅
+    ├── rate_limit.py        # Redis rate limiter — active ✅
+    └── quota.py             # Quota enforcement — active ✅
 ```
 
-### The only active route in Phase 1:
+### Active routes (summary):
 
 ```
-POST /api/v1/webhooks/github
-  1. Validate X-Hub-Signature-256 HMAC-SHA256 — 403 if invalid
-  2. Filter: only pull_request events with action in [opened, synchronize, reopened]
-     → Return 200 immediately and do nothing for all other events
-  3. Deduplicate on X-GitHub-Delivery header via Redis — discard if already seen
-  4. Extract: action, repo_full_name, pr_number, head_sha, base_sha, installation_id
-  5. Enqueue Celery task: review_pr(payload)
-  6. Return 200 — no further processing in the handler
+POST /api/v1/webhooks/github     — validate HMAC, filter PR events, enqueue review_pr
+POST /api/v1/webhooks/stripe     — handle Stripe billing events
+POST /api/v1/auth/cli/session    — create CLI login session, return session_id + browser_url
+GET  /api/v1/auth/cli/token/{id} — poll for JWT after browser OAuth completes (atomic GETDEL)
+GET  /api/v1/reviews/            — list reviews for authenticated org
+POST /api/v1/reviews/local       — enqueue local diff review, return job_id
+GET  /api/v1/reviews/local/{id}  — poll local review status/findings
+GET  /api/v1/reviews/local/{id}/stream — SSE stream of findings as agents complete
 ```
 
 ---
@@ -245,8 +256,10 @@ apps/agents/
 │   ├── schemas.py           # FixProposal, ValidationResult ✅
 │   └── __init__.py
 └── workers/
-    ├── celery_app.py        # Celery app instance + tasks: review_pr, index_repo
-    └── index_task.py        # Repo indexing task (embeds code → Qdrant)
+    ├── celery_app.py        # Celery app instance + tasks: review_pr, index_repo, review_local
+    ├── connections.py       # Shared Redis/Qdrant connection helpers for workers
+    ├── index_task.py        # Repo indexing task (embeds code → Qdrant)
+    └── local_review_task.py # Local diff review task — runs agents, publishes findings to Redis pub/sub
 ```
 
 ### Agent internal pipeline (every agent must follow this exactly):
@@ -269,17 +282,19 @@ apps/agents/
 
 ## apps/cli — Sole Responsibility
 
-**Developer-facing local review tool. Phase 7 — do not build, do not add logic.**
+**Developer-facing local review tool. `login` and `review` commands are active.**
 
 ```
 apps/cli/
-├── main.py              # Typer entrypoint — stub
+├── main.py              # Typer entrypoint — registers login + review commands
+├── auth.py              # Token persistence (~/.config/argus/credentials.json, 0o600)
+├── client.py            # httpx.Client factory (Bearer token, 120s timeout)
 └── commands/
-    ├── review.py        # argus review [files]
-    ├── fix.py           # argus fix [files] --auto
-    ├── watch.py         # argus watch
-    └── baseline.py      # argus baseline
+    ├── login.py         # argus login — browser OAuth flow via CLI session API ✅
+    └── review.py        # argus review [files] — async local review, SSE + polling fallback ✅
 ```
+
+The binary is built with PyInstaller (`argus.spec`) and distributed via GitHub Releases + `install.sh`.
 
 ---
 
@@ -426,8 +441,8 @@ ENV=development
 | AST-based chunking (9 languages) | 4 | ✅ complete |
 | Documentation agent (team/enterprise) | 3 | ✅ active |
 | Ticket compliance agent | 3 | ✅ active |
+| CLI login + review commands | 5 | ✅ complete |
 | GitLab integration | — | stub only |
-| CLI commands | 7 | not started |
 | Web dashboard | 6 | not started |
 
 Stubs are allowed. Implementation is not.
@@ -442,6 +457,6 @@ Stubs are allowed. Implementation is not.
 4. **Every agent outputs FindingSchema** — no exceptions
 5. **Private key never read from file at runtime** — base64 env var, loaded lazily via get_settings()
 6. **No processing inside the webhook handler** — enqueue and return, nothing else
-7. **Middleware stubs do nothing until Phase 3 auth sprint** — do not activate prematurely
+7. **Middleware is active** — `AuthMiddleware` and `RateLimitMiddleware` are registered in `gateway_main.py`; do not disable or bypass them
 8. **uv only for Python deps** — never suggest pip install
 9. **Do not add dependencies without checking if they are already in the workspace**

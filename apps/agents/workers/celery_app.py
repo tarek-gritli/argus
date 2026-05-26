@@ -1,7 +1,7 @@
 from celery import Celery
 from celery.signals import worker_process_init, worker_shutdown
 from shared.config import get_settings
-from shared.queue.tasks import INDEX_REPO_TASK_NAME, REVIEW_PR_TASK_NAME
+from shared.queue.tasks import INDEX_REPO_TASK_NAME, REVIEW_LOCAL_TASK_NAME, REVIEW_PR_TASK_NAME
 
 settings = get_settings()
 
@@ -37,6 +37,13 @@ def review_pr(payload: dict) -> None:
     from orchestrator.coordinator import run
 
     run(payload)
+
+
+@celery_app.task(name=REVIEW_LOCAL_TASK_NAME)
+def review_local(job_id: str, diff: str, files: list[str] | None = None) -> None:
+    from workers.local_review_task import run_local_review
+
+    run_local_review(job_id=job_id, diff=diff, files=files)
 
 
 @celery_app.task(name=INDEX_REPO_TASK_NAME)

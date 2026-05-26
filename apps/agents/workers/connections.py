@@ -52,6 +52,12 @@ def run_async(coro, timeout: float | None = 30.0):
     return asyncio.run_coroutine_threadsafe(coro, _loop).result(timeout=timeout)
 
 
+def get_redis_client() -> redis_lib.Redis:
+    if redis_client is None:
+        raise RuntimeError("Redis not initialized")
+    return redis_client
+
+
 def get_session_factory() -> async_sessionmaker:
     if session_factory is None:
         raise RuntimeError("DB runtime not initialized")

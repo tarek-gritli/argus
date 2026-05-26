@@ -22,9 +22,16 @@ _CSRF_TTL = 600  # 10 minutes
 
 
 @router.get("/github/login")
-async def github_login(request: Request, settings: Settings = Depends(get_settings)):
+async def github_login(
+    request: Request,
+    cli_session_id: str | None = None,
+    settings: Settings = Depends(get_settings),
+):
     state = secrets.token_urlsafe(32)
-    await request.app.state.redis.set(f"oauth_state:{state}", "1", ex=_CSRF_TTL)
+    # Store cli_session_id alongside the CSRF token so the callback can retrieve
+    # it — GitHub does not round-trip unknown query params back to the callback.
+    state_value = cli_session_id if cli_session_id else "1"
+    await request.app.state.redis.set(f"oauth_state:{state}", state_value, ex=_CSRF_TTL)
     url = f"{_GITHUB_AUTHORIZE_URL}?client_id={settings.github_client_id}&state={state}&scope=read:user"
     return RedirectResponse(url=url)
 
@@ -38,9 +45,13 @@ async def github_callback(
     session: AsyncSession = Depends(get_session),
 ):
     key = f"oauth_state:{state}"
-    valid = await request.app.state.redis.getdel(key)
-    if not valid:
+    state_value = await request.app.state.redis.getdel(key)
+    if not state_value:
         return Response(status_code=400, content="Invalid or expired state")
+    decoded = state_value.decode() if isinstance(state_value, bytes) else state_value
+    # Value is the cli_session_id when the login was initiated from the CLI,
+    # or the sentinel "1" for a regular browser login.
+    cli_session_id: str | None = decoded if decoded != "1" else None
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -90,6 +101,8 @@ async def github_callback(
         org = result3.scalar_one()
 
     token = create_jwt(user_id=user.id, org_id=org.id, role=membership.role)
+    if cli_session_id:
+        await request.app.state.redis.set(f"cli_session:{cli_session_id}", token, ex=300)
     response = Response(content=f'{{"token":"{token}"}}', media_type="application/json")
     response.set_cookie(
         "argus_token",
