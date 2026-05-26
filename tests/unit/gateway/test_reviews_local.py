@@ -1,20 +1,8 @@
-from unittest.mock import patch
+import json
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from shared.schemas import FindingSchema
-
-_SAMPLE_FINDING = FindingSchema(
-    agent="security",
-    severity="high",
-    file="src/auth.py",
-    line_start=10,
-    line_end=15,
-    title="SQL Injection",
-    description="User input not sanitized.",
-    suggestion="Use parameterized queries.",
-    confidence=0.95,
-)
 
 
 def _make_app():
@@ -22,44 +10,50 @@ def _make_app():
 
     app = FastAPI()
     app.include_router(router, prefix="/api/v1/reviews/local")
-
-    @app.middleware("http")
-    async def inject_org(request, call_next):
-        request.state.org_id = "org-123"
-        return await call_next(request)
-
-    return app
+    mock_redis = MagicMock()
+    mock_redis.get = AsyncMock(return_value=None)
+    app.state.redis = mock_redis
+    return app, mock_redis
 
 
-def test_local_review_returns_findings():
-    app = _make_app()
-    client = TestClient(app)
-    with patch("api.routes.reviews_local.run_review", return_value=[_SAMPLE_FINDING]):
+def test_post_enqueues_and_returns_job_id():
+    app, _ = _make_app()
+    with patch("api.routes.reviews_local._get_celery") as mock_get_celery:
+        mock_celery = MagicMock()
+        mock_get_celery.return_value = mock_celery
+        client = TestClient(app)
         resp = client.post("/api/v1/reviews/local", json={"diff": "+ some code"})
-    assert resp.status_code == 200
-    data = resp.json()
-    assert len(data["findings"]) == 1
-    assert data["findings"][0]["title"] == "SQL Injection"
+
+    assert resp.status_code == 202
+    body = resp.json()
+    assert "job_id" in body
+    assert "stream_url" in body
+    assert "status_url" in body
+    mock_celery.send_task.assert_called_once()
+    assert mock_celery.send_task.call_args[0][0] == "review_local"
 
 
-def test_local_review_empty_diff_returns_empty():
-    app = _make_app()
+def test_get_poll_returns_202_when_pending():
+    app, mock_redis = _make_app()
+    mock_redis.get = AsyncMock(return_value=None)
     client = TestClient(app)
-    with patch("api.routes.reviews_local.run_review", return_value=[]):
-        resp = client.post("/api/v1/reviews/local", json={"diff": ""})
-    assert resp.status_code == 200
-    assert resp.json()["findings"] == []
+    resp = client.get("/api/v1/reviews/local/job123")
+    assert resp.status_code == 202
+    assert resp.json()["status"] == "pending"
 
 
-def test_local_review_with_files_filter():
-    app = _make_app()
+def test_get_poll_returns_findings_when_done():
+    findings = [{"agent": "security", "severity": "high", "title": "XSS"}]
+    app, mock_redis = _make_app()
+    mock_redis.get = AsyncMock(return_value=json.dumps(findings).encode())
     client = TestClient(app)
-    with patch("api.routes.reviews_local.run_review", return_value=[_SAMPLE_FINDING]) as mock_review:
-        resp = client.post(
-            "/api/v1/reviews/local",
-            json={"diff": "+ some code", "files": ["src/auth.py"]},
-        )
+    resp = client.get("/api/v1/reviews/local/job123")
     assert resp.status_code == 200
-    call_kwargs = mock_review.call_args.kwargs
-    filenames = [f.filename for f in call_kwargs["files"]]
-    assert filenames == ["src/auth.py"]
+    assert resp.json()["findings"] == findings
+
+
+def test_post_empty_diff_returns_400():
+    app, _ = _make_app()
+    client = TestClient(app)
+    resp = client.post("/api/v1/reviews/local", json={"diff": "   "})
+    assert resp.status_code == 400
