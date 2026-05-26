@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...confidence import score_from_count
 from ..tools.ast_analyzer import StaticAnalysisResult
-from .confidence import score_from_count
 
 FindingSchema = dict[str, Any]
 
