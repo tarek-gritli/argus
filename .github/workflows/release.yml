@@ -82,7 +82,7 @@ jobs:
             --notes "## Install
 
           \`\`\`bash
-          curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | sh
+          curl -fsSL https://raw.githubusercontent.com/${REPO}/${TAG}/install.sh | sh
           \`\`\`
 
           ## Assets
