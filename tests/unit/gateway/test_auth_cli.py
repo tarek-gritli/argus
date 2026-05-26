@@ -34,6 +34,7 @@ def test_poll_token_pending_returns_202():
     client = TestClient(app)
     resp = client.get("/api/v1/auth/cli/token/some-session-id")
     assert resp.status_code == 202
+    app.state.redis.getdel.assert_awaited_once_with("cli_session:some-session-id")
 
 
 def test_poll_token_ready_returns_200_with_token():
@@ -43,3 +44,4 @@ def test_poll_token_ready_returns_200_with_token():
     resp = client.get("/api/v1/auth/cli/token/some-session-id")
     assert resp.status_code == 200
     assert resp.json()["token"] == "jwt_token_value"
+    app.state.redis.getdel.assert_awaited_once_with("cli_session:some-session-id")
