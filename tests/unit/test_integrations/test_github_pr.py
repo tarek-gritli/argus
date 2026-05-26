@@ -48,14 +48,23 @@ def test_get_pr_files_returns_list():
 
 
 def test_get_pr_files_filters_ignored_and_patchless_files():
-    """get_pr_files skips node_modules, generated, and patch-less files."""
+    """get_pr_files skips ignored dirs, lock files, binaries, and patch-less files."""
     mock_pr = _make_mock_pr()
     keep_file = _make_mock_file("src/app.py")
     ignored_dir_file = _make_mock_file("node_modules/pkg/index.js")
     ignored_generated_file = _make_mock_file("dist/app.min.js")
+    ignored_lock_file = _make_mock_file("pnpm-lock.yaml")
+    ignored_binary_file = _make_mock_file("assets/logo.png")
     patchless_file = _make_mock_file("src/image.png")
     patchless_file.patch = None
-    mock_pr.get_files.return_value = [keep_file, ignored_dir_file, ignored_generated_file, patchless_file]
+    mock_pr.get_files.return_value = [
+        keep_file,
+        ignored_dir_file,
+        ignored_generated_file,
+        ignored_lock_file,
+        ignored_binary_file,
+        patchless_file,
+    ]
 
     from integrations.github.pr import get_pr_files
 
@@ -171,6 +180,33 @@ def test_get_pr_diff_filters_ignored_paths():
     diff = get_pr_diff(pr)
 
     assert "ignored" not in diff
+    assert "kept" in diff
+
+
+def test_get_pr_diff_filters_lock_and_binary_files():
+    from unittest.mock import MagicMock
+
+    from integrations.github.pr import get_pr_diff
+
+    lock_file = MagicMock()
+    lock_file.filename = "package-lock.json"
+    lock_file.patch = "@@ -1 +1 @@\n+ignored-lock"
+
+    binary_file = MagicMock()
+    binary_file.filename = "assets/icon.webp"
+    binary_file.patch = "@@ -1 +1 @@\n+ignored-binary"
+
+    kept = MagicMock()
+    kept.filename = "src/main.py"
+    kept.patch = "@@ -1 +1 @@\n+kept"
+
+    pr = MagicMock()
+    pr.get_files.return_value = [lock_file, binary_file, kept]
+
+    diff = get_pr_diff(pr)
+
+    assert "ignored-lock" not in diff
+    assert "ignored-binary" not in diff
     assert "kept" in diff
 
 

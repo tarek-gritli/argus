@@ -39,6 +39,43 @@ _IGNORED_SUFFIXES = (
     ".min.js",
     ".min.css",
     ".map",
+    ".lock",
+    ".lockb",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".ico",
+    ".pdf",
+    ".zip",
+    ".gz",
+    ".tar",
+    ".tgz",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".eot",
+    ".mp3",
+    ".mp4",
+)
+
+_IGNORED_FILENAMES = frozenset(
+    {
+        "package-lock.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "bun.lock",
+        "bun.lockb",
+        "uv.lock",
+        "poetry.lock",
+        "pdm.lock",
+        "Pipfile.lock",
+        "Cargo.lock",
+        "Gemfile.lock",
+        "composer.lock",
+        "Podfile.lock",
+    }
 )
 
 
@@ -48,6 +85,7 @@ def _normalise_path(filename: str) -> str:
 
 def _is_reviewable_file(filename: str, patch: str | None = None) -> bool:
     path = _normalise_path(filename)
+    basename = path.rsplit("/", 1)[-1]
 
     if any(path.startswith(prefix) for prefix in _IGNORED_PATH_PREFIXES):
         return False
@@ -56,6 +94,9 @@ def _is_reviewable_file(filename: str, patch: str | None = None) -> bool:
         return False
 
     if path.endswith(_IGNORED_SUFFIXES):
+        return False
+
+    if basename in _IGNORED_FILENAMES:
         return False
 
     if not patch:
