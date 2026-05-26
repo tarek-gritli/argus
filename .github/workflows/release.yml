@@ -68,6 +68,15 @@ jobs:
         with:
           path: dist/
 
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum \
+            argus-linux-x86_64/argus-linux-x86_64 \
+            argus-darwin-x86_64/argus-darwin-x86_64 \
+            argus-darwin-arm64/argus-darwin-arm64 \
+            | sed 's| [^ ]*/|  |' > checksums.txt
+
       - name: Create release and upload assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -92,4 +101,5 @@ jobs:
             $PRERELEASE \
             dist/argus-linux-x86_64/argus-linux-x86_64 \
             dist/argus-darwin-x86_64/argus-darwin-x86_64 \
-            dist/argus-darwin-arm64/argus-darwin-arm64
+            dist/argus-darwin-arm64/argus-darwin-arm64 \
+            dist/checksums.txt

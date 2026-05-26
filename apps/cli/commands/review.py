@@ -61,7 +61,6 @@ def review(files: Optional[list[str]] = typer.Argument(default=None)):
     try:
         with client.stream("GET", stream_url) as stream_resp:
             if stream_resp.status_code == 200:
-                sse_ok = True
                 for line in stream_resp.iter_lines():
                     if not line:
                         continue
@@ -74,6 +73,7 @@ def review(files: Optional[list[str]] = typer.Argument(default=None)):
                             findings.append(payload)
                             _print_finding_live(payload)
                         elif event == "done":
+                            sse_ok = True
                             break
                         elif event == "error":
                             typer.echo(f"Review error: {payload.get('message', 'unknown')}", err=True)
@@ -121,8 +121,12 @@ def _get_diff(files: list[str] | None = None) -> str:
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         return result.stdout
-    except subprocess.CalledProcessError:
-        return ""
+    except subprocess.CalledProcessError as exc:
+        typer.echo(f"Failed to compute git diff: {(exc.stderr or '').strip() or exc}", err=True)
+        raise typer.Exit(code=1)
+    except FileNotFoundError:
+        typer.echo("`git` is not available on PATH.", err=True)
+        raise typer.Exit(code=1)
 
 
 def _print_finding_live(f: dict) -> None:

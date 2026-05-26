@@ -56,12 +56,48 @@ fi
 
 # ── Download ───────────────────────────────────────────────────────────────────
 TMP="$(mktemp)"
+CHECKSUMS_TMP="$(mktemp)"
 echo "Downloading ${ASSET_NAME}..."
 if command -v curl >/dev/null 2>&1; then
   curl -fsSL "$DOWNLOAD_URL" -o "$TMP"
+  CHECKSUMS_URL="$(echo "$RELEASE_JSON" | grep -o "\"browser_download_url\": \"[^\"]*checksums\.txt\"" | head -1 | cut -d'"' -f4)"
+  [ -n "$CHECKSUMS_URL" ] && curl -fsSL "$CHECKSUMS_URL" -o "$CHECKSUMS_TMP"
 else
   wget -qO "$TMP" "$DOWNLOAD_URL"
+  CHECKSUMS_URL="$(echo "$RELEASE_JSON" | grep -o "\"browser_download_url\": \"[^\"]*checksums\.txt\"" | head -1 | cut -d'"' -f4)"
+  [ -n "$CHECKSUMS_URL" ] && wget -qO "$CHECKSUMS_TMP" "$CHECKSUMS_URL"
 fi
+
+# ── Verify checksum ────────────────────────────────────────────────────────────
+if [ -s "$CHECKSUMS_TMP" ]; then
+  echo "Verifying checksum..."
+  EXPECTED="$(grep " ${ASSET_NAME}$" "$CHECKSUMS_TMP" | awk '{print $1}')"
+  if [ -z "$EXPECTED" ]; then
+    echo "Error: no checksum entry for '${ASSET_NAME}' in checksums.txt"
+    rm -f "$TMP" "$CHECKSUMS_TMP"
+    exit 1
+  fi
+  if command -v sha256sum >/dev/null 2>&1; then
+    ACTUAL="$(sha256sum "$TMP" | awk '{print $1}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    ACTUAL="$(shasum -a 256 "$TMP" | awk '{print $1}')"
+  else
+    echo "Warning: neither sha256sum nor shasum found; skipping checksum verification."
+    ACTUAL="$EXPECTED"
+  fi
+  if [ "$ACTUAL" != "$EXPECTED" ]; then
+    echo "Error: checksum mismatch for '${ASSET_NAME}'"
+    echo "  expected: $EXPECTED"
+    echo "  actual:   $ACTUAL"
+    rm -f "$TMP" "$CHECKSUMS_TMP"
+    exit 1
+  fi
+  echo "Checksum verified."
+else
+  echo "Warning: checksums.txt not found in release; skipping integrity check."
+fi
+rm -f "$CHECKSUMS_TMP"
+
 chmod +x "$TMP"
 
 # ── Install ────────────────────────────────────────────────────────────────────

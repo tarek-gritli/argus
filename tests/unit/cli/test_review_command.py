@@ -1,4 +1,5 @@
 import json
+import subprocess
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
@@ -181,3 +182,30 @@ def test_review_specific_files_sends_files_in_body():
     assert result.exit_code == 0
     call_body = mock_client.post.call_args.kwargs["json"]
     assert call_body["files"] == ["src/auth.py", "src/db.py"]
+
+
+def test_review_git_failure_exits_with_error():
+    with (
+        patch("commands.review.load_token", return_value="tok"),
+        patch(
+            "commands.review.subprocess.run",
+            side_effect=subprocess.CalledProcessError(128, "git", stderr="not a git repository"),
+        ),
+    ):
+        app = _make_app()
+        result = runner.invoke(app, [])
+
+    assert result.exit_code == 1
+    assert "git diff" in result.output.lower() or "failed" in result.output.lower()
+
+
+def test_review_git_not_found_exits_with_error():
+    with (
+        patch("commands.review.load_token", return_value="tok"),
+        patch("commands.review.subprocess.run", side_effect=FileNotFoundError),
+    ):
+        app = _make_app()
+        result = runner.invoke(app, [])
+
+    assert result.exit_code == 1
+    assert "git" in result.output.lower()

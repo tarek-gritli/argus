@@ -20,9 +20,8 @@ async def create_cli_session(request: Request):
 
 @router.get("/token/{session_id}")
 async def poll_cli_token(session_id: str, request: Request):
-    value = await request.app.state.redis.get(f"cli_session:{session_id}")
+    value = await request.app.state.redis.getdel(f"cli_session:{session_id}")
     if value is None or value == "" or value == b"":
         return Response(status_code=202)
-    await request.app.state.redis.delete(f"cli_session:{session_id}")
     token = value.decode() if isinstance(value, bytes) else value
     return {"token": token}
