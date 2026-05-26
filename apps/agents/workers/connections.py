@@ -16,6 +16,8 @@ _engine = None
 session_factory: async_sessionmaker | None = None
 _ready = threading.Event()
 _closing = threading.Event()
+_init_lock = threading.Lock()
+_initialized = threading.Event()
 
 
 def _loop_worker() -> None:
@@ -66,19 +68,28 @@ def get_session_factory() -> async_sessionmaker:
 
 def init_connections() -> None:
     global _loop_thread, redis_client
-    settings = get_settings()
-    _closing.clear()
 
-    redis_client = redis_lib.Redis.from_url(settings.redis_url, decode_responses=True)
+    if _initialized.is_set():
+        return
 
-    _loop_thread = threading.Thread(target=_loop_worker, daemon=True, name="argus-db-loop")
-    _loop_thread.start()
-    _ready.wait()
-    run_async(_async_init(settings.database_url))
+    with _init_lock:
+        if _initialized.is_set():
+            return
+
+        settings = get_settings()
+        _closing.clear()
+
+        redis_client = redis_lib.Redis.from_url(settings.redis_url, decode_responses=True)
+
+        _loop_thread = threading.Thread(target=_loop_worker, daemon=True, name="argus-db-loop")
+        _loop_thread.start()
+        _ready.wait()
+        run_async(_async_init(settings.database_url))
+        _initialized.set()
 
 
 def close_connections() -> None:
-    global redis_client, _engine, session_factory
+    global redis_client, _engine, session_factory, _loop, _loop_thread
 
     if redis_client is not None:
         redis_client.close()
@@ -96,3 +107,8 @@ def close_connections() -> None:
         _loop.call_soon_threadsafe(_loop.stop)
     if _loop_thread is not None:
         _loop_thread.join(timeout=10)
+
+    _initialized.clear()
+    _ready.clear()
+    _loop = None
+    _loop_thread = None

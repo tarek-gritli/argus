@@ -126,3 +126,12 @@ def test_close_connections_closes_and_clears_client():
 
     mock_redis.close.assert_called_once()
     assert conns.redis_client is None
+
+
+def test_worker_init_bootstraps_connections():
+    with patch("workers.connections.init_connections") as mock_init:
+        from workers.celery_app import on_worker_init
+
+        on_worker_init()
+
+    mock_init.assert_called_once()
