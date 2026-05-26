@@ -9,6 +9,7 @@ on:
       tag:
         description: "Tag to release (e.g. v0.1.0)"
         required: true
+        type: string
 
 permissions:
   contents: read
@@ -91,9 +92,14 @@ jobs:
           PRERELEASE=""
           if echo "$TAG" | grep -q "-"; then PRERELEASE="--prerelease"; fi
 
-          gh release create "$TAG" \
-            --title "Argus CLI $TAG" \
-            --notes "## Install
+          ASSETS="dist/argus-linux-x86_64/argus-linux-x86_64 dist/argus-darwin-x86_64/argus-darwin-x86_64 dist/argus-darwin-arm64/argus-darwin-arm64 dist/checksums.txt"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" $ASSETS --clobber
+          else
+            gh release create "$TAG" \
+              --title "Argus CLI $TAG" \
+              --notes "## Install
 
           \`\`\`bash
           curl -fsSL https://raw.githubusercontent.com/${REPO}/${TAG}/install.sh | sh
@@ -103,8 +109,6 @@ jobs:
           - \`argus-linux-x86_64\` — Linux x86_64
           - \`argus-darwin-x86_64\` — macOS Intel
           - \`argus-darwin-arm64\` — macOS Apple Silicon (M1/M2/M3)" \
-            $PRERELEASE \
-            dist/argus-linux-x86_64/argus-linux-x86_64 \
-            dist/argus-darwin-x86_64/argus-darwin-x86_64 \
-            dist/argus-darwin-arm64/argus-darwin-arm64 \
-            dist/checksums.txt
+              $PRERELEASE \
+              $ASSETS
+          fi
