@@ -36,8 +36,8 @@ async def submit_local_review(body: LocalReviewRequest, request: Request):
     )
     return {
         "job_id": job_id,
-        "stream_url": f"/api/v1/reviews/local/{job_id}/stream",
-        "status_url": f"/api/v1/reviews/local/{job_id}",
+        "stream_url": f"{get_settings().api_prefix}/reviews/local/{job_id}/stream",
+        "status_url": f"{get_settings().api_prefix}/reviews/local/{job_id}",
     }
 
 
