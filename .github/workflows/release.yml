@@ -17,7 +17,7 @@ jobs:
         include:
           - os: ubuntu-latest
             asset_name: argus-linux-x86_64
-          - os: macos-13
+          - os: macos-15-intel
             asset_name: argus-darwin-x86_64
           - os: macos-latest
             asset_name: argus-darwin-arm64
