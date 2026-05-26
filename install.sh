@@ -82,8 +82,9 @@ if [ -s "$CHECKSUMS_TMP" ]; then
   elif command -v shasum >/dev/null 2>&1; then
     ACTUAL="$(shasum -a 256 "$TMP" | awk '{print $1}')"
   else
-    echo "Warning: neither sha256sum nor shasum found; skipping checksum verification."
-    ACTUAL="$EXPECTED"
+    echo "Error: neither sha256sum nor shasum found; cannot verify binary integrity."
+    rm -f "$TMP" "$CHECKSUMS_TMP"
+    exit 1
   fi
   if [ "$ACTUAL" != "$EXPECTED" ]; then
     echo "Error: checksum mismatch for '${ASSET_NAME}'"
