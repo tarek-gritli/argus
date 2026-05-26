@@ -5,7 +5,7 @@ description = "Semantic context retrieval - AST-based chunking (tree-sitter, 10 
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "qdrant-client[fastembed]>=1.18.0",
+    "qdrant-client>=1.18.0",
     "redis>=7.4.0",
     "tiktoken>=0.13.0",
     "tree-sitter>=0.25.2",
