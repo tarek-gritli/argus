@@ -19,6 +19,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         self._exempt = _build_exempt_prefixes()
 
     async def dispatch(self, request: Request, call_next):
+        if request.method == "OPTIONS":
+            return await call_next(request)
         path = request.url.path
         if path in _EXEMPT_EXACT or any(path.startswith(p) for p in self._exempt):
             return await call_next(request)

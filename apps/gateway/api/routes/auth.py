@@ -103,15 +103,9 @@ async def github_callback(
     token = create_jwt(user_id=user.id, org_id=org.id, role=membership.role)
     if cli_session_id:
         await request.app.state.redis.set(f"cli_session:{cli_session_id}", token, ex=300)
-    response = Response(content=f'{{"token":"{token}"}}', media_type="application/json")
-    response.set_cookie(
-        "argus_token",
-        token,
-        httponly=True,
-        samesite="lax",
-        secure=settings.env != "development",
-    )
-    return response
+        return Response(content=f'{{"token":"{token}"}}', media_type="application/json")
+    # Browser login: pass token via URL so Next.js can set its own cookie
+    return RedirectResponse(url=f"{settings.frontend_url}/auth/callback?token={token}", status_code=302)
 
 
 @router.delete("/logout")

@@ -30,6 +30,23 @@ class CheckoutRequest(BaseModel):
     seats: int = Field(ge=1, le=500)
 
 
+@router.get("")
+async def get_billing(request: Request):
+    org_id: str = request.state.org_id
+    async with session_context() as session:
+        result = await session.execute(select(OrgBilling).where(OrgBilling.org_id == org_id))
+        billing = result.scalar_one_or_none()
+        if not billing:
+            raise HTTPException(status_code=404, detail="Billing record not found")
+    return {
+        "plan": billing.plan,
+        "seat_count": billing.seat_count,
+        "reviews_used_this_month": billing.reviews_used_this_month,
+        "monthly_limit": billing.monthly_limit,
+        "stripe_customer_id": billing.stripe_customer_id,
+    }
+
+
 @router.post("/checkout")
 async def create_checkout_session(body: CheckoutRequest, request: Request):
     org_id: str = request.state.org_id
