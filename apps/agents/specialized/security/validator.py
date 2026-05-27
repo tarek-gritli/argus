@@ -6,7 +6,7 @@ import logging
 from typing import Iterable
 
 from ..confidence import confidence_at_or_above
-from .schemas import Finding, ReflectionAction, ReflectionDecision, Severity
+from .schemas import Finding, RawFinding, ReflectionAction, ReflectionDecision, Severity
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ _SEVERITY_WEIGHT = {
 }
 
 
-def build_fallback_decisions(raw_findings: list[Finding]) -> list[ReflectionDecision]:
+def build_fallback_decisions(raw_findings: list[RawFinding]) -> list[ReflectionDecision]:
     """Apply the security confidence policy when reflection LLM is unavailable."""
     decisions: list[ReflectionDecision] = []
 

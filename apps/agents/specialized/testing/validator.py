@@ -112,8 +112,8 @@ def validate_findings(
 
         # Penalize speculative "no tests anywhere" claims when test files WERE touched
         # (The agent might be right, but confidence should be lower)
-        title_lower = finding["title"].lower()
-        desc_lower = finding.get("description", "").lower()
+        title_lower = str(finding.get("title", "").lower())
+        desc_lower = str(finding.get("description", "")).lower()
 
         if has_test_files_in_diff:
             for pattern in _speculative_patterns_list():

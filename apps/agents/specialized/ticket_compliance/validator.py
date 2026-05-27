@@ -15,6 +15,8 @@ def validate_findings(findings: list[dict]) -> list[dict]:
     """Drop findings below confidence floor and normalize confidence/severity."""
     valid: list[dict] = []
     for finding in findings:
+        if not isinstance(finding, dict):
+            continue
         confidence = coerce_confidence(finding.get("confidence"))
         if confidence is None:
             continue
