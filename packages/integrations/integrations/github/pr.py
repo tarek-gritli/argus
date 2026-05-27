@@ -187,9 +187,9 @@ def post_issue_comment(pr: PullRequest, body: str) -> None:
 
     total = len(chunks)
     for index, chunk in enumerate(chunks, start=1):
-        header = f"Part {index}/{total}\n\n"
+        header = f"Review summary part {index}/{total}\n\n"
         if len(header) + len(chunk) > _MAX_ISSUE_COMMENT_LENGTH:
-            header = f"Part {index}/{total} (truncated)\n\n"
+            header = f"Review summary part {index}/{total} (truncated)\n\n"
             chunk = chunk[: _MAX_ISSUE_COMMENT_LENGTH - len(header)]
         pr.create_issue_comment(header + chunk)
 
