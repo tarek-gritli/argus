@@ -20,7 +20,7 @@ dependencies = [
     "tree-sitter-python>=0.25.0",
     "tree-sitter-ruby>=0.23.1",
     "tree-sitter-typescript>=0.23.2",
-    "voyageai>=0.3.7",
+    "voyageai>=0.3.0,<0.3.7",
 ]
 
 [build-system]
