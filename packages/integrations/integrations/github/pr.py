@@ -16,6 +16,12 @@ def _chunk_comment_body(body: str, max_length: int = _MAX_ISSUE_COMMENT_LENGTH) 
     chunks: list[str] = []
     current = ""
     for line in body.splitlines(keepends=True):
+        while (len(line) > max_length) and line:
+            if current:
+                chunks.append(current.rstrip("\n"))
+                current = ""
+            chunks.append(line[:max_length].rstrip("\n"))
+            line = line[max_length:]
         if current and len(current) + len(line) > max_length:
             chunks.append(current.rstrip("\n"))
             current = line
@@ -73,7 +79,13 @@ def post_issue_comment(pr: PullRequest, body: str) -> None:
 
     total = len(chunks)
     for index, chunk in enumerate(chunks, start=1):
-        pr.create_issue_comment(f"Review summary part {index}/{total}\n\n{chunk}")
+        header = f"Part {index}/{total}\n\n"
+        if len(header) + len(chunk) > _MAX_ISSUE_COMMENT_LENGTH:
+            header = f"Part {index}/{total} (truncated)\n\n"
+            chunk = chunk[: _MAX_ISSUE_COMMENT_LENGTH - len(header)]
+        else:
+            chunk = header + chunk
+        pr.create_issue_comment(chunk)
 
 
 def update_pr_body(pr: PullRequest, body: str) -> None:
