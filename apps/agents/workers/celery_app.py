@@ -1,5 +1,5 @@
 from celery import Celery
-from celery.signals import worker_process_init, worker_shutdown
+from celery.signals import worker_process_init, worker_ready, worker_shutdown
 from shared.config import get_settings
 from shared.queue.tasks import INDEX_REPO_TASK_NAME, REVIEW_LOCAL_TASK_NAME, REVIEW_PR_TASK_NAME
 
@@ -18,6 +18,7 @@ celery_app.conf.update(
 
 
 @worker_process_init.connect
+@worker_ready.connect
 def on_worker_init(**_) -> None:
     from workers.connections import init_connections
 
