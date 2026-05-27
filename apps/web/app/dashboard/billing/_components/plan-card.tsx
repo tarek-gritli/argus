@@ -1,32 +1,35 @@
 import type { Billing } from "@/lib/types"
-import { cn } from "@/lib/utils"
 
-const PLAN_CONFIG: Record<string, { label: string; style: string }> = {
-  free:       { label: "Free",       style: "bg-muted border-border text-muted-foreground" },
-  pro:        { label: "Pro",        style: "bg-blue-500/8 border-blue-500/20 text-blue-700 dark:text-blue-400" },
-  team:       { label: "Team",       style: "bg-violet-500/8 border-violet-500/20 text-violet-700 dark:text-violet-400" },
-  enterprise: { label: "Enterprise", style: "bg-amber-500/8 border-amber-500/20 text-amber-700 dark:text-amber-400" },
+const PLAN_CONFIG: Record<string, { label: string; price: string; description: string }> = {
+  free:       { label: "Starter tier",  price: "$0",   description: "Perfect for individual developers and small open-source projects." },
+  pro:        { label: "Pro",           price: "$29",  description: "Unlimited reviews and advanced AI linting." },
+  team:       { label: "Team",          price: "$75+", description: "Centralized review engine for engineering orgs." },
+  enterprise: { label: "Enterprise",    price: "—",    description: "Custom limits and dedicated support." },
 }
 
 export function PlanCard({ billing }: { billing: Billing }) {
   const cfg = PLAN_CONFIG[billing.plan] ?? PLAN_CONFIG.free
   return (
-    <div className="rounded-lg border bg-card p-5">
-      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-4">Current Plan</p>
-      <div className="flex items-center justify-between">
+    <div className="border border-white/[0.08] p-6" style={{ background: "rgba(255,255,255,0.04)" }}>
+      <div className="flex items-start justify-between mb-6">
         <div>
-          <p className="text-2xl font-bold text-foreground">{cfg.label}</p>
-          <p className="text-[12px] text-muted-foreground mt-1.5">
-            {billing.plan !== "free" && (
-              <span>{billing.seat_count} {billing.seat_count === 1 ? "seat" : "seats"} · </span>
-            )}
-            {billing.monthly_limit} reviews / month
-          </p>
+          <span className="text-[10px] font-bold tracking-wider uppercase text-[#c6c6c7] block mb-1">Current Plan</span>
+          <h2 className="text-[18px] font-semibold leading-6 tracking-[-0.01em] text-[#e5e2e1]">{cfg.label}</h2>
+          <p className="text-[12px] text-[#8e9192] mt-1">{cfg.description}</p>
         </div>
-        <span className={cn("px-3 py-1 rounded-full border text-[11px] font-semibold", cfg.style)}>
-          {cfg.label}
-        </span>
+        <div className="border-l-2 border-[#e2e2e2] bg-[#2a2a2a] px-3 py-1">
+          <span className="text-[10px] font-bold tracking-wider uppercase text-[#e2e2e2]">ACTIVE</span>
+        </div>
       </div>
+      <div className="flex items-baseline gap-2">
+        <span className="text-[24px] font-semibold leading-8 tracking-[-0.02em] text-[#e5e2e1]">{cfg.price}</span>
+        <span className="text-[14px] text-[#8e9192]">/ month</span>
+      </div>
+      {billing.plan !== "free" && (
+        <p className="text-[12px] text-[#8e9192] mt-2">
+          {billing.seat_count} {billing.seat_count === 1 ? "seat" : "seats"} · {billing.monthly_limit} reviews / month
+        </p>
+      )}
     </div>
   )
 }

@@ -5,10 +5,14 @@ import { billingOptions } from "@/lib/queries";
 import { PlanCard } from "./_components/plan-card";
 import { QuotaBar } from "./_components/quota-bar";
 import { UpgradeDialog } from "./_components/upgrade-dialog";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Topbar } from "@/components/topbar";
 import { api } from "@/lib/api";
-import { ExternalLink } from "lucide-react";
+import { FileText } from "lucide-react";
+
+const MOCK_INVOICES = [
+  { id: "INV-2023-010", date: "Oct 01, 2023", amount: "$0.00" },
+  { id: "INV-2023-009", date: "Sep 01, 2023", amount: "$0.00" },
+];
 
 export default function BillingPage() {
   const { data: billing, isLoading } = useQuery(billingOptions());
@@ -18,46 +22,71 @@ export default function BillingPage() {
     window.location.href = portal_url;
   }
 
-  // billing = {
-  //   plan: "free",
-  //   seat_count: 5,
-  //   reviews_used_this_month: 12,
-  //   monthly_limit: 100,
-  //   stripe_customer_id: "cus_1234567890",
-  // }; // TODO: remove after testing
-  // isLoading = false;
-
   return (
     <>
       <Topbar title="Billing" />
       <div className="px-8 py-8">
-        <div className="mb-6">
-          <h2 className="text-base font-semibold text-foreground">Billing</h2>
-          <p className="text-[12px] text-muted-foreground mt-0.5">
-            Manage your plan and usage
-          </p>
-        </div>
-
         {isLoading || !billing ? (
           <div className="space-y-3">
-            <Skeleton className="h-28 rounded-lg" />
-            <Skeleton className="h-28 rounded-lg" />
+            <div className="h-40 bg-white/5 animate-pulse" />
+            <div className="h-24 bg-white/5 animate-pulse" />
           </div>
         ) : (
           <div className="space-y-3">
-            <PlanCard billing={billing} />
-            <QuotaBar billing={billing} />
-            <div className="flex gap-2 pt-1">
-              {billing.plan === "free" && <UpgradeDialog />}
-              {billing.stripe_customer_id && (
-                <button
-                  onClick={handlePortal}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded text-[12px] font-medium border border-border text-foreground hover:bg-muted transition-colors"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Manage Subscription
-                </button>
-              )}
+            {/* Current plan + quota */}
+            <div
+              className="border border-white/[0.08]"
+              style={{ background: "rgba(255,255,255,0.04)" }}
+            >
+              <div className="p-6">
+                <PlanCard billing={billing} />
+                <QuotaBar billing={billing} />
+              </div>
+              <div className="flex gap-4 px-6 pb-6 mt-2">
+                {billing.plan === "free" && <UpgradeDialog />}
+                {billing.stripe_customer_id && (
+                  <button
+                    onClick={handlePortal}
+                    className="flex-1 border border-white/10 text-[#e5e2e1] py-3 text-[14px] font-semibold hover:bg-white/5 transition-colors"
+                  >
+                    Manage Billing
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Invoices */}
+            <div
+              className="border border-white/[0.08] overflow-hidden"
+              style={{ background: "rgba(255,255,255,0.04)" }}
+            >
+              <div className="px-4 py-3 border-b border-white/5">
+                <h3 className="text-[10px] font-bold tracking-wider uppercase text-[#8e9192]">
+                  Recent Invoices
+                </h3>
+              </div>
+              <div className="divide-y divide-white/5">
+                {MOCK_INVOICES.map((inv) => (
+                  <div
+                    key={inv.id}
+                    className="flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-4">
+                      <FileText className="h-5 w-5 text-[#8e9192]" />
+                      <div>
+                        <p className="text-[14px] text-[#e5e2e1]">{inv.id}</p>
+                        <p className="text-[12px] text-[#8e9192]">{inv.date}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[14px] font-semibold text-[#e5e2e1]">
+                        {inv.amount}
+                      </p>
+                      <p className="text-[12px] text-[#c6c6c7]">Paid</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
