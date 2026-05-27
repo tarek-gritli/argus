@@ -7,6 +7,34 @@ from github.PullRequest import PullRequest
 
 from .client import get_installation_client
 
+_MAX_ISSUE_COMMENT_LENGTH = 60000
+
+
+def _chunk_comment_body(body: str, max_length: int = _MAX_ISSUE_COMMENT_LENGTH) -> list[str]:
+    if len(body) <= max_length:
+        return [body]
+
+    chunks: list[str] = []
+    current = ""
+    for line in body.splitlines(keepends=True):
+        while (len(line) > max_length) and line:
+            if current:
+                chunks.append(current.rstrip("\n"))
+                current = ""
+            chunks.append(line[:max_length].rstrip("\n"))
+            line = line[max_length:]
+        if current and len(current) + len(line) > max_length:
+            chunks.append(current.rstrip("\n"))
+            current = line
+        else:
+            current += line
+
+    if current:
+        chunks.append(current.rstrip("\n"))
+
+    return chunks or [body[:max_length]]
+
+
 _IGNORED_PATH_PREFIXES = (
     "node_modules/",
     "vendor/",
@@ -148,7 +176,22 @@ def get_pr_diff(pr: PullRequest, files: Iterable[File] | None = None) -> str:
 
 def post_issue_comment(pr: PullRequest, body: str) -> None:
     """Post a comment on a PR."""
-    pr.create_issue_comment(body)
+    rough_chunks = _chunk_comment_body(body)
+    total = max(1, len(rough_chunks) // 10)
+    max_header_length = len(f"Part {total}/{total}\n\n")
+    chunks = _chunk_comment_body(body, max_length=_MAX_ISSUE_COMMENT_LENGTH - max_header_length)
+
+    if len(chunks) == 1:
+        pr.create_issue_comment(chunks[0])
+        return
+
+    total = len(chunks)
+    for index, chunk in enumerate(chunks, start=1):
+        header = f"Review summary part {index}/{total}\n\n"
+        if len(header) + len(chunk) > _MAX_ISSUE_COMMENT_LENGTH:
+            header = f"Review summary part {index}/{total} (truncated)\n\n"
+            chunk = chunk[: _MAX_ISSUE_COMMENT_LENGTH - len(header)]
+        pr.create_issue_comment(header + chunk)
 
 
 def update_pr_body(pr: PullRequest, body: str) -> None:

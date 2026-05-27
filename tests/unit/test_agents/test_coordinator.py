@@ -357,3 +357,31 @@ def test_run_skips_persist_when_no_org_id():
         run(VALID_PAYLOAD)  # no org_id
 
     mock_sf.assert_not_called()
+
+
+def test_run_posts_summary_even_if_inline_review_fails():
+    """The summary comment should still be posted if inline review creation fails."""
+    mock_pr = _make_mock_pr()
+
+    with (
+        _patch_run_async(),
+        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
+        patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
+        patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
+        patch("orchestrator.coordinator.get_pr_file_content", return_value="code"),
+        patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
+        patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=(True, "pro"))),
+        patch("orchestrator.coordinator._get_repo_id_for_run", new=AsyncMock(return_value="repo_abc")),
+        patch("orchestrator.coordinator._fetch_context", new=AsyncMock(return_value=ContextBundle.empty())),
+        patch("orchestrator.coordinator.get_rejected_finding_keys", new=AsyncMock(return_value=set())),
+        patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]),
+        patch("orchestrator.coordinator.run_fix_pipeline", return_value=[SAMPLE_FINDING]),
+        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
+        patch("orchestrator.coordinator.post_findings_as_review", side_effect=RuntimeError("GitHub review failed")),
+        patch("orchestrator.coordinator._persist", new=AsyncMock()),
+    ):
+        from orchestrator.coordinator import run
+
+        run({**VALID_PAYLOAD, "org_id": "org-1"})
+
+    assert mock_post.call_count == 1

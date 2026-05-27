@@ -89,8 +89,12 @@ def run(payload: dict) -> None:
             except Exception:
                 logger.warning("Failed to update PR description — continuing", exc_info=True)
 
-        post_findings_as_review(pr, findings, pr_payload.head_sha)
         post_issue_comment(pr, format_findings(findings))
+
+        try:
+            post_findings_as_review(pr, findings, pr_payload.head_sha)
+        except Exception:
+            logger.exception("Failed to post inline review comments — summary comment was already posted")
 
         if org_id:
             try:

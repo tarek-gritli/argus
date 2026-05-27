@@ -84,6 +84,20 @@ def test_post_issue_comment_calls_create():
     mock_pr.create_issue_comment.assert_called_once_with("## Review\nAll good.")
 
 
+def test_post_issue_comment_chunks_oversized_body():
+    """Large comments are split into multiple GitHub issue comments."""
+    mock_pr = _make_mock_pr()
+    long_body = "line\n" * 20000
+
+    from integrations.github.pr import post_issue_comment
+
+    post_issue_comment(mock_pr, long_body)
+
+    assert mock_pr.create_issue_comment.call_count > 1
+    first_call_body = mock_pr.create_issue_comment.call_args_list[0].args[0]
+    assert first_call_body.startswith("Review summary part 1/")
+
+
 def test_get_pr_diff_concatenates_patches():
     from unittest.mock import MagicMock
 
