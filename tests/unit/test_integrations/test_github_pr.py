@@ -47,6 +47,32 @@ def test_get_pr_files_returns_list():
     mock_pr.get_files.assert_called_once()
 
 
+def test_get_pr_files_filters_ignored_and_patchless_files():
+    """get_pr_files skips ignored dirs, lock files, binaries, and patch-less files."""
+    mock_pr = _make_mock_pr()
+    keep_file = _make_mock_file("src/app.py")
+    ignored_dir_file = _make_mock_file("node_modules/pkg/index.js")
+    ignored_generated_file = _make_mock_file("dist/app.min.js")
+    ignored_lock_file = _make_mock_file("pnpm-lock.yaml")
+    ignored_binary_file = _make_mock_file("assets/logo.png")
+    patchless_file = _make_mock_file("src/image.png")
+    patchless_file.patch = None
+    mock_pr.get_files.return_value = [
+        keep_file,
+        ignored_dir_file,
+        ignored_generated_file,
+        ignored_lock_file,
+        ignored_binary_file,
+        patchless_file,
+    ]
+
+    from integrations.github.pr import get_pr_files
+
+    result = get_pr_files(mock_pr)
+
+    assert result == [keep_file]
+
+
 def test_post_issue_comment_calls_create():
     """post_issue_comment delegates to pr.create_issue_comment."""
     mock_pr = _make_mock_pr()
@@ -96,6 +122,92 @@ def test_get_pr_diff_skips_files_without_patch():
 
     diff = get_pr_diff(pr)
     assert diff == ""
+
+
+def test_get_pr_diff_with_empty_files_iterable():
+    """Passing an empty iterable for `files` returns empty diff."""
+    from unittest.mock import MagicMock
+
+    from integrations.github.pr import get_pr_diff
+
+    pr = MagicMock()
+    # files argument is an empty list
+    diff = get_pr_diff(pr, files=[])
+    assert diff == ""
+
+
+def test_get_pr_diff_with_generator_and_patchless_items():
+    """Ensure generator inputs are handled and patchless items are skipped."""
+    from unittest.mock import MagicMock
+
+    from integrations.github.pr import get_pr_diff
+
+    file_with_patch = MagicMock()
+    file_with_patch.filename = "src/ok.py"
+    file_with_patch.patch = "@@ -1 +1 @@\n+ok"
+
+    file_without_patch = MagicMock()
+    file_without_patch.filename = "src/nope.py"
+    file_without_patch.patch = None
+
+    def gen():
+        yield file_without_patch
+        yield file_with_patch
+
+    pr = MagicMock()
+
+    diff = get_pr_diff(pr, files=gen())
+    assert "ok" in diff
+    assert "nope" not in diff
+
+
+def test_get_pr_diff_filters_ignored_paths():
+    from unittest.mock import MagicMock
+
+    from integrations.github.pr import get_pr_diff
+
+    ignored = MagicMock()
+    ignored.filename = "node_modules/pkg/index.js"
+    ignored.patch = "@@ -1 +1 @@\n+ignored"
+
+    kept = MagicMock()
+    kept.filename = "src/main.py"
+    kept.patch = "@@ -1 +1 @@\n+kept"
+
+    pr = MagicMock()
+    pr.get_files.return_value = [ignored, kept]
+
+    diff = get_pr_diff(pr)
+
+    assert "ignored" not in diff
+    assert "kept" in diff
+
+
+def test_get_pr_diff_filters_lock_and_binary_files():
+    from unittest.mock import MagicMock
+
+    from integrations.github.pr import get_pr_diff
+
+    lock_file = MagicMock()
+    lock_file.filename = "package-lock.json"
+    lock_file.patch = "@@ -1 +1 @@\n+ignored-lock"
+
+    binary_file = MagicMock()
+    binary_file.filename = "assets/icon.webp"
+    binary_file.patch = "@@ -1 +1 @@\n+ignored-binary"
+
+    kept = MagicMock()
+    kept.filename = "src/main.py"
+    kept.patch = "@@ -1 +1 @@\n+kept"
+
+    pr = MagicMock()
+    pr.get_files.return_value = [lock_file, binary_file, kept]
+
+    diff = get_pr_diff(pr)
+
+    assert "ignored-lock" not in diff
+    assert "ignored-binary" not in diff
+    assert "kept" in diff
 
 
 def test_post_review_comment_calls_create_review_comment():

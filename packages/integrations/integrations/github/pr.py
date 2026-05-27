@@ -1,10 +1,112 @@
 import re
+from collections.abc import Iterable
 
 from github import Github
 from github.File import File
 from github.PullRequest import PullRequest
 
 from .client import get_installation_client
+
+_IGNORED_PATH_PREFIXES = (
+    "node_modules/",
+    "vendor/",
+    "dist/",
+    "build/",
+    ".next/",
+    ".turbo/",
+    ".cache/",
+    "coverage/",
+    "__pycache__/",
+    ".venv/",
+)
+
+_IGNORED_PATH_SEGMENTS = frozenset(
+    {
+        "node_modules",
+        "vendor",
+        "dist",
+        "build",
+        ".next",
+        ".turbo",
+        ".cache",
+        "coverage",
+        "__pycache__",
+        ".venv",
+    }
+)
+
+_IGNORED_SUFFIXES = (
+    ".min.js",
+    ".min.css",
+    ".map",
+    ".lock",
+    ".lockb",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".ico",
+    ".pdf",
+    ".zip",
+    ".gz",
+    ".tar",
+    ".tgz",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".eot",
+    ".mp3",
+    ".mp4",
+)
+
+_IGNORED_FILENAMES = frozenset(
+    {
+        "package-lock.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "bun.lock",
+        "bun.lockb",
+        "uv.lock",
+        "poetry.lock",
+        "pdm.lock",
+        "Pipfile.lock",
+        "Cargo.lock",
+        "Gemfile.lock",
+        "composer.lock",
+        "Podfile.lock",
+    }
+)
+
+
+def _normalise_path(filename: str) -> str:
+    return filename.replace("\\", "/")
+
+
+def _is_reviewable_file(filename: str, patch: str | None = None) -> bool:
+    path = _normalise_path(filename)
+    basename = path.rsplit("/", 1)[-1]
+
+    if any(path.startswith(prefix) for prefix in _IGNORED_PATH_PREFIXES):
+        return False
+
+    if any(segment in _IGNORED_PATH_SEGMENTS for segment in path.split("/")):
+        return False
+
+    if path.endswith(_IGNORED_SUFFIXES):
+        return False
+
+    if basename in _IGNORED_FILENAMES:
+        return False
+
+    if not patch:
+        return False
+
+    return True
+
+
+def _reviewable_files(files: Iterable[File]) -> list[File]:
+    return [f for f in files if _is_reviewable_file(f.filename, getattr(f, "patch", None))]
 
 
 def get_pr(repo_full_name: str, pr_number: int, installation_id: int) -> PullRequest:
@@ -15,7 +117,7 @@ def get_pr(repo_full_name: str, pr_number: int, installation_id: int) -> PullReq
 
 def get_pr_files(pr: PullRequest) -> list[File]:
     """Return changed files for a PR."""
-    return list(pr.get_files())
+    return _reviewable_files(pr.get_files())
 
 
 def get_pr_file_content(pr: PullRequest, filename: str) -> str | None:
@@ -31,10 +133,11 @@ def get_pr_file_content(pr: PullRequest, filename: str) -> str | None:
         return None
 
 
-def get_pr_diff(pr: PullRequest) -> str:
+def get_pr_diff(pr: PullRequest, files: Iterable[File] | None = None) -> str:
     """Return the full unified diff for a PR as a single string."""
     parts: list[str] = []
-    for f in pr.get_files():
+    source_files = list(files) if files is not None else pr.get_files()
+    for f in _reviewable_files(source_files):
         if not f.patch:
             continue
         parts.append(f"--- a/{f.filename}")
