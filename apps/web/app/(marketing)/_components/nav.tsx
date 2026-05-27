@@ -1,61 +1,97 @@
 "use client"
 
+import type React from "react"
+import { useState } from "react"
 import Link from "next/link"
-import { useState, useEffect } from "react"
-import { cn } from "@/lib/utils"
+import { Menu, X } from "lucide-react"
 import { BASE as API_URL } from "@/lib/api"
 
-export function Nav() {
-  const [scrolled, setScrolled] = useState(false)
+const NAV_ITEMS = [
+  { name: "Features", href: "#features-section" },
+  { name: "Pricing", href: "#pricing-section" },
+  { name: "Testimonials", href: "#testimonials-section" },
+]
 
-  useEffect(() => {
-    const handler = () => setScrolled(window.scrollY > 20)
-    window.addEventListener("scroll", handler, { passive: true })
-    return () => window.removeEventListener("scroll", handler)
-  }, [])
+function handleScroll(e: React.MouseEvent<HTMLAnchorElement>, href: string) {
+  e.preventDefault()
+  const el = document.getElementById(href.slice(1))
+  if (el) el.scrollIntoView({ behavior: "smooth" })
+}
+
+export function Nav() {
+  const [open, setOpen] = useState(false)
 
   return (
-    <header
-      className={cn(
-        "fixed top-0 inset-x-0 z-50 transition-all duration-300",
-        scrolled
-          ? "bg-[oklch(0.10_0_0)]/90 backdrop-blur border-b border-white/5"
-          : "bg-transparent"
-      )}
-    >
-      <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-        <Link href="/home" className="flex items-center gap-2.5">
-          <div className="w-6 h-6 rounded bg-white/10 flex items-center justify-center">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <circle cx="7" cy="7" r="6" stroke="white" strokeWidth="1.5" />
-              <circle cx="7" cy="7" r="2.5" fill="white" />
-            </svg>
+    <header className="w-full py-4 px-6">
+      <div className="max-w-7xl mx-auto flex items-center justify-between">
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3">
+            <span className="text-foreground text-xl font-semibold">Argus</span>
           </div>
-          <span className="font-semibold text-[13px] tracking-wide text-white/90">ARGUS</span>
-        </Link>
-
-        <nav className="hidden md:flex items-center gap-8 text-[13px] text-zinc-500">
-          <a href="#features" className="hover:text-zinc-200 transition-colors">Features</a>
-          <a href="#how-it-works" className="hover:text-zinc-200 transition-colors">How it works</a>
-          <a href="#pricing" className="hover:text-zinc-200 transition-colors">Pricing</a>
-          <Link href="/docs" className="hover:text-zinc-200 transition-colors">Docs</Link>
-        </nav>
-
+          <nav className="hidden md:flex items-center gap-2">
+            {NAV_ITEMS.map((item) => (
+              <Link
+                key={item.name}
+                href={item.href}
+                onClick={(e) => handleScroll(e, item.href)}
+                className="text-[#888888] hover:text-foreground px-4 py-2 rounded-full font-medium transition-colors"
+              >
+                {item.name}
+              </Link>
+            ))}
+          </nav>
+        </div>
         <div className="flex items-center gap-4">
           <a
             href={`${API_URL}/api/v1/auth/github/login`}
-            className="text-[13px] text-zinc-500 hover:text-zinc-200 transition-colors"
+            className="hidden md:block bg-secondary text-secondary-foreground hover:bg-secondary/90 px-6 py-2 rounded-full font-medium shadow-sm text-sm"
           >
-            Sign in
+            Try for Free
           </a>
-          <a
-            href={`${API_URL}/api/v1/auth/github/login`}
-            className="text-[13px] bg-white text-black font-semibold px-4 py-2 rounded-lg hover:bg-zinc-100 transition-colors"
+          <button
+            className="md:hidden text-foreground"
+            onClick={() => setOpen(true)}
+            aria-label="Open menu"
           >
-            Get started free
-          </a>
+            <Menu className="h-7 w-7" />
+          </button>
         </div>
       </div>
+
+      {/* Mobile drawer */}
+      {open && (
+        <div className="fixed inset-0 z-50 bg-background/80" onClick={() => setOpen(false)}>
+          <div
+            className="absolute bottom-0 inset-x-0 bg-background border-t border-border p-6 rounded-t-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <span className="text-xl font-semibold text-foreground">Navigation</span>
+              <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <nav className="flex flex-col gap-4">
+              {NAV_ITEMS.map((item) => (
+                <a
+                  key={item.name}
+                  href={item.href}
+                  onClick={(e) => { handleScroll(e, item.href); setOpen(false) }}
+                  className="text-[#888888] hover:text-foreground text-lg py-2 transition-colors"
+                >
+                  {item.name}
+                </a>
+              ))}
+              <a
+                href={`${API_URL}/api/v1/auth/github/login`}
+                className="w-full mt-4 bg-secondary text-secondary-foreground hover:bg-secondary/90 px-6 py-2 rounded-full font-medium shadow-sm text-sm text-center"
+              >
+                Try for Free
+              </a>
+            </nav>
+          </div>
+        </div>
+      )}
     </header>
   )
 }

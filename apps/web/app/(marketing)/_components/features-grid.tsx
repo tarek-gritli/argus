@@ -51,7 +51,7 @@ function FeatureCard({ feature, index }: { feature: typeof FEATURES[number]; ind
       className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-6 hover:border-white/[0.14] hover:bg-white/[0.04] transition-all duration-200"
     >
       <div className="w-9 h-9 rounded-lg bg-white/[0.06] flex items-center justify-center mb-5">
-        <Icon className="h-4.5 w-4.5 text-zinc-300" size={18} />
+        <Icon className="text-zinc-300" size={18} />
       </div>
       <h3 className="font-semibold text-white text-[15px] mb-2">{feature.title}</h3>
       <p className="text-[13px] text-zinc-500 leading-relaxed">{feature.desc}</p>
@@ -61,7 +61,7 @@ function FeatureCard({ feature, index }: { feature: typeof FEATURES[number]; ind
 
 export function FeaturesGrid() {
   return (
-    <section id="features" className="py-24 max-w-6xl mx-auto px-6">
+    <section id="features-section" className="py-24 max-w-6xl mx-auto px-6">
       <div className="mb-16">
         <h2 className="text-4xl font-bold text-white mb-4 tracking-tight">Five agents. One pull request.</h2>
         <p className="text-zinc-500 text-lg max-w-xl">
