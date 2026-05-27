@@ -1,14 +1,14 @@
 import type { Severity } from "@/lib/types"
 
-const SEVERITIES: Severity[] = ["critical", "high", "medium", "low", "info"]
-
-const SEVERITY_CONFIG: Record<Severity, { label: string; color: string }> = {
-  critical: { label: "Critical", color: "bg-red-500" },
-  high:     { label: "High",     color: "bg-orange-500" },
-  medium:   { label: "Medium",   color: "bg-yellow-500" },
-  low:      { label: "Low",      color: "bg-green-500" },
-  info:     { label: "Info",     color: "bg-slate-400" },
+const SEVERITY_CONFIG: Record<Severity, { label: string; color: string; borderColor: string; iconColor: string }> = {
+  critical: { label: "CRITICAL", color: "text-[#ffb4ab]", borderColor: "border-l-[#ffb4ab]", iconColor: "text-[#ffb4ab]" },
+  high:     { label: "HIGH",     color: "text-[#e2e2e2]", borderColor: "border-l-[#e2e2e2]", iconColor: "text-[#e2e2e2]" },
+  medium:   { label: "MEDIUM",   color: "text-[#c6c6c7]", borderColor: "border-l-[#c6c6c7]", iconColor: "text-[#c6c6c7]" },
+  low:      { label: "LOW",      color: "text-[#c4c7c8]", borderColor: "border-l-[#c4c7c8]", iconColor: "text-[#c4c7c8]" },
+  info:     { label: "INFO",     color: "text-[#8e9192]", borderColor: "border-l-[#8e9192]", iconColor: "text-[#8e9192]" },
 }
+
+const SEVERITIES: Severity[] = ["critical", "high", "medium", "low", "info"]
 
 interface Props {
   counts: Record<Severity, number>
@@ -17,22 +17,27 @@ interface Props {
 
 export function StatsStrip({ counts, total }: Props) {
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-8">
-      <div className="col-span-1 rounded-lg border bg-card p-4">
-        <p className="text-2xl font-bold font-tabular text-foreground">{total}</p>
-        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-widest mt-1">Total</p>
+    <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
+      {/* Total */}
+      <div className="border border-white/5 p-3 flex flex-col gap-1" style={{ background: "#1c1b1b" }}>
+        <span className="text-[10px] font-bold tracking-[0.05em] uppercase text-[#8e9192]">Total Reviews</span>
+        <span className="text-[24px] font-semibold leading-8 tracking-[-0.02em] text-[#e5e2e1]">{total.toLocaleString()}</span>
       </div>
-      {SEVERITIES.map((s) => (
-        <div key={s} className="rounded-lg border bg-card p-4">
-          <div className="flex items-center gap-1.5 mb-2">
-            <span className={`w-1.5 h-1.5 rounded-full ${SEVERITY_CONFIG[s].color}`} />
+
+      {/* Per severity */}
+      {SEVERITIES.map((s) => {
+        const cfg = SEVERITY_CONFIG[s]
+        return (
+          <div
+            key={s}
+            className={`border border-white/5 border-l-2 ${cfg.borderColor} p-3 flex flex-col gap-1`}
+            style={{ background: "#1c1b1b" }}
+          >
+            <span className={`text-[10px] font-bold tracking-[0.05em] uppercase ${cfg.color}`}>{cfg.label}</span>
+            <span className="text-[24px] font-semibold leading-8 tracking-[-0.02em] text-[#e5e2e1]">{counts[s]}</span>
           </div>
-          <p className="text-2xl font-bold font-tabular text-foreground">{counts[s]}</p>
-          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-widest mt-1">
-            {SEVERITY_CONFIG[s].label}
-          </p>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
