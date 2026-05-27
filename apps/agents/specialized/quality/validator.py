@@ -11,6 +11,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from ..confidence import (
+    coerce_confidence,
+    confidence_at_or_above,
+    normalize_severity,
+    sort_by_severity_then_confidence,
+)
+
 logger = logging.getLogger(__name__)
 
 # Confidence below this → drop the finding entirely
@@ -62,10 +69,14 @@ def validate_findings(raw_findings: list[dict[str, Any]]) -> list[dict[str, Any]
         finding["agent"] = "quality"
 
         # --- Confidence floor ---
-        confidence = float(finding.get("confidence", 0))
-        if confidence < _MIN_CONFIDENCE:
+        confidence = coerce_confidence(finding.get("confidence"))
+        if confidence is None:
+            logger.warning("Dropping finding with non-numeric confidence")
+            continue
+        if not confidence_at_or_above(confidence, _MIN_CONFIDENCE):
             logger.debug("Dropping low-confidence finding: %s (%.2f)", finding["title"], confidence)
             continue
+        finding["confidence"] = confidence
 
         # --- Line range sanity ---
         line_start = finding.get("line_start", 0)
@@ -84,9 +95,7 @@ def validate_findings(raw_findings: list[dict[str, Any]]) -> list[dict[str, Any]
             continue
 
         # --- Severity normalization ---
-        valid_severities = {"critical", "high", "medium", "low", "info"}
-        if finding["severity"] not in valid_severities:
-            finding["severity"] = "medium"
+        finding["severity"] = normalize_severity(finding.get("severity"), default="medium")
 
         # --- Suggestion fallback ---
         if not finding.get("suggestion"):
@@ -98,8 +107,7 @@ def validate_findings(raw_findings: list[dict[str, Any]]) -> list[dict[str, Any]
         valid.append(finding)
 
     # Sort by severity weight, then confidence
-    _severity_weight = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
-    valid.sort(key=lambda f: (_severity_weight.get(f["severity"], 5), -float(f["confidence"])))
+    sort_by_severity_then_confidence(valid)
 
     if len(valid) > _MAX_FINDINGS:
         logger.info("Capping findings from %d to %d", len(valid), _MAX_FINDINGS)

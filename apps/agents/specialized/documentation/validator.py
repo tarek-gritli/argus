@@ -5,13 +5,18 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from ..confidence import (
+    coerce_confidence,
+    confidence_at_or_above,
+    normalize_severity,
+    scale_confidence,
+    sort_by_severity_then_confidence,
+)
+
 logger = logging.getLogger(__name__)
 
 _MIN_CONFIDENCE = 0.55
 _MAX_FINDINGS = 15
-
-_VALID_SEVERITIES = {"critical", "high", "medium", "low", "info"}
-_SEVERITY_WEIGHT = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 
 # The documentation agent must never claim issues for things it cannot see
 _SPECULATIVE_PATTERNS = [
@@ -49,8 +54,7 @@ def validate_findings(raw_findings: list[dict[str, Any]]) -> list[dict[str, Any]
 
         finding["agent"] = "documentation"
 
-        if finding["severity"] not in _VALID_SEVERITIES:
-            finding["severity"] = "medium"
+        finding["severity"] = normalize_severity(finding.get("severity"), default="medium")
 
         try:
             line_start = int(finding.get("line_start", 0))
@@ -63,9 +67,8 @@ def validate_findings(raw_findings: list[dict[str, Any]]) -> list[dict[str, Any]
             logger.warning("Dropping finding with invalid line range: %d-%d", line_start, line_end)
             continue
 
-        try:
-            confidence = float(finding.get("confidence", 0))
-        except (TypeError, ValueError):
+        confidence = coerce_confidence(finding.get("confidence"))
+        if confidence is None:
             logger.warning("Dropping finding with non-numeric confidence")
             continue
 
@@ -73,13 +76,13 @@ def validate_findings(raw_findings: list[dict[str, Any]]) -> list[dict[str, Any]
         desc_lower = str(finding.get("description", "")).lower()
         for pattern in _SPECULATIVE_PATTERNS:
             if pattern in title_lower or pattern in desc_lower:
-                confidence *= 0.5
+                confidence = scale_confidence(confidence, 0.5)
                 logger.debug("Penalizing speculative finding: %s", finding["title"])
                 break
 
-        finding["confidence"] = round(confidence, 3)
+        finding["confidence"] = confidence
 
-        if confidence < _MIN_CONFIDENCE:
+        if not confidence_at_or_above(confidence, _MIN_CONFIDENCE):
             logger.debug("Dropping low-confidence finding: %s (%.2f)", finding["title"], confidence)
             continue
 
@@ -91,7 +94,7 @@ def validate_findings(raw_findings: list[dict[str, Any]]) -> list[dict[str, Any]
         finding.setdefault("fix", None)
         valid.append(finding)
 
-    valid.sort(key=lambda f: (_SEVERITY_WEIGHT.get(f["severity"], 5), -float(f["confidence"])))
+    sort_by_severity_then_confidence(valid)
 
     if len(valid) > _MAX_FINDINGS:
         logger.info("Capping findings from %d to %d", len(valid), _MAX_FINDINGS)

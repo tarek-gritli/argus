@@ -15,6 +15,7 @@ from specialized.security.schemas import (
     RepoConfig,
     Severity,
 )
+from specialized.security.validator import build_fallback_decisions, validate_findings
 
 DIFF_WITH_SECRET = """\
 --- a/src/auth.py
@@ -217,3 +218,55 @@ def test_llm_fallback_on_api_error():
 
     # Fallback should still detect the secret
     assert any(f.category == "Hardcoded Secret" for f in result.findings)
+
+
+def test_security_validator_drops_low_confidence_findings():
+    finding = MagicMock()
+    finding.severity = Severity.HIGH
+    finding.confidence = 0.4
+    finding.message = "Possible issue"
+
+    assert validate_findings([finding]) == []
+
+
+def test_security_validator_downgrades_critical_low_confidence():
+    finding = MagicMock()
+    finding.severity = Severity.CRITICAL
+    finding.confidence = 0.8
+    finding.message = "Possible issue"
+
+    result = validate_findings([finding])
+    assert len(result) == 1
+    assert result[0].severity == Severity.HIGH
+
+
+def test_security_fallback_decisions_follow_confidence_policy():
+    raw_findings = [
+        RawFinding(
+            file="src/auth.py",
+            line=1,
+            category="Injection",
+            owasp_id="A03:2021",
+            severity=Severity.CRITICAL,
+            exploit_path="SQL injection.",
+            message="SQL injection.",
+            suggested_fix="Use parameterized queries.",
+            confidence=0.8,
+        ),
+        RawFinding(
+            file="src/auth.py",
+            line=2,
+            category="Injection",
+            owasp_id="A03:2021",
+            severity=Severity.HIGH,
+            exploit_path="SQL injection.",
+            message="SQL injection.",
+            suggested_fix="Use parameterized queries.",
+            confidence=0.4,
+        ),
+    ]
+
+    decisions = build_fallback_decisions(raw_findings)
+    assert decisions[0].action == ReflectionAction.DOWNGRADE
+    assert decisions[0].revised_severity == Severity.HIGH
+    assert decisions[1].action == ReflectionAction.DROP

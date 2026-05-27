@@ -14,6 +14,14 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from ..confidence import (
+    coerce_confidence,
+    confidence_at_or_above,
+    normalize_severity,
+    scale_confidence,
+    sort_by_severity_then_confidence,
+)
+
 logger = logging.getLogger(__name__)
 
 _MIN_CONFIDENCE = 0.5
@@ -40,9 +48,6 @@ _STRONG_PATTERNS = [
     "missing error",
     "flaky",
 ]
-
-_VALID_SEVERITIES = {"critical", "high", "medium", "low", "info"}
-_SEVERITY_WEIGHT = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 
 
 def validate_findings(
@@ -87,8 +92,7 @@ def validate_findings(
         finding["agent"] = "testing"
 
         # Severity normalization
-        if finding["severity"] not in _VALID_SEVERITIES:
-            finding["severity"] = "medium"
+        finding["severity"] = normalize_severity(finding.get("severity"), default="medium")
 
         # Line range sanity — coerce to int to handle string values from LLM
         try:
@@ -101,30 +105,29 @@ def validate_findings(
             logger.warning("Dropping finding with invalid line range: %d-%d", line_start, line_end)
             continue
 
-        try:
-            confidence = float(finding.get("confidence", 0))
-        except (TypeError, ValueError):
+        confidence = coerce_confidence(finding.get("confidence"))
+        if confidence is None:
             logger.warning("Dropping finding with non-numeric confidence")
             continue
 
         # Penalize speculative "no tests anywhere" claims when test files WERE touched
         # (The agent might be right, but confidence should be lower)
-        title_lower = finding["title"].lower()
-        desc_lower = finding.get("description", "").lower()
+        title_lower = str(finding.get("title", "").lower())
+        desc_lower = str(finding.get("description", "")).lower()
 
         if has_test_files_in_diff:
             for pattern in _speculative_patterns_list():
                 if pattern in title_lower or pattern in desc_lower:
-                    confidence *= 0.6
+                    confidence = scale_confidence(confidence, 0.6)
                     logger.debug(
                         "Penalizing speculative finding (test files exist in diff): %s",
                         finding["title"],
                     )
                     break
 
-        finding["confidence"] = round(confidence, 3)
+        finding["confidence"] = confidence
 
-        if confidence < _MIN_CONFIDENCE:
+        if not confidence_at_or_above(confidence, _MIN_CONFIDENCE):
             logger.debug("Dropping low-confidence finding: %s (%.2f)", finding["title"], confidence)
             continue
 
@@ -139,7 +142,7 @@ def validate_findings(
         valid.append(finding)
 
     # Sort: severity first, then confidence descending
-    valid.sort(key=lambda f: (_SEVERITY_WEIGHT.get(f["severity"], 5), -float(f["confidence"])))
+    sort_by_severity_then_confidence(valid)
 
     if len(valid) > _MAX_FINDINGS:
         logger.info("Capping findings from %d to %d", len(valid), _MAX_FINDINGS)
