@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 const PUBLIC_PATHS = ["/login", "/auth/callback", "/home"]
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   return NextResponse.next();
   const token = req.cookies.get("argus_token")?.value
   const { pathname } = req.nextUrl
