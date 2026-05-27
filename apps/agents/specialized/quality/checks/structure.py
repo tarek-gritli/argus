@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...confidence import blend_scores, score_from_count, score_from_threshold
 from ..tools.ast_analyzer import StaticAnalysisResult
 from ..tools.grep_patterns import PatternScanResult
-from .confidence import blend_scores, score_from_count, score_from_threshold
 
 FindingSchema = dict[str, Any]
 

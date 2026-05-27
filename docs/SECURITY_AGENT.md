@@ -1,7 +1,7 @@
 # Security Agent
-### `apps/agents/security/`
+### `apps/agents/specialized/security/`
 
-The security agent is the first agent shipped in Argus. It receives a pull request diff, runs three deterministic scanners in parallel, feeds the pre-annotated results to Claude across two separate LLM calls (generate → reflect), and writes a clean structured findings file to object storage.
+The security agent is the first agent shipped in Argus. It receives a pull request diff, runs three deterministic scanners in parallel, feeds the pre-annotated results to Claude across two separate LLM calls (generate → reflect), and returns a clean structured findings payload to the orchestrator.
 
 This document covers the full end-to-end flow from webhook to output, phase by phase.
 
@@ -62,13 +62,13 @@ Orchestrator
 │     Generate findings → self-reflection     │
 │                │                            │
 │                ▼                            │
-│   Phase E: Format structured JSON output    │
+│   Phase E: Validate + format output         │
 └─────────────────────────────────────────────┘
         │
         ▼
-Object Storage (S3 / Azure Blob)
-  · review_{pr_id}.json — full findings array
-  · Orchestrator marks review "complete" in PostgreSQL
+Orchestrator / review writer
+  · Consumes the returned `ReviewResult`
+  · Persists findings and marks review "complete"
 ```
 
 > **Stripped from MVP:** Qdrant vector memory · fix suggestion engine · notification channels · results aggregator (single agent only in Phase 1)
@@ -86,7 +86,7 @@ The context builder runs first, before any scanning. It configures the agent's "
 │  ┌─────────────────┐   ┌─────────────────────────┐  │
 │  │  System Prompt  │   │      OWASP Rule Set      │  │
 │  │                 │   │                          │  │
-│  │ Role: security  │   │ Top 10 2021 categories   │  │
+│  │ Role: security  │   │ Top 10 2025 categories   │  │
 │  │   reviewer      │   │ Per-category examples    │  │
 │  │ Output: JSON    │   │ Severity mapping table   │  │
 │  │   only          │   │ Loaded as static JSON    │  │
@@ -325,9 +325,9 @@ Action on idx 1: DOWNGRADE
 
 ---
 
-## 6. Phase E — Output Formatter
+### 6. Phase E — Validation + Output Formatter
 
-The formatter strips all internal fields (`exploit_path`, `downgrade_reason`, `action`) that were only used during reasoning. It validates every field against the output schema using Pydantic, assigns a unique `finding_id` (UUID), and emits the clean array to object storage.
+The validator and formatter strip all internal fields (`exploit_path`, `downgrade_reason`, `action`) that were only used during reasoning. They validate every field against the output schema using Pydantic, assign a unique `finding_id` (UUID), and emit the clean array to the orchestrator.
 
 ```json
 {
@@ -370,16 +370,16 @@ The formatter strips all internal fields (`exploit_path`, `downgrade_reason`, `a
 ## 7. File & Code Map
 
 ```
-apps/agents/security/
+apps/agents/specialized/security/
 ├── agent.py                  ← entry point
-├── prompts.py                ← all prompt strings
 ├── schemas.py                ← Pydantic types
+├── validator.py              ← confidence policy + fallback reflection
 ├── tools/
 │   ├── secret_scanner.py     ← scanner
 │   ├── sast_scanner.py       ← scanner
 │   └── dep_checker.py        ← scanner
 └── rules/                    ← static data
-    ├── owasp_top10_2021.json
+    ├── owasp_top10.json
     ├── sast_rules_python.json
     ├── sast_rules_javascript.json
     ├── secret_patterns.json
@@ -420,14 +420,14 @@ apps/agents/security/
 | `scan(diff_lines)` | Extracts added dependency lines from manifest files in diff. Looks up each `pkg+version` against local NVD mirror. Returns hits with `cve_id`, `cvss_score`, `fix_version`. |
 | `_parse_manifests(lines)` | Handles `requirements.txt`, `package.json`, `pom.xml`, `Gemfile`, `go.mod`. Returns normalized `(name, version)` tuples. |
 
-### `prompts.py`
+### `agent.py` prompt helpers
 
 | Symbol | Description |
 |---|---|
 | `SYSTEM_PROMPT` | Security reviewer persona. JSON-only output, OWASP citation, no style findings. |
-| `REFLECTION_SYSTEM_PROMPT` | Skeptical senior reviewer persona. Defines DROP / KEEP / DOWNGRADE actions and when to apply each. |
-| `build_generation_prompt(diff, hits, ctx)` | Assembles user-turn string: annotated diff lines + schema definition + instructions. |
-| `build_reflection_prompt(raw_findings)` | Serializes raw findings into the reflection user-turn. |
+| `REFLECTION_PROMPT` | Skeptical senior reviewer persona. Defines DROP / KEEP / DOWNGRADE actions and when to apply each. |
+| `_build_generation_prompt(diff, hits, ctx)` | Assembles user-turn string: annotated diff lines + schema definition + instructions. |
+| `_build_reflection_prompt(raw_findings)` | Serializes raw findings into the reflection user-turn. |
 
 ### `schemas.py`
 
@@ -444,7 +444,7 @@ apps/agents/security/
 
 | File | Contents |
 |---|---|
-| `owasp_top10_2021.json` | Category definitions + severity mapping table |
+| `owasp_top10.json` | Category definitions + severity mapping table |
 | `sast_rules_python.json` | tree-sitter patterns for Python |
 | `sast_rules_javascript.json` | tree-sitter patterns for JS/TS |
 | `secret_patterns.json` | Compiled regex list with names and severity hints |
@@ -476,4 +476,4 @@ Auto-apply of suggested fixes is gated at **confidence > 0.90** and **single-fil
 
 ---
 
-*v1.0 — Security Agent | Argus · Confidential*
+*v1.1 — Security Agent | Argus · Confidential*

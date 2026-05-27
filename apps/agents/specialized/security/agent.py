@@ -30,6 +30,7 @@ from .schemas import (
     SecurityContext,
     Severity,
 )
+from .validator import build_fallback_decisions, validate_findings
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +240,9 @@ def run_security_agent(task: AgentTask) -> ReviewResult:
 
     findings = _reflect_findings_llm(raw_findings)
     logger.info("After reflection: %d findings", len(findings))
+
+    findings = validate_findings(findings)
+    logger.info("After validation: %d findings", len(findings))
 
     return _format_output(findings, task)
 
@@ -533,38 +537,7 @@ def _fallback_generate_findings(hits: ScannerHits) -> list[RawFinding]:
 
 
 def _fallback_reflect_findings(raw_findings: list[RawFinding]) -> list[Finding]:
-    decisions: list[ReflectionDecision] = []
-
-    for index, finding in enumerate(raw_findings):
-        if finding.confidence < 0.60:
-            decisions.append(
-                ReflectionDecision(
-                    finding_index=index,
-                    action=ReflectionAction.DROP,
-                    reason="Confidence below threshold.",
-                )
-            )
-            continue
-
-        if finding.severity == Severity.CRITICAL and finding.confidence < 0.85:
-            decisions.append(
-                ReflectionDecision(
-                    finding_index=index,
-                    action=ReflectionAction.DOWNGRADE,
-                    reason="Critical severity unsupported by confidence.",
-                    revised_severity=Severity.HIGH,
-                )
-            )
-            continue
-
-        decisions.append(
-            ReflectionDecision(
-                finding_index=index,
-                action=ReflectionAction.KEEP,
-                reason="Exploit path and confidence are acceptable.",
-            )
-        )
-
+    decisions = build_fallback_decisions(raw_findings)
     return _apply_decisions(raw_findings, decisions)
 
 
