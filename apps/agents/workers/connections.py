@@ -83,8 +83,14 @@ def init_connections() -> None:
 
         _loop_thread = threading.Thread(target=_loop_worker, daemon=True, name="argus-db-loop")
         _loop_thread.start()
-        _ready.wait()
-        run_async(_async_init(settings.database_url))
+        if not _ready.wait(timeout=10):
+            close_connections()
+            raise RuntimeError("Async runtime failed to start in time")
+        try:
+            run_async(_async_init(settings.database_url))
+        except Exception:
+            close_connections()
+            raise
         _initialized.set()
 
 
