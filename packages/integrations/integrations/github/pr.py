@@ -72,7 +72,11 @@ def get_pr_diff(pr: PullRequest) -> str:
 
 def post_issue_comment(pr: PullRequest, body: str) -> None:
     """Post a comment on a PR."""
-    chunks = _chunk_comment_body(body)
+    rough_chunks = _chunk_comment_body(body)
+    total = max(1, len(rough_chunks) // 10)  # Aim for ~10 comments, but allow more if body is huge
+    max_header_length = len(f"Part {total}/{total}\n\n")
+    chunks = _chunk_comment_body(body, max_length=_MAX_ISSUE_COMMENT_LENGTH - max_header_length)
+
     if len(chunks) == 1:
         pr.create_issue_comment(chunks[0])
         return
@@ -83,9 +87,7 @@ def post_issue_comment(pr: PullRequest, body: str) -> None:
         if len(header) + len(chunk) > _MAX_ISSUE_COMMENT_LENGTH:
             header = f"Part {index}/{total} (truncated)\n\n"
             chunk = chunk[: _MAX_ISSUE_COMMENT_LENGTH - len(header)]
-        else:
-            chunk = header + chunk
-        pr.create_issue_comment(chunk)
+        pr.create_issue_comment(header + chunk)
 
 
 def update_pr_body(pr: PullRequest, body: str) -> None:
