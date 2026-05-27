@@ -4,7 +4,7 @@ export default function SettingsPage() {
   return (
     <>
       <Topbar title="Settings" />
-      <div className="p-6 max-w-2xl space-y-5">
+      <div className="px-8 py-8 space-y-5">
         <div className="mb-6">
           <h2 className="text-base font-semibold text-foreground">Settings</h2>
           <p className="text-[12px] text-muted-foreground mt-0.5">Manage your organization preferences</p>

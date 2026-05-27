@@ -17,7 +17,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
   return (
     <>
       <Topbar title="Review Detail" />
-      <div className="p-6 max-w-4xl">
+      <div className="px-8 py-8">
         <Link
           href="/dashboard/reviews"
           className="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground mb-6 transition-colors"

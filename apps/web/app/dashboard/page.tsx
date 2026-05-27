@@ -22,7 +22,7 @@ export default function OverviewPage() {
   return (
     <>
       <Topbar title="Overview" />
-      <div className="p-6 max-w-5xl">
+      <div className="px-8 py-8">
         {isLoading ? (
           <div className="grid grid-cols-6 gap-3 mb-8">
             {Array.from({ length: 6 }).map((_, i) => (

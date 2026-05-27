@@ -33,7 +33,7 @@ export default function IntegrationsPage() {
   return (
     <>
       <Topbar title="Integrations" />
-      <div className="p-6 max-w-2xl">
+      <div className="px-8 py-8">
         <div className="mb-6">
           <h2 className="text-base font-semibold text-foreground">Integrations</h2>
           <p className="text-[12px] text-muted-foreground mt-0.5">

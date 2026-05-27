@@ -1,18 +1,25 @@
 import { cn } from "@/lib/utils"
 
-const STATUS_CONFIG: Record<string, { dot: string; text: string; bg: string }> = {
-  pending: { dot: "bg-yellow-500", text: "text-yellow-700 dark:text-yellow-400", bg: "bg-yellow-500/8 border-yellow-500/20" },
-  running: { dot: "bg-blue-500 animate-pulse", text: "text-blue-700 dark:text-blue-400", bg: "bg-blue-500/8 border-blue-500/20" },
-  done:    { dot: "bg-green-500",  text: "text-green-700 dark:text-green-400",  bg: "bg-green-500/8 border-green-500/20" },
-  failed:  { dot: "bg-red-500",    text: "text-red-700 dark:text-red-400",    bg: "bg-red-500/8 border-red-500/20" },
+const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; pulse?: boolean }> = {
+  pending:  { label: "PENDING",   color: "text-[#8e9192] border-[#8e9192]", bg: "bg-[#8e9192]/10" },
+  running:  { label: "RUNNING",   color: "text-white border-white",         bg: "bg-white/10", pulse: true },
+  done:     { label: "COMPLETED", color: "text-[#e2e2e2] border-[#e2e2e2]", bg: "bg-[#e2e2e2]/10" },
+  failed:   { label: "FAILED",    color: "text-[#ffb4ab] border-[#ffb4ab]", bg: "bg-[#ffb4ab]/10" },
 }
 
 export function ReviewStatusBadge({ status }: { status: string }) {
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending
   return (
-    <span className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] font-medium", cfg.bg, cfg.text)}>
-      <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
-      <span className="capitalize">{status}</span>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 px-2 py-0.5 border-l text-[10px] font-bold tracking-[0.05em]",
+        cfg.bg,
+        cfg.color,
+        cfg.pulse && "animate-pulse"
+      )}
+    >
+      {cfg.pulse && <span className="w-1.5 h-1.5 rounded-full bg-current" />}
+      {cfg.label}
     </span>
   )
 }
