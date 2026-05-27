@@ -53,6 +53,7 @@ async def github_webhook(request: Request, settings: Settings = Depends(get_sett
         default_branch = repo_data.get("default_branch", "main")
 
         if ref != f"refs/heads/{default_branch}":
+            logger.info("push ignored: ref=%s is not default branch (%s)", ref, default_branch)
             return Response(status_code=200)
 
         installation_id = body.get("installation", {}).get("id")
@@ -60,50 +61,58 @@ async def github_webhook(request: Request, settings: Settings = Depends(get_sett
         ref_name = ref.removeprefix("refs/heads/")
 
         repo_id = await _get_repo_id(installation_id, repo_full_name)
-        if repo_id:
-            redis_client = request.app.state.redis
-            latest_key = f"index:latest:{repo_id}"
-            scheduled_key = f"index:scheduled:{repo_id}"
+        if not repo_id:
+            logger.info("push ignored: repo %s not found in DB (not yet installed?)", repo_full_name)
+            return Response(status_code=200)
+
+        redis_client = request.app.state.redis
+        latest_key = f"index:latest:{repo_id}"
+        scheduled_key = f"index:scheduled:{repo_id}"
+        try:
+            await redis_client.set(latest_key, ref_name, ex=600)
+            scheduled = await redis_client.set(scheduled_key, "1", ex=300, nx=True)
+        except Exception:
+            logger.warning(
+                "Redis unavailable for repo_id=%s ref=%s installation_id=%s — enqueuing with ref fallback",
+                repo_id,
+                ref_name,
+                installation_id,
+                exc_info=True,
+            )
+            scheduled = True
+        if scheduled:
+            celery_app = request.app.state.celery
             try:
-                await redis_client.set(latest_key, ref_name, ex=600)
-                scheduled = await redis_client.set(scheduled_key, "1", ex=300, nx=True)
-            except Exception:
-                logger.warning(
-                    "Redis unavailable for repo_id=%s ref=%s installation_id=%s — enqueuing with ref fallback",
-                    repo_id,
-                    ref_name,
-                    installation_id,
-                    exc_info=True,
+                celery_app.send_task(
+                    INDEX_REPO_TASK_NAME,
+                    kwargs={
+                        "repo_id": repo_id,
+                        "installation_id": installation_id,
+                        "repo_full_name": repo_full_name,
+                        "ref": ref_name,
+                    },
+                    countdown=300,
                 )
-                scheduled = True
-            if scheduled:
-                celery_app = request.app.state.celery
+                logger.info("index task scheduled: repo=%s ref=%s (5 min delay)", repo_full_name, ref_name)
+            except Exception:
                 try:
-                    celery_app.send_task(
-                        INDEX_REPO_TASK_NAME,
-                        kwargs={
-                            "repo_id": repo_id,
-                            "installation_id": installation_id,
-                            "repo_full_name": repo_full_name,
-                            "ref": ref_name,
-                        },
-                        countdown=300,
-                    )
+                    await redis_client.delete(scheduled_key)
                 except Exception:
-                    try:
-                        await redis_client.delete(scheduled_key)
-                    except Exception:
-                        logger.warning("Failed to clean up scheduled_key for repo_id=%s", repo_id, exc_info=True)
-                    logger.warning("Failed to enqueue %s for repo_id=%s", INDEX_REPO_TASK_NAME, repo_id, exc_info=True)
+                    logger.warning("Failed to clean up scheduled_key for repo_id=%s", repo_id, exc_info=True)
+                logger.warning("Failed to enqueue %s for repo_id=%s", INDEX_REPO_TASK_NAME, repo_id, exc_info=True)
+        else:
+            logger.info("index already scheduled for repo=%s — debounced", repo_full_name)
         return Response(status_code=200)
 
     if event != "pull_request":
+        logger.debug("event=%s ignored", event)
         return Response(status_code=200)
 
     body = json.loads(payload)
 
     action = body.get("action", "")
     if action not in ("opened", "synchronize", "reopened"):
+        logger.debug("pull_request action=%s ignored", action)
         return Response(status_code=200)
 
     delivery_id = request.headers.get("X-GitHub-Delivery")
@@ -115,6 +124,7 @@ async def github_webhook(request: Request, settings: Settings = Depends(get_sett
     acquired = await redis_client.set(delivery_id, "1", ex=DELIVERY_TTL, nx=True)
 
     if not acquired:
+        logger.info("delivery %s already processed — skipping duplicate", delivery_id)
         return Response(status_code=200)
 
     repo = body.get("repository", {})
@@ -147,6 +157,13 @@ async def github_webhook(request: Request, settings: Settings = Depends(get_sett
     celery_app = request.app.state.celery
     try:
         celery_app.send_task(REVIEW_PR_TASK_NAME, args=[payload_dict])
+        logger.info(
+            "review task enqueued: repo=%s PR#%d action=%s org_id=%s",
+            extracted_payload.repo_full_name,
+            extracted_payload.pr_number,
+            action,
+            org_id,
+        )
     except Exception:
         await redis_client.delete(delivery_id)
         return Response(status_code=503, content="Queue unavailable")
