@@ -33,6 +33,8 @@ def _chunk_comment_body(body: str, max_length: int = _MAX_ISSUE_COMMENT_LENGTH) 
         chunks.append(current.rstrip("\n"))
 
     return chunks or [body[:max_length]]
+
+
 _IGNORED_PATH_PREFIXES = (
     "node_modules/",
     "vendor/",
@@ -175,7 +177,7 @@ def get_pr_diff(pr: PullRequest, files: Iterable[File] | None = None) -> str:
 def post_issue_comment(pr: PullRequest, body: str) -> None:
     """Post a comment on a PR."""
     rough_chunks = _chunk_comment_body(body)
-    total = max(1, len(rough_chunks) // 10)  # Aim for ~10 comments, but allow more if body is huge
+    total = max(1, len(rough_chunks) // 10)
     max_header_length = len(f"Part {total}/{total}\n\n")
     chunks = _chunk_comment_body(body, max_length=_MAX_ISSUE_COMMENT_LENGTH - max_header_length)
 
