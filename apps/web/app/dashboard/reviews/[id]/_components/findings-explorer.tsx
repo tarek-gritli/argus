@@ -10,20 +10,20 @@ import { cn } from "@/lib/utils"
 const SEVERITIES: Severity[] = ["critical", "high", "medium", "low", "info"]
 const AGENTS: Agent[] = ["security", "quality", "testing", "documentation", "ticket_compliance"]
 
-const SEVERITY_DOT: Record<Severity, string> = {
-  critical: "bg-red-500",
-  high:     "bg-orange-500",
-  medium:   "bg-yellow-500",
-  low:      "bg-green-500",
-  info:     "bg-slate-400",
-}
-
 const AGENT_LABEL: Record<Agent, string> = {
   security:          "Security",
   quality:           "Quality",
   testing:           "Testing",
   documentation:     "Docs",
   ticket_compliance: "Ticket",
+}
+
+const SEVERITY_LABEL: Record<Severity, string> = {
+  critical: "Critical",
+  high:     "High",
+  medium:   "Medium",
+  low:      "Low",
+  info:     "Info",
 }
 
 interface Props {
@@ -33,7 +33,7 @@ interface Props {
 
 export function FindingsExplorer({ reviewId, findings }: Props) {
   const [severityFilter, setSeverityFilter] = useState<Severity | "all">("all")
-  const [agentTab, setAgentTab] = useState<Agent | "all">("all")
+  const [agentFilter, setAgentFilter] = useState<Agent | "all">("all")
   const acceptMutation = useAcceptFinding(reviewId)
   const rejectMutation = useRejectFinding(reviewId)
 
@@ -55,89 +55,75 @@ export function FindingsExplorer({ reviewId, findings }: Props) {
 
   const activeAgents = AGENTS.filter((a) => findings.some((f) => f.agent === a))
 
-  function getFiltered(subset: Finding[]) {
-    return severityFilter === "all" ? subset : subset.filter((f) => f.severity === severityFilter)
-  }
-
-  const visibleFindings = agentTab === "all"
-    ? getFiltered(findings)
-    : getFiltered(findings.filter((f) => f.agent === agentTab))
+  const visibleFindings = findings.filter((f) => {
+    if (agentFilter !== "all" && f.agent !== agentFilter) return false
+    if (severityFilter !== "all" && f.severity !== severityFilter) return false
+    return true
+  })
 
   return (
     <div>
-      {/* Agent tabs */}
-      <div className="flex items-center gap-0 mb-5 border-b border-border">
-        {(["all", ...activeAgents] as (Agent | "all")[]).map((tab) => {
-          const count = tab === "all"
-            ? findings.length
-            : findings.filter((f) => f.agent === tab).length
-          const active = agentTab === tab
-          return (
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-4 py-3 border-y border-[#444748] mb-4">
+        {/* Agent filter */}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-bold tracking-[0.05em] uppercase text-[#8e9192]">AGENT</span>
+          <div className="flex gap-1">
             <button
-              key={tab}
-              onClick={() => setAgentTab(tab)}
+              onClick={() => setAgentFilter("all")}
               className={cn(
-                "px-4 py-2.5 text-[12px] font-medium border-b-2 -mb-px transition-colors",
-                active
-                  ? "border-foreground text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                "px-2 py-1 text-[12px] border transition-colors",
+                agentFilter === "all"
+                  ? "bg-[#2a2a2a] text-[#e5e2e1] border-[#444748]"
+                  : "bg-[#201f1f] text-[#8e9192] border-[#444748] hover:border-white/30 hover:text-[#c4c7c8]"
               )}
             >
-              {tab === "all" ? "All" : AGENT_LABEL[tab]}
-              <span className={cn(
-                "ml-1.5 text-[10px] tabular-nums",
-                active ? "text-foreground/60" : "text-muted-foreground/60"
-              )}>
-                {count}
-              </span>
+              All
             </button>
-          )
-        })}
-      </div>
+            {activeAgents.map((a) => (
+              <button
+                key={a}
+                onClick={() => setAgentFilter(a)}
+                className={cn(
+                  "px-2 py-1 text-[12px] border transition-colors",
+                  agentFilter === a
+                    ? "bg-[#2a2a2a] text-[#e5e2e1] border-[#444748]"
+                    : "bg-[#201f1f] text-[#8e9192] border-[#444748] hover:border-white/30 hover:text-[#c4c7c8]"
+                )}
+              >
+                {AGENT_LABEL[a]}
+              </button>
+            ))}
+          </div>
+        </div>
 
-      {/* Severity filters */}
-      <div className="flex flex-wrap items-center gap-1.5 mb-5">
-        <button
-          onClick={() => setSeverityFilter("all")}
-          className={cn(
-            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium transition-colors",
-            severityFilter === "all"
-              ? "bg-foreground text-background border-foreground"
-              : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
-          )}
-        >
-          All <span className="tabular-nums">{findings.length}</span>
-        </button>
-        {SEVERITIES.map((s) => {
-          const count = (agentTab === "all"
-            ? findings
-            : findings.filter((f) => f.agent === agentTab)
-          ).filter((f) => f.severity === s).length
-          if (!count) return null
-          return (
-            <button
-              key={s}
-              onClick={() => setSeverityFilter(s)}
-              className={cn(
-                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium transition-colors capitalize",
-                severityFilter === s
-                  ? "bg-foreground text-background border-foreground"
-                  : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
-              )}
-            >
-              <span className={cn("w-1.5 h-1.5 rounded-full", SEVERITY_DOT[s])} />
-              {s}
-              <span className="tabular-nums">{count}</span>
-            </button>
-          )
-        })}
+        <div className="w-px h-4 bg-[#444748]" />
+
+        {/* Severity filter */}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-bold tracking-[0.05em] uppercase text-[#8e9192]">SEVERITY</span>
+          <select
+            value={severityFilter}
+            onChange={(e) => setSeverityFilter(e.target.value as Severity | "all")}
+            className="bg-[#0e0e0e] border border-[#444748] text-[12px] text-[#c4c7c8] py-1 px-2 focus:outline-none focus:border-white/40 appearance-none pr-6"
+          >
+            <option value="all">All Severities</option>
+            {SEVERITIES.map((s) => (
+              <option key={s} value={s}>{SEVERITY_LABEL[s]}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="ml-auto text-[10px] font-bold tracking-[0.05em] uppercase text-[#8e9192]">
+          {visibleFindings.length} Finding{visibleFindings.length !== 1 ? "s" : ""} Found
+        </div>
       </div>
 
       {/* Findings list */}
-      <div className="space-y-3">
+      <div className="space-y-4">
         {visibleFindings.length === 0 ? (
-          <div className="py-12 text-center rounded-lg border border-dashed">
-            <p className="text-sm text-muted-foreground">No findings match the current filter.</p>
+          <div className="py-12 text-center border border-white/5">
+            <p className="text-[13px] text-[#8e9192]">No findings match the current filter.</p>
           </div>
         ) : (
           visibleFindings.map((f) => (

@@ -1,19 +1,18 @@
 import type { Severity } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
-const SEVERITY_CONFIG: Record<Severity, { dot: string; label: string; style: string }> = {
-  critical: { dot: "bg-red-500",    label: "Critical", style: "bg-red-500/8 border-red-500/20 text-red-700 dark:text-red-400" },
-  high:     { dot: "bg-orange-500", label: "High",     style: "bg-orange-500/8 border-orange-500/20 text-orange-700 dark:text-orange-400" },
-  medium:   { dot: "bg-yellow-500", label: "Medium",   style: "bg-yellow-500/8 border-yellow-500/20 text-yellow-700 dark:text-yellow-400" },
-  low:      { dot: "bg-green-500",  label: "Low",      style: "bg-green-500/8 border-green-500/20 text-green-700 dark:text-green-400" },
-  info:     { dot: "bg-slate-400",  label: "Info",     style: "bg-muted border-border text-muted-foreground" },
+const SEVERITY_CONFIG: Record<Severity, { label: string; color: string; bg: string }> = {
+  critical: { label: "CRITICAL", color: "text-[#ffb4ab] border-[#ffb4ab]", bg: "bg-[#ffb4ab]/10" },
+  high:     { label: "HIGH",     color: "text-[#e2e2e2] border-[#e2e2e2]", bg: "bg-[#e2e2e2]/10" },
+  medium:   { label: "MED",      color: "text-[#c6c6c7] border-[#c6c6c7]", bg: "bg-[#c6c6c7]/10" },
+  low:      { label: "LOW",      color: "text-[#8e9192] border-[#8e9192]", bg: "bg-[#8e9192]/10" },
+  info:     { label: "INFO",     color: "text-[#444748] border-[#444748]", bg: "bg-[#444748]/10" },
 }
 
 export function SeverityBadge({ severity }: { severity: Severity }) {
   const cfg = SEVERITY_CONFIG[severity]
   return (
-    <span className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide", cfg.style)}>
-      <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", cfg.dot)} />
+    <span className={cn("inline-flex items-center px-2 py-0.5 border-l text-[10px] font-bold tracking-[0.05em]", cfg.bg, cfg.color)}>
       {cfg.label}
     </span>
   )
