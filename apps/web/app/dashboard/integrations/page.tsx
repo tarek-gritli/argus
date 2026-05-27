@@ -6,10 +6,9 @@ import { IntegrationCard } from "./_components/integration-card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Topbar } from "@/components/topbar"
 import { api } from "@/lib/api"
+import { getOrgId } from "@/lib/auth"
 import type { Integration } from "@/lib/types"
 import { Plus } from "lucide-react"
-
-const ORG_ID_PLACEHOLDER = "current"
 
 const ALL_KINDS = ["slack", "notion", "linear", "jira"] as const
 const KIND_LABELS: Record<string, string> = {
@@ -23,7 +22,8 @@ const KIND_DESCRIPTIONS: Record<string, string> = {
 }
 
 export default function IntegrationsPage() {
-  const { data: integrations, isLoading } = useQuery(integrationsOptions(ORG_ID_PLACEHOLDER))
+  const orgId = getOrgId() ?? ""
+  const { data: integrations, isLoading } = useQuery(integrationsOptions(orgId))
 
   const connectedByKind = (integrations ?? []).reduce<Record<string, Integration>>(
     (acc, i) => ({ ...acc, [i.kind]: i }),
@@ -55,7 +55,7 @@ export default function IntegrationsPage() {
               if (integration) {
                 return (
                   <div key={integration.id} className={!isLast ? "border-b border-border" : ""}>
-                    <IntegrationCard integration={integration} orgId={ORG_ID_PLACEHOLDER} />
+                    <IntegrationCard integration={integration} orgId={orgId} />
                   </div>
                 )
               }
@@ -73,7 +73,7 @@ export default function IntegrationsPage() {
                       <p className="text-[12px] text-muted-foreground">{KIND_DESCRIPTIONS[kind]}</p>
                     </div>
                   </div>
-                  <a href={api.integrations.connectUrl(kind, ORG_ID_PLACEHOLDER)}>
+                  <a href={api.integrations.connectUrl(kind, orgId)}>
                     <button className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[12px] font-medium border border-border text-foreground hover:bg-muted transition-colors">
                       <Plus className="h-3.5 w-3.5" /> Connect
                     </button>

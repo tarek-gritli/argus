@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 
 const GATEWAY = process.env.GATEWAY_URL ?? "http://localhost:8000"
 
+function decodeJwtPayload(token: string): Record<string, unknown> {
+  const part = token.split(".")[1]
+  return JSON.parse(Buffer.from(part, "base64url").toString("utf-8"))
+}
+
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null)
   const token = body?.token
@@ -17,6 +22,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "invalid token" }, { status: 401 })
   }
 
+  const payload = decodeJwtPayload(token)
+  const orgId = typeof payload.oid === "string" ? payload.oid : ""
+
   const isProd = process.env.NODE_ENV === "production"
   const response = NextResponse.json({ ok: true })
 
@@ -27,9 +35,15 @@ export async function POST(request: NextRequest) {
     httpOnly: true,
     secure: isProd,
   })
-  // Non-httpOnly flag lets the client-side auth guard know the user is logged in
+  // Non-httpOnly cookies let client-side code know login state and org context
   // without exposing the actual bearer token to JavaScript
   response.cookies.set("argus_authed", "1", {
+    path: "/",
+    sameSite: "lax",
+    httpOnly: false,
+    secure: isProd,
+  })
+  response.cookies.set("argus_org_id", orgId, {
     path: "/",
     sameSite: "lax",
     httpOnly: false,
@@ -42,5 +56,6 @@ export async function DELETE() {
   const response = NextResponse.json({ ok: true })
   response.cookies.set("argus_token", "", { path: "/", maxAge: 0 })
   response.cookies.set("argus_authed", "", { path: "/", maxAge: 0 })
+  response.cookies.set("argus_org_id", "", { path: "/", maxAge: 0 })
   return response
 }

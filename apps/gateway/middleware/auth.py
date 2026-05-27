@@ -10,7 +10,18 @@ _EXEMPT_EXACT = frozenset(["/ping"])
 
 def _build_exempt_prefixes() -> tuple[str, ...]:
     p = get_settings().api_prefix
-    return (f"{p}/webhooks/", f"{p}/auth/github/", f"{p}/auth/logout", f"{p}/auth/cli/", "/dashboard/")
+    return (
+        f"{p}/webhooks/",
+        f"{p}/auth/github/",
+        f"{p}/auth/logout",
+        f"{p}/auth/cli/",
+        "/dashboard/",
+        # OAuth callbacks come from third-party redirects — no auth token present
+        f"{p}/oauth/slack/callback",
+        f"{p}/oauth/notion/callback",
+        f"{p}/oauth/linear/callback",
+        f"{p}/oauth/jira/callback",
+    )
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
