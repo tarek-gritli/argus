@@ -6,7 +6,22 @@ import { useRouter } from "next/navigation"
 export default function AuthCallbackPage() {
   const router = useRouter()
   useEffect(() => {
-    router.replace("/dashboard")
+    // Token is in the URL fragment (#token=...) — never sent to servers or logged
+    const token = new URLSearchParams(window.location.hash.slice(1)).get("token")
+    // Strip from URL immediately so it doesn't persist in browser history
+    history.replaceState(null, "", window.location.pathname)
+    if (!token) {
+      router.replace("/login")
+      return
+    }
+    fetch("/api/auth/set-token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    }).then((res) => {
+      if (res.ok) router.replace("/dashboard")
+      else router.replace("/login")
+    })
   }, [router])
   return (
     <div className="min-h-screen flex items-center justify-center">

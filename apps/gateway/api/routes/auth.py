@@ -105,7 +105,8 @@ async def github_callback(
         await request.app.state.redis.set(f"cli_session:{cli_session_id}", token, ex=300)
         return Response(content=f'{{"token":"{token}"}}', media_type="application/json")
     # Browser login: pass token via URL so Next.js can set its own cookie
-    return RedirectResponse(url=f"{settings.frontend_url}/auth/callback?token={token}", status_code=302)
+    # Fragment is never sent to servers or stored in Referer/access logs
+    return RedirectResponse(url=f"{settings.frontend_url}/auth/callback#token={token}", status_code=302)
 
 
 @router.delete("/logout")
