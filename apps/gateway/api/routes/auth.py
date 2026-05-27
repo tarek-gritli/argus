@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import RedirectResponse
 from shared.config import Settings, get_settings
 from shared.db import get_session
-from shared.models import Org, User, UserOrg
+from shared.models import Org, OrgBilling, User, UserOrg
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -143,6 +143,7 @@ async def _upsert_user_org(
         await session.flush()
         membership = UserOrg(user_id=user.id, org_id=org.id, role="owner")
         session.add(membership)
+        session.add(OrgBilling(org_id=org.id))
         await session.commit()
         return user, org, membership
 
