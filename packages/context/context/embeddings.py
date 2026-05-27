@@ -114,7 +114,7 @@ async def embed_chunks(repo_id: str, chunks: list[CodeChunk]) -> None:
 
         points = [
             PointStruct(
-                id=hashlib.sha256(f"{repo_id}:{c.filepath}:{c.start_line}".encode()).hexdigest()[:16],
+                id=str(uuid.UUID(hashlib.sha256(f"{repo_id}:{c.filepath}:{c.start_line}".encode()).hexdigest()[:32])),
                 vector=vec,
                 payload={
                     "filepath": c.filepath,
