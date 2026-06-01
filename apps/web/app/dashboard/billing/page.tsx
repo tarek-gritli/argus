@@ -9,11 +9,6 @@ import { Topbar } from "@/components/topbar";
 import { api } from "@/lib/api";
 import { FileText } from "lucide-react";
 
-const MOCK_INVOICES = [
-  { id: "INV-2023-010", date: "Oct 01, 2023", amount: "$0.00" },
-  { id: "INV-2023-009", date: "Sep 01, 2023", amount: "$0.00" },
-];
-
 export default function BillingPage() {
   const { data: billing, isLoading } = useQuery(billingOptions());
 
@@ -56,38 +51,30 @@ export default function BillingPage() {
             </div>
 
             {/* Invoices */}
-            <div
-              className="border border-white/[0.08] overflow-hidden"
-              style={{ background: "rgba(255,255,255,0.04)" }}
-            >
-              <div className="px-4 py-3 border-b border-white/5">
-                <h3 className="text-[10px] font-bold tracking-wider uppercase text-[#8e9192]">
-                  Recent Invoices
-                </h3>
-              </div>
-              <div className="divide-y divide-white/5">
-                {MOCK_INVOICES.map((inv) => (
-                  <div
-                    key={inv.id}
-                    className="flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors cursor-pointer"
+            {billing.stripe_customer_id && (
+              <div
+                className="border border-white/8 overflow-hidden"
+                style={{ background: "rgba(255,255,255,0.04)" }}
+              >
+                <div className="px-4 py-3 border-b border-white/5">
+                  <h3 className="text-[10px] font-bold tracking-wider uppercase text-[#8e9192]">
+                    Recent Invoices
+                  </h3>
+                </div>
+                <div className="px-4 py-6 flex items-center gap-3 text-[#8e9192]">
+                  <FileText className="h-4 w-4 shrink-0" />
+                  <span className="text-[13px]">
+                    Invoices are managed via the Stripe billing portal.
+                  </span>
+                  <button
+                    onClick={handlePortal}
+                    className="ml-auto text-[12px] text-[#c6c6c7] hover:text-white underline underline-offset-2 transition-colors"
                   >
-                    <div className="flex items-center gap-4">
-                      <FileText className="h-5 w-5 text-[#8e9192]" />
-                      <div>
-                        <p className="text-[14px] text-[#e5e2e1]">{inv.id}</p>
-                        <p className="text-[12px] text-[#8e9192]">{inv.date}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[14px] font-semibold text-[#e5e2e1]">
-                        {inv.amount}
-                      </p>
-                      <p className="text-[12px] text-[#c6c6c7]">Paid</p>
-                    </div>
-                  </div>
-                ))}
+                    Open portal
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>
