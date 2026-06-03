@@ -49,11 +49,14 @@ const COLUMNS = [
   }),
   col.accessor("completed_at", {
     header: "Duration",
-    cell: (info) => (
-      <span className="text-[12px] text-[#c4c7c8]">
-        {info.getValue() ? "—" : "—"}
-      </span>
-    ),
+    cell: (info) => {
+      const completedAt = info.getValue()
+      const createdAt = info.row.original.created_at
+      if (!completedAt) return <span className="text-[12px] text-[#8e9192]">—</span>
+      const secs = Math.round((new Date(completedAt).getTime() - new Date(createdAt).getTime()) / 1000)
+      const label = secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}m ${secs % 60}s`
+      return <span className="text-[12px] text-[#c4c7c8]">{label}</span>
+    },
   }),
 ]
 
