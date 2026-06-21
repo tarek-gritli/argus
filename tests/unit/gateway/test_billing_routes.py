@@ -219,7 +219,7 @@ def test_get_billing_returns_plan_and_quota():
     assert data["seat_count"] == 3
     assert data["reviews_used_this_month"] == 42
     assert data["monthly_limit"] == 300
-    assert data["stripe_customer_id"] == "cus_test"
+    assert data["has_stripe_customer"]
 
 
 def test_get_billing_404_when_no_record():
