@@ -15,6 +15,7 @@ def _build_exempt_prefixes() -> tuple[str, ...]:
         f"{p}/auth/github/",
         f"{p}/auth/logout",
         f"{p}/auth/cli/",
+        f"{p}/auth/validate-nonce",
         "/dashboard/",
         # OAuth callbacks come from third-party redirects — no auth token present
         f"{p}/oauth/slack/callback",

@@ -1,20 +1,53 @@
 import { NextRequest, NextResponse } from "next/server"
 
 const GATEWAY = process.env.GATEWAY_URL ?? "http://localhost:8000"
+const APP_ORIGIN = process.env.FRONTEND_URL ?? "http://localhost:3000"
 
 function decodeJwtPayload(token: string): Record<string, unknown> {
   const part = token.split(".")[1]
   return JSON.parse(Buffer.from(part, "base64url").toString("utf-8"))
 }
 
+function isSameOrigin(request: NextRequest): boolean {
+  const origin = request.headers.get("origin") ?? ""
+  const referer = request.headers.get("referer") ?? ""
+  if (origin && origin !== APP_ORIGIN) return false
+  if (!origin && referer && !referer.startsWith(APP_ORIGIN + "/")) return false
+  return true
+}
+
+function isSecFetchSameOrigin(request: NextRequest): boolean {
+  const site = request.headers.get("sec-fetch-site") ?? ""
+  return site === "" || site === "same-origin"
+}
+
 export async function POST(request: NextRequest) {
+  // CSRF: reject cross-origin requests — cookies must only be set from our own frontend
+  if (!isSameOrigin(request) || !isSecFetchSameOrigin(request)) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 })
+  }
+
   const body = await request.json().catch(() => null)
   const token = body?.token
+  const nonce = body?.nonce
   if (!token || typeof token !== "string") {
     return NextResponse.json({ error: "missing token" }, { status: 400 })
   }
+  if (!nonce || typeof nonce !== "string") {
+    return NextResponse.json({ error: "missing nonce" }, { status: 400 })
+  }
 
-  // Validate token against the gateway before trusting it
+  // One-time nonce validation — proves the user came through our OAuth flow
+  const nonceCheck = await fetch(`${GATEWAY}/api/v1/auth/validate-nonce`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, nonce }),
+  }).catch(() => null)
+  if (!nonceCheck?.ok) {
+    return NextResponse.json({ error: "invalid nonce" }, { status: 403 })
+  }
+
+  // Double-check token validity against the gateway
   const check = await fetch(`${GATEWAY}/api/v1/reviews/?page=1&per_page=1`, {
     headers: { Authorization: `Bearer ${token}` },
   }).catch(() => null)
