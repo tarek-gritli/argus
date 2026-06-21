@@ -43,7 +43,7 @@ async def get_billing(request: Request):
         "seat_count": billing.seat_count,
         "reviews_used_this_month": billing.reviews_used_this_month,
         "monthly_limit": billing.monthly_limit,
-        "stripe_customer_id": billing.stripe_customer_id,
+        "has_stripe_customer": billing.stripe_customer_id is not None,
     }
 
 

@@ -39,7 +39,7 @@ export default function BillingPage() {
               </div>
               <div className="flex gap-4 px-6 pb-6 mt-2">
                 {billing.plan === "free" && <UpgradeDialog />}
-                {billing.stripe_customer_id && (
+                {billing.has_stripe_customer && (
                   <button
                     onClick={handlePortal}
                     className="flex-1 border border-white/10 text-[#e5e2e1] py-3 text-[14px] font-semibold hover:bg-white/5 transition-colors"
@@ -51,7 +51,7 @@ export default function BillingPage() {
             </div>
 
             {/* Invoices */}
-            {billing.stripe_customer_id && (
+            {billing.has_stripe_customer && (
               <div
                 className="border border-white/8 overflow-hidden"
                 style={{ background: "rgba(255,255,255,0.04)" }}

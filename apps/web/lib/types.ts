@@ -35,7 +35,7 @@ export const BillingSchema = z.object({
   seat_count: z.number(),
   reviews_used_this_month: z.number(),
   monthly_limit: z.number(),
-  stripe_customer_id: z.string().nullable(),
+  has_stripe_customer: z.boolean(),
 })
 
 export const IntegrationSchema = z.object({
