@@ -78,6 +78,8 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     gemini_api_key: str | None = None
     app_base_url: str = "http://localhost:8000"
+    frontend_url: str = "http://localhost:3000"
+    cors_origins: str = "http://localhost:3000"
 
     @field_validator(*_REQUIRED_NON_EMPTY, mode="before")
     @classmethod

@@ -68,15 +68,16 @@ def test_slack_callback_saves_integration():
         patch("api.routes.oauth.encrypt", side_effect=lambda v: f"enc:{v}"),
     ):
         mock_settings.return_value.app_base_url = "https://app.example.com"
+        mock_settings.return_value.frontend_url = "https://app.example.com"
 
         async def run():
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-                return await client.get("/api/v1/oauth/slack/callback?code=abc&state=nonce123")
+                return await client.get("/api/v1/oauth/slack/callback?code=abc&state=nonce123", follow_redirects=False)
 
         resp = asyncio.run(run())
 
-    assert resp.status_code == 200
-    assert resp.json() == {"status": "connected"}
+    assert resp.status_code == 302
+    assert "/dashboard/integrations" in resp.headers["location"]
 
 
 def test_slack_callback_ok_false_returns_400():
@@ -183,15 +184,16 @@ def test_notion_callback_saves_integration():
         patch("api.routes.oauth.encrypt", side_effect=lambda v: f"enc:{v}"),
     ):
         mock_settings.return_value.app_base_url = "https://app.example.com"
+        mock_settings.return_value.frontend_url = "https://app.example.com"
 
         async def run():
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-                return await client.get("/api/v1/oauth/notion/callback?code=abc&state=nonce456")
+                return await client.get("/api/v1/oauth/notion/callback?code=abc&state=nonce456", follow_redirects=False)
 
         resp = asyncio.run(run())
 
-    assert resp.status_code == 200
-    assert resp.json() == {"status": "connected"}
+    assert resp.status_code == 302
+    assert "/dashboard/integrations" in resp.headers["location"]
 
 
 def test_notion_callback_exchange_failure_returns_502():

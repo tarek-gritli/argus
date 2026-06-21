@@ -7,6 +7,7 @@ from api import api_router
 from api.routes.dashboard import router as dashboard_router
 from celery import Celery
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from middleware.auth import AuthMiddleware
 from middleware.rate_limit import RateLimitMiddleware
 from shared.config import get_settings
@@ -32,6 +33,16 @@ app = FastAPI(
     title="Argus Gateway",
     version="0.1.0",
     lifespan=lifespan,
+)
+
+_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 app.add_middleware(AuthMiddleware)
 app.add_middleware(RateLimitMiddleware)

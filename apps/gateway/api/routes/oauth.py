@@ -104,7 +104,7 @@ async def slack_callback(code: str, state: str, request: Request):
         "webhook_url": encrypt(webhook.get("url", "")),
     }
     await _save_integration(org_id, "slack", config)
-    return {"status": "connected"}
+    return RedirectResponse(url=f"{get_settings().frontend_url}/dashboard/integrations", status_code=302)
 
 
 @router.get("/notion/authorize")
@@ -145,7 +145,7 @@ async def notion_callback(code: str, state: str, request: Request):
         "workspace_id": data.get("workspace_id", ""),
     }
     await _save_integration(org_id, "notion", config)
-    return {"status": "connected"}
+    return RedirectResponse(url=f"{get_settings().frontend_url}/dashboard/integrations", status_code=302)
 
 
 @router.get("/linear/authorize")
@@ -181,7 +181,7 @@ async def linear_callback(code: str, state: str, request: Request):
         raise HTTPException(status_code=502, detail="Linear token exchange failed") from exc
     config = {"access_token": encrypt(data["access_token"])}
     await _save_integration(org_id, "linear", config)
-    return {"status": "connected"}
+    return RedirectResponse(url=f"{get_settings().frontend_url}/dashboard/integrations", status_code=302)
 
 
 @router.get("/jira/authorize")
@@ -224,4 +224,4 @@ async def jira_callback(code: str, state: str, request: Request):
         "base_url": data.get("base_url", ""),
     }
     await _save_integration(org_id, "jira", config)
-    return {"status": "connected"}
+    return RedirectResponse(url=f"{get_settings().frontend_url}/dashboard/integrations", status_code=302)

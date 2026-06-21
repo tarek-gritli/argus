@@ -6,9 +6,10 @@ import httpx
 from auth_utils import create_jwt
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 from shared.config import Settings, get_settings
 from shared.db import get_session
-from shared.models import Org, User, UserOrg
+from shared.models import Org, OrgBilling, User, UserOrg
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +20,7 @@ _GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
 _GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
 _GITHUB_USER_URL = "https://api.github.com/user"
 _CSRF_TTL = 600  # 10 minutes
+_COOKIE_NONCE_TTL = 300  # 5 minutes
 
 
 @router.get("/github/login")
@@ -103,15 +105,37 @@ async def github_callback(
     token = create_jwt(user_id=user.id, org_id=org.id, role=membership.role)
     if cli_session_id:
         await request.app.state.redis.set(f"cli_session:{cli_session_id}", token, ex=300)
-    response = Response(content=f'{{"token":"{token}"}}', media_type="application/json")
-    response.set_cookie(
-        "argus_token",
-        token,
-        httponly=True,
-        samesite="lax",
-        secure=settings.env != "development",
-    )
-    return response
+        return Response(content=f'{{"token":"{token}"}}', media_type="application/json")
+    # Browser login: pass token + one-time nonce via URL so Next.js can set its own cookie.
+    # The nonce is consumed (GETDEL) by validate-nonce before cookies are written,
+    # preventing cross-site requests from hijacking the session.
+    # Fragment is never sent to servers or stored in Referer/access logs
+    nonce = secrets.token_urlsafe(32)
+    await request.app.state.redis.set(f"cookie_nonce:{nonce}", token, ex=_COOKIE_NONCE_TTL)
+    return RedirectResponse(url=f"{settings.frontend_url}/auth/callback#token={token}&nonce={nonce}", status_code=302)
+
+
+class ValidateNonceRequest(BaseModel):
+    nonce: str
+    token: str
+
+
+@router.post("/validate-nonce")
+async def validate_nonce(body: ValidateNonceRequest, request: Request):
+    """One-time validation of a cookie-setting nonce.
+
+    Called by the Next.js API route (/api/auth/set-token) before writing
+    auth cookies.  The nonce is atomically deleted (GETDEL) so it can
+    never be replayed.
+    """
+    key = f"cookie_nonce:{body.nonce}"
+    stored = await request.app.state.redis.getdel(key)
+    if not stored:
+        return Response(status_code=400, content='{"error":"Invalid or expired nonce"}', media_type="application/json")
+    stored_str = stored.decode() if isinstance(stored, bytes) else stored
+    if stored_str != body.token:
+        return Response(status_code=400, content='{"error":"Nonce/token mismatch"}', media_type="application/json")
+    return {"ok": True}
 
 
 @router.delete("/logout")
@@ -148,6 +172,7 @@ async def _upsert_user_org(
         await session.flush()
         membership = UserOrg(user_id=user.id, org_id=org.id, role="owner")
         session.add(membership)
+        session.add(OrgBilling(org_id=org.id))
         await session.commit()
         return user, org, membership
 

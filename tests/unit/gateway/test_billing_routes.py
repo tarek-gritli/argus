@@ -202,3 +202,29 @@ def test_portal_no_customer_returns_400():
         resp = client.post("/billing/portal")
 
     assert resp.status_code == 400
+
+
+def test_get_billing_returns_plan_and_quota():
+    from shared.models.org_billing import OrgBilling
+
+    b = OrgBilling(org_id="org-1", plan="pro", seat_count=3, reviews_used_this_month=42, stripe_customer_id="cus_test")
+
+    with patch("api.routes.billing.session_context", return_value=_mock_session(b)):
+        client = TestClient(_make_app())
+        resp = client.get("/billing/")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["plan"] == "pro"
+    assert data["seat_count"] == 3
+    assert data["reviews_used_this_month"] == 42
+    assert data["monthly_limit"] == 300
+    assert data["has_stripe_customer"]
+
+
+def test_get_billing_404_when_no_record():
+    with patch("api.routes.billing.session_context", return_value=_mock_session(None)):
+        client = TestClient(_make_app())
+        resp = client.get("/billing/")
+
+    assert resp.status_code == 404
