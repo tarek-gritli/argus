@@ -53,4 +53,4 @@ Argus deploys specialized LLM agents in parallel to analyze pull requests, synth
 - **gateway** — FastAPI: webhook validation, org resolution, JWT auth, quota enforcement
 - **agents** — LangGraph orchestrator, three parallel review agents, fix engine
 - **cli** — Typer CLI: `argus login` (browser OAuth) + `argus review` (local diff review via SSE)
-- **web** — Next.js dashboard (not yet built)
+- **web** — Next.js dashboard: marketing site + authed app (reviews, findings, billing, integrations, settings)

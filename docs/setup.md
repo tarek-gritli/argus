@@ -85,3 +85,11 @@ In separate terminals:
 make run-gateway    # FastAPI on http://localhost:8000
 make run-agents     # Celery worker
 ```
+
+## 9. Start the web dashboard (optional)
+
+```bash
+cd apps/web
+pnpm install
+pnpm dev            # Next.js on http://localhost:3000
+```

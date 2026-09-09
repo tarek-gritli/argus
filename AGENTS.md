@@ -64,7 +64,7 @@ Multi-agent AI platform that automates code review at the pull-request level.
 Deploys specialized agents in parallel, synthesizes findings into actionable feedback,
 and learns from accepted/rejected suggestions over time.
 
-**Current build phase: Phase 5 (CLI — login + review)**
+**Current build phase: Phase 6 (Web dashboard) — in progress**
 - API gateway + GitHub webhook handler ✅
 - Orchestrator with three parallel agents (Security, Quality, Testing) — full loop end-to-end ✅
 - Fix engine (generator → validator → scorer → pipeline) ✅
@@ -77,7 +77,7 @@ and learns from accepted/rejected suggestions over time.
 - AST-based code chunking (9 languages) ✅
 - Blue-green Qdrant collection swap for zero-downtime reindex ✅
 - CLI `argus login` + `argus review` — browser OAuth flow + async local review via SSE ✅
-- No dashboard yet
+- Next.js dashboard — marketing site + authed dashboard (reviews, findings, billing, integrations, settings) ✅
 
 ---
 
@@ -143,7 +143,7 @@ argus/
 │   ├── gateway/        # FastAPI — ONLY public-facing HTTP service
 │   ├── agents/         # All AI execution: orchestration, agents, fix engine
 │   ├── cli/            # Typer CLI — login + review commands active ✅
-│   └── web/            # Next.js dashboard (Phase 6 — do not build)
+│   └── web/            # Next.js dashboard — marketing site + authed dashboard ✅
 ├── packages/
 │   ├── shared/         # Cross-app models, schemas, DB session, queue interface
 │   ├── context/        # Vector embeddings (Qdrant), AST chunking, Redis cache ✅
@@ -264,7 +264,7 @@ apps/agents/
 
 ### Agent internal pipeline (every agent must follow this exactly):
 1. **Input** — receive diff + file context + repo metadata
-2. **Context injection** — vector embeddings + historical findings (Phase 5, skip for now)
+2. **Context injection** — vector embeddings + historical findings (via `packages/context` ✅)
 3. **LLM analysis** — Claude performs domain-specific review via LangGraph node
 4. **Self-validation** — agent checks its own output, filters false positives
 5. **Output** — structured FindingSchema JSON, nothing else
@@ -300,8 +300,46 @@ The binary is built with PyInstaller (`argus.spec`) and distributed via GitHub R
 
 ## apps/web — Sole Responsibility
 
-**Next.js dashboard. Phase 6 — do not build, do not add logic.**
-Scaffold exists. Leave it alone until Phase 6.
+**Next.js dashboard. Renders data from the gateway API — no business logic, no direct DB/LLM access.**
+
+Next.js 16 (App Router, React 19, React Compiler), Tailwind v4, shadcn, TanStack Query + Table, Zod.
+**pnpm only**, run from inside `apps/web/`.
+
+```
+apps/web/
+├── app/
+│   ├── (marketing)/        # Public landing site (hero, bento, pricing, FAQ, testimonials)
+│   ├── login/              # GitHub OAuth entry
+│   ├── auth/callback/      # OAuth return → posts code to /api/auth/set-token
+│   ├── api/auth/set-token/ # Route handler — sets httpOnly argus_token cookie (CSRF: origin + one-time nonce)
+│   └── dashboard/
+│       ├── page.tsx        # Stats strip + recent reviews
+│       ├── reviews/        # List + [id] detail with findings explorer (accept/reject)
+│       ├── billing/        # Plan card, quota bars, upgrade dialog, Stripe success/cancel
+│       ├── integrations/   # Integration cards, Notion database picker (team/enterprise)
+│       └── settings/       # Org + team member details
+├── components/             # sidebar, topbar, auth-guard, providers, ui/ (shadcn primitives)
+├── lib/
+│   ├── api.ts              # Typed fetch client → gateway (credentials: include)
+│   ├── queries.ts          # TanStack Query options + mutation hooks
+│   ├── types.ts            # Zod schemas for API responses
+│   └── auth.ts             # Reads non-sensitive argus_authed / argus_org_id cookies
+├── proxy.ts                # Middleware — redirects unauthed to /login, authed away from /login
+└── next.config.ts          # Rewrites /api/* → GATEWAY_URL (server-side proxy, avoids cross-origin cookie issues)
+```
+
+Env: `NEXT_PUBLIC_API_URL`, `GATEWAY_URL` (required in non-dev), `FRONTEND_URL`.
+
+Gateway routes the dashboard consumes (beyond the summary above):
+```
+GET    /api/v1/reviews/{id}                              — review detail
+GET    /api/v1/reviews/{id}/findings                     — findings, filter by severity/agent
+POST   /api/v1/reviews/{id}/findings/{fid}/accept|reject — feedback signal for history suppression
+GET    /api/v1/billing/  ·  POST /api/v1/billing/checkout|portal
+GET    /api/v1/orgs/{org_id}/integrations  ·  PATCH/DELETE .../{integration_id}
+GET    /api/v1/orgs/{org_id}/integrations/{id}/notion/databases  ·  PATCH .../notion/database
+GET    /api/v1/oauth/{kind}/authorize  ·  DELETE /api/v1/auth/logout  ·  GET /api/v1/auth/github/login
+```
 
 ---
 
@@ -442,8 +480,8 @@ ENV=development
 | Documentation agent (team/enterprise) | 3 | ✅ active |
 | Ticket compliance agent | 3 | ✅ active |
 | CLI login + review commands | 5 | ✅ complete |
+| Web dashboard (marketing + authed app) | 6 | ✅ in progress |
 | GitLab integration | — | stub only |
-| Web dashboard | 6 | not started |
 
 Stubs are allowed. Implementation is not.
 
