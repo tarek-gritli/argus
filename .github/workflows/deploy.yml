@@ -1,0 +1,74 @@
+name: Deploy to Cloud Run
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write # required for keyless auth via Workload Identity Federation
+
+env:
+  GCP_REGION: europe-west1
+  AR_REPOSITORY: argus
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          persist-credentials: false
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Build and push gateway image
+        env:
+          IMAGE: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.AR_REPOSITORY }}/gateway:${{ github.sha }}
+        run: |
+          docker build -f apps/gateway/Dockerfile -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Build and push agents image
+        env:
+          IMAGE: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.AR_REPOSITORY }}/agents:${{ github.sha }}
+        run: |
+          docker build -f apps/agents/Dockerfile -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Deploy gateway (Cloud Run Service)
+        env:
+          IMAGE: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.AR_REPOSITORY }}/gateway:${{ github.sha }}
+          SERVICE_ACCOUNT: ${{ secrets.GCP_GATEWAY_SERVICE_ACCOUNT }}
+        run: |
+          gcloud run deploy argus-gateway \
+            --image "$IMAGE" \
+            --region "$GCP_REGION" \
+            --service-account "$SERVICE_ACCOUNT" \
+            --quiet
+
+      - name: Deploy agents (Cloud Run Worker Pool)
+        env:
+          IMAGE: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.AR_REPOSITORY }}/agents:${{ github.sha }}
+          SERVICE_ACCOUNT: ${{ secrets.GCP_AGENTS_SERVICE_ACCOUNT }}
+        run: |
+          gcloud beta run worker-pools deploy argus-agents \
+            --image "$IMAGE" \
+            --region "$GCP_REGION" \
+            --service-account "$SERVICE_ACCOUNT" \
+            --quiet
