@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
+
 import httpx
 
-_DEFAULT_BASE = "http://localhost:8000"
+_DEFAULT_BASE = os.environ.get("ARGUS_GATEWAY_URL", "http://localhost:8000")
 
 
 def make_client(token: str | None = None, base_url: str = _DEFAULT_BASE) -> httpx.Client:
