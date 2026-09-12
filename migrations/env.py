@@ -1,3 +1,4 @@
+import os
 import sys
 from logging.config import fileConfig
 from pathlib import Path
@@ -13,6 +14,12 @@ from shared.models.base import Base
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+database_url = os.environ.get("DATABASE_URL")
+if database_url:
+    # Alembic connects synchronously via psycopg2; strip the async driver
+    # prefix the app itself uses.
+    config.set_main_option("sqlalchemy.url", database_url.replace("postgresql+asyncpg://", "postgresql://"))
 
 target_metadata = Base.metadata
 
