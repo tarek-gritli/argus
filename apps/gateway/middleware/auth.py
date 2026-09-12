@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import logging
+
 import jwt
 from fastapi import Request, Response
 from shared.config import get_settings
 from starlette.middleware.base import BaseHTTPMiddleware
+
+logger = logging.getLogger(__name__)
 
 _EXEMPT_EXACT = frozenset(["/ping"])
 
@@ -44,7 +48,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         try:
             settings = get_settings()
             payload = jwt.decode(token, settings.jwt_secret_key, algorithms=["HS256"])
-        except jwt.PyJWTError:
+        except jwt.PyJWTError as e:
+            logger.warning("JWT validation failed for %s: %s", path, e)
             return Response(status_code=401, content='{"detail":"Unauthorized"}', media_type="application/json")
 
         try:
