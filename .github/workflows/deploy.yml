@@ -55,20 +55,48 @@ jobs:
         env:
           IMAGE: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.AR_REPOSITORY }}/gateway:${{ github.sha }}
           SERVICE_ACCOUNT: ${{ secrets.GCP_GATEWAY_SERVICE_ACCOUNT }}
+          SECRETS: >-
+            GITHUB_WEBHOOK_SECRET=github-webhook-secret:latest,
+            GITHUB_APP_ID=github-app-id:latest,
+            GITHUB_PRIVATE_KEY_B64=github-private-key-b64:latest,
+            GITHUB_CLIENT_ID=github-client-id:latest,
+            GITHUB_CLIENT_SECRET=github-client-secret:latest,
+            JWT_SECRET_KEY=jwt-secret-key:latest,
+            SECRET_ENCRYPTION_KEY=secret-encryption-key:latest,
+            STRIPE_SECRET_KEY=stripe-secret-key:latest,
+            STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest,
+            STRIPE_PRO_PRICE_ID=stripe-pro-price-id:latest,
+            STRIPE_TEAM_PRICE_ID=stripe-team-price-id:latest,
+            DATABASE_URL=database-url:latest,
+            REDIS_URL=redis-url:latest,
+            CELERY_BROKER_URL=celery-broker-url:latest
         run: |
           gcloud run deploy argus-gateway \
             --image "$IMAGE" \
             --region "$GCP_REGION" \
             --service-account "$SERVICE_ACCOUNT" \
+            --set-secrets="$(echo "$SECRETS" | tr -d '\n ')" \
             --quiet
 
       - name: Deploy agents (Cloud Run Worker Pool)
         env:
           IMAGE: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.AR_REPOSITORY }}/agents:${{ github.sha }}
           SERVICE_ACCOUNT: ${{ secrets.GCP_AGENTS_SERVICE_ACCOUNT }}
+          SECRETS: >-
+            ANTHROPIC_API_KEY=anthropic-api-key:latest,
+            VOYAGE_API_KEY=voyage-api-key:latest,
+            GITHUB_PRIVATE_KEY_B64=github-private-key-b64:latest,
+            GITHUB_APP_ID=github-app-id:latest,
+            SECRET_ENCRYPTION_KEY=secret-encryption-key:latest,
+            DATABASE_URL=database-url:latest,
+            REDIS_URL=redis-url:latest,
+            CELERY_BROKER_URL=celery-broker-url:latest,
+            QDRANT_URL=qdrant-url:latest,
+            QDRANT_API_KEY=qdrant-api-key:latest
         run: |
           gcloud beta run worker-pools deploy argus-agents \
             --image "$IMAGE" \
             --region "$GCP_REGION" \
             --service-account "$SERVICE_ACCOUNT" \
+            --set-secrets="$(echo "$SECRETS" | tr -d '\n ')" \
             --quiet
