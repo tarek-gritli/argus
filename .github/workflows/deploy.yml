@@ -79,6 +79,7 @@ jobs:
             --region "$GCP_REGION" \
             --service-account "$SERVICE_ACCOUNT" \
             --set-secrets="$(echo "$SECRETS" | tr -d '\n ')" \
+            --allow-unauthenticated \
             --quiet
 
       - name: Deploy agents (Cloud Run Worker Pool)
