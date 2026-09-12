@@ -43,6 +43,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         token = _extract_token(request)
         if not token:
+            logger.warning("No token found for %s", path)
             return Response(status_code=401, content='{"detail":"Unauthorized"}', media_type="application/json")
 
         try:

@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Double-check token validity against the gateway
-  const check = await fetch(`${GATEWAY}/api/v1/reviews/?page=1&per_page=1`, {
+  const check = await fetch(`${GATEWAY}/api/v1/reviews?page=1&per_page=1`, {
     headers: { Authorization: `Bearer ${token}` },
   }).catch(() => null)
   if (!check?.ok) {
