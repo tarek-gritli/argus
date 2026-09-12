@@ -37,6 +37,12 @@ app = FastAPI(
 
 _origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 
+app.add_middleware(AuthMiddleware)
+app.add_middleware(RateLimitMiddleware)
+# CORSMiddleware must be added last (outermost) so it also attaches headers
+# to early-rejection responses from AuthMiddleware/RateLimitMiddleware, not
+# just successful ones — otherwise browsers report auth failures as an
+# opaque CORS error instead of the real 401/429.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
@@ -44,8 +50,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(AuthMiddleware)
-app.add_middleware(RateLimitMiddleware)
 
 
 @app.get("/ping")
