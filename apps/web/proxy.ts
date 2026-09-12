@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/home"]
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/home", "/api/auth/set-token"]
 
 export function proxy(req: NextRequest) {
   const token = req.cookies.get("argus_token")?.value
