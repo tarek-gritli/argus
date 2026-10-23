@@ -8,9 +8,15 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 
-def _make_app() -> FastAPI:
+def _make_app(role: str = "owner") -> FastAPI:
     app = FastAPI()
     app.include_router(router)
+
+    @app.middleware("http")
+    async def _role(request, call_next):  # AuthMiddleware stand-in: sets the JWT role before routing
+        request.state.role = role
+        return await call_next(request)
+
     return app
 
 

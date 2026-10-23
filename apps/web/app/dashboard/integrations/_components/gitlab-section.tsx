@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
 import { errorDetail } from "@/lib/api"
+import { useCanManageOrg } from "@/lib/auth"
 import {
   integrationsOptions,
   useRemoveIntegration,
@@ -23,6 +24,7 @@ function GitlabRow({ integration, orgId }: { integration: Integration; orgId: st
   const toggle = useToggleIntegration(orgId)
   const remove = useRemoveIntegration(orgId)
   const rotate = useRotateGitlabSecret(orgId)
+  const canManage = useCanManageOrg()
   const [rotated, setRotated] = useState<GitlabWebhookDetails | null>(null)
   const host = String(integration.config["base_url"] ?? "gitlab").replace(/^https?:\/\//, "")
 
@@ -42,9 +44,9 @@ function GitlabRow({ integration, orgId }: { integration: Integration; orgId: st
         )}
         <Switch
           checked={integration.enabled}
-          disabled={toggle.isPending}
+          disabled={!canManage || toggle.isPending}
           onCheckedChange={(enabled) =>
-            toggle.mutate({ id: integration.id, enabled }, { onError: () => toast.error("Failed to update") })
+            toggle.mutate({ id: integration.id, enabled }, { onError: (err) => toast.error(errorDetail(err, "Failed to update")) })
           }
         />
         <Button
@@ -52,7 +54,7 @@ function GitlabRow({ integration, orgId }: { integration: Integration; orgId: st
           size="icon"
           className="h-7 w-7 text-muted-foreground"
           title="Regenerate webhook secret"
-          disabled={rotate.isPending}
+          disabled={!canManage || rotate.isPending}
           onClick={() =>
             rotate.mutate(integration.id, {
               onSuccess: setRotated,
@@ -66,11 +68,11 @@ function GitlabRow({ integration, orgId }: { integration: Integration; orgId: st
           variant="ghost"
           size="icon"
           className="h-7 w-7 text-muted-foreground hover:text-destructive"
-          disabled={remove.isPending}
+          disabled={!canManage || remove.isPending}
           onClick={() =>
             remove.mutate(integration.id, {
               onSuccess: () => toast.success("GitLab connection removed"),
-              onError: () => toast.error("Failed to remove connection"),
+              onError: (err) => toast.error(errorDetail(err, "Failed to remove connection")),
             })
           }
         >
@@ -95,6 +97,7 @@ function GitlabRow({ integration, orgId }: { integration: Integration; orgId: st
 export function GitlabSection({ orgId }: { orgId: string }) {
   const { data } = useQuery(integrationsOptions(orgId))
   const connections = (data ?? []).filter((i) => i.kind === "gitlab")
+  const canManage = useCanManageOrg()
 
   return (
     <section className="mb-6 border border-white/8" style={{ background: "rgba(255,255,255,0.04)" }}>
@@ -105,7 +108,7 @@ export function GitlabSection({ orgId }: { orgId: string }) {
             Review merge requests on gitlab.com or your self-hosted instance
           </p>
         </div>
-        <ConnectGitlabDialog orgId={orgId} />
+        {canManage && <ConnectGitlabDialog orgId={orgId} />}
       </div>
       {connections.map((c) => (
         <GitlabRow key={c.id} integration={c} orgId={orgId} />

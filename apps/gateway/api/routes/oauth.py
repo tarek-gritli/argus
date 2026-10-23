@@ -9,6 +9,7 @@ from integrations.oauth import jira as jira_oauth
 from integrations.oauth import linear as linear_oauth
 from integrations.oauth import notion as notion_oauth
 from integrations.oauth import slack as slack_oauth
+from permissions import require_owner
 from shared.config import get_settings
 from shared.crypto import encrypt
 from shared.db import session_context
@@ -66,7 +67,7 @@ async def _exchange_jira_code(code: str, redirect_uri: str) -> dict:
     return data
 
 
-@router.get("/slack/authorize")
+@router.get("/slack/authorize", dependencies=[Depends(require_owner)])
 async def slack_authorize(org_id: str, request: Request, org_id_from_token: str = Depends(_get_org_id)):
     if org_id_from_token != org_id:
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -107,7 +108,7 @@ async def slack_callback(code: str, state: str, request: Request):
     return RedirectResponse(url=f"{get_settings().frontend_url}/dashboard/integrations", status_code=302)
 
 
-@router.get("/notion/authorize")
+@router.get("/notion/authorize", dependencies=[Depends(require_owner)])
 async def notion_authorize(org_id: str, request: Request, org_id_from_token: str = Depends(_get_org_id)):
     if org_id_from_token != org_id:
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -148,7 +149,7 @@ async def notion_callback(code: str, state: str, request: Request):
     return RedirectResponse(url=f"{get_settings().frontend_url}/dashboard/integrations", status_code=302)
 
 
-@router.get("/linear/authorize")
+@router.get("/linear/authorize", dependencies=[Depends(require_owner)])
 async def linear_authorize(org_id: str, request: Request, org_id_from_token: str = Depends(_get_org_id)):
     if org_id_from_token != org_id:
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -184,7 +185,7 @@ async def linear_callback(code: str, state: str, request: Request):
     return RedirectResponse(url=f"{get_settings().frontend_url}/dashboard/integrations", status_code=302)
 
 
-@router.get("/jira/authorize")
+@router.get("/jira/authorize", dependencies=[Depends(require_owner)])
 async def jira_authorize(org_id: str, request: Request, org_id_from_token: str = Depends(_get_org_id)):
     if org_id_from_token != org_id:
         raise HTTPException(status_code=403, detail="Forbidden")
