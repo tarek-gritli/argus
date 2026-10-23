@@ -8,7 +8,7 @@ import { GitlabSection } from "./_components/gitlab-section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Topbar } from "@/components/topbar";
 import { api } from "@/lib/api";
-import { getOrgId } from "@/lib/auth";
+import { getOrgId, useCanManageOrg } from "@/lib/auth";
 import type { Integration } from "@/lib/types";
 import { Plus, Lock } from "lucide-react";
 
@@ -35,6 +35,7 @@ const KIND_DESCRIPTIONS: Record<string, string> = {
 
 export default function IntegrationsPage() {
   const orgId = getOrgId() ?? "";
+  const canManage = useCanManageOrg();
   const { data: billing, isLoading: billingLoading } =
     useQuery(billingOptions());
   const { data: integrations, isLoading: integrationsLoading } = useQuery(
@@ -61,6 +62,12 @@ export default function IntegrationsPage() {
             each review.
           </p>
         </div>
+
+        {!canManage && (
+          <p className="mb-4 text-[12px] text-[#8e9192] border border-white/8 px-3 py-2">
+            Only organization owners can connect or change integrations.
+          </p>
+        )}
 
         {orgId && <GitlabSection orgId={orgId} />}
 
@@ -151,11 +158,20 @@ export default function IntegrationsPage() {
                       </p>
                     </div>
                   </div>
-                  <a href={api.integrations.connectUrl(kind, orgId)}>
-                    <button className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-white/10 text-[#c6c6c7] hover:bg-white/5 transition-colors">
+                  {canManage ? (
+                    <a href={api.integrations.connectUrl(kind, orgId)}>
+                      <button className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-white/10 text-[#c6c6c7] hover:bg-white/5 transition-colors">
+                        <Plus className="h-3.5 w-3.5" /> Connect
+                      </button>
+                    </a>
+                  ) : (
+                    <button
+                      disabled
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-white/10 text-[#c6c6c7] opacity-40"
+                    >
                       <Plus className="h-3.5 w-3.5" /> Connect
                     </button>
-                  </a>
+                  )}
                 </div>
               );
             })}

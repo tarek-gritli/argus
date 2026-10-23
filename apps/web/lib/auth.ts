@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from "react"
+
 // argus_token is httpOnly — not accessible to JS
 // argus_authed=1 and argus_org_id are non-sensitive flags set alongside it
 function readCookie(name: string): string | undefined {
@@ -14,4 +16,17 @@ export function isAuthenticated(): boolean {
 
 export function getOrgId(): string | undefined {
   return readCookie("argus_org_id")
+}
+
+/**
+ * False only when we positively know the user is a plain member. Sessions that predate the
+ * role cookie keep their controls (the gateway rejects anything they aren't allowed to do).
+ * Hydration-safe: the server render and first client render both say true.
+ */
+export function useCanManageOrg(): boolean {
+  return useSyncExternalStore(
+    () => () => {},
+    () => readCookie("argus_role") !== "member",
+    () => true,
+  )
 }

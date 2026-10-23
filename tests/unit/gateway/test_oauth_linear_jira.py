@@ -5,13 +5,19 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 
-def _make_app(org_id: str = "org-1"):
+def _make_app(org_id: str = "org-1", role: str = "owner"):
     from api.routes.oauth import _get_org_id, router
 
     app = FastAPI()
     app.state.redis = AsyncMock()
     app.include_router(router, prefix="/api/v1/oauth")
     app.dependency_overrides[_get_org_id] = lambda: org_id
+
+    @app.middleware("http")
+    async def _role(request, call_next):  # AuthMiddleware stand-in: sets the JWT role before routing
+        request.state.role = role
+        return await call_next(request)
+
     return app
 
 

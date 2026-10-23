@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
 import type { Integration } from "@/lib/types";
 import { useToggleIntegration, useRemoveIntegration } from "@/lib/queries";
-import { api } from "@/lib/api";
+import { errorDetail } from "@/lib/api";
+import { useCanManageOrg } from "@/lib/auth";
 import { NotionDatabasePicker } from "./notion-database-picker";
 import { toast } from "sonner";
 
@@ -52,6 +53,7 @@ export function IntegrationCard({ integration, orgId }: Props) {
   const toggleMutation = useToggleIntegration(orgId);
   const removeMutation = useRemoveIntegration(orgId);
   const [notionPickerOpen, setNotionPickerOpen] = useState(false);
+  const canManage = useCanManageOrg();
 
   const notionNeedsDatabase =
     integration.kind === "notion" &&
@@ -68,7 +70,7 @@ export function IntegrationCard({ integration, orgId }: Props) {
   function handleRemove() {
     removeMutation.mutate(integration.id, {
       onSuccess: () => toast.success("Integration removed"),
-      onError: () => toast.error("Failed to remove integration"),
+      onError: (err) => toast.error(errorDetail(err, "Failed to remove integration")),
     });
   }
 
@@ -94,7 +96,7 @@ export function IntegrationCard({ integration, orgId }: Props) {
               <Switch
                 checked={integration.enabled}
                 onCheckedChange={handleToggle}
-                disabled={toggleMutation.isPending || !integration.ready}
+                disabled={!canManage || toggleMutation.isPending || !integration.ready}
               />
             </div>
           </div>
@@ -109,6 +111,7 @@ export function IntegrationCard({ integration, orgId }: Props) {
               <Button
                 size="sm"
                 variant="outline"
+                disabled={!canManage}
                 onClick={() => setNotionPickerOpen(true)}
               >
                 Select database
@@ -118,7 +121,7 @@ export function IntegrationCard({ integration, orgId }: Props) {
               variant="ghost"
               size="icon"
               className="h-7 w-7 text-muted-foreground hover:text-destructive"
-              disabled={removeMutation.isPending}
+              disabled={!canManage || removeMutation.isPending}
               onClick={handleRemove}
             >
               <Trash2 className="h-3.5 w-3.5" />

@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
 
   const payload = decodeJwtPayload(token)
   const orgId = typeof payload.oid === "string" ? payload.oid : ""
+  const role = typeof payload.role === "string" ? payload.role : ""
 
   const isProd = process.env.NODE_ENV === "production"
   const response = NextResponse.json({ ok: true })
@@ -82,6 +83,13 @@ export async function POST(request: NextRequest) {
     httpOnly: false,
     secure: isProd,
   })
+  // UI hint only (hides controls a member can't use); the gateway enforces roles from the JWT
+  response.cookies.set("argus_role", role, {
+    path: "/",
+    sameSite: "lax",
+    httpOnly: false,
+    secure: isProd,
+  })
   return response
 }
 
@@ -90,5 +98,6 @@ export async function DELETE() {
   response.cookies.set("argus_token", "", { path: "/", maxAge: 0 })
   response.cookies.set("argus_authed", "", { path: "/", maxAge: 0 })
   response.cookies.set("argus_org_id", "", { path: "/", maxAge: 0 })
+  response.cookies.set("argus_role", "", { path: "/", maxAge: 0 })
   return response
 }

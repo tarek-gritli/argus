@@ -7,6 +7,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from gitlab.exceptions import GitlabError
 from integrations.gitlab import DEFAULT_BASE_URL, InvalidGitLabURL, get_gitlab_client, normalize_base_url
+from permissions import require_owner
 from pydantic import BaseModel
 from shared.config import get_settings
 from shared.crypto import decrypt, encrypt
@@ -83,7 +84,7 @@ async def list_integrations(org_id: str, org_id_from_token: str = Depends(_get_o
     ]
 
 
-@router.patch("/orgs/{org_id}/integrations/{integration_id}")
+@router.patch("/orgs/{org_id}/integrations/{integration_id}", dependencies=[Depends(require_owner)])
 async def update_integration(
     org_id: str,
     integration_id: str,
@@ -113,7 +114,7 @@ async def update_integration(
     }
 
 
-@router.delete("/orgs/{org_id}/integrations/{integration_id}", status_code=204)
+@router.delete("/orgs/{org_id}/integrations/{integration_id}", status_code=204, dependencies=[Depends(require_owner)])
 async def delete_integration(
     org_id: str,
     integration_id: str,
@@ -135,7 +136,7 @@ async def delete_integration(
         await session.commit()
 
 
-@router.get("/orgs/{org_id}/integrations/{integration_id}/notion/databases")
+@router.get("/orgs/{org_id}/integrations/{integration_id}/notion/databases", dependencies=[Depends(require_owner)])
 async def list_notion_databases(
     org_id: str,
     integration_id: str,
@@ -178,7 +179,7 @@ async def list_notion_databases(
     return [{"id": db["id"], "title": db.get("title", [{}])[0].get("plain_text", "(untitled)")} for db in data.get("results", [])]
 
 
-@router.patch("/orgs/{org_id}/integrations/{integration_id}/notion/database")
+@router.patch("/orgs/{org_id}/integrations/{integration_id}/notion/database", dependencies=[Depends(require_owner)])
 async def select_notion_database(
     org_id: str,
     integration_id: str,
@@ -203,28 +204,21 @@ async def select_notion_database(
     return {"status": "ok", "database_id": body.database_id}
 
 
-def _require_owner(request: Request) -> None:
-    if request.state.role != "owner":
-        raise HTTPException(status_code=403, detail="Only owners can manage GitLab connections")
-
-
 def _verify_gitlab_token(base_url: str, token: str) -> None:
     """Blocking: resolve the host (SSRF guard) and confirm the token authenticates."""
     gl = get_gitlab_client(base_url, token)
     gl.auth()
 
 
-@router.post("/orgs/{org_id}/integrations/gitlab", status_code=201)
+@router.post("/orgs/{org_id}/integrations/gitlab", status_code=201, dependencies=[Depends(require_owner)])
 async def connect_gitlab(
     org_id: str,
     body: GitLabConnect,
-    request: Request,
     org_id_from_token: str = Depends(_get_org_id),
 ):
     """Connect a GitLab instance. The webhook secret is returned once — paste it into GitLab."""
     if org_id_from_token != org_id:
         raise HTTPException(status_code=403, detail="Forbidden")
-    _require_owner(request)
     try:
         await asyncio.to_thread(_verify_gitlab_token, body.base_url, body.access_token)
     except InvalidGitLabURL as exc:
@@ -250,16 +244,14 @@ async def connect_gitlab(
     return {"id": integration_id, "webhook_url": _webhook_url(integration_id), "webhook_secret": secret}
 
 
-@router.post("/orgs/{org_id}/integrations/{integration_id}/gitlab/rotate-secret")
+@router.post("/orgs/{org_id}/integrations/{integration_id}/gitlab/rotate-secret", dependencies=[Depends(require_owner)])
 async def rotate_gitlab_secret(
     org_id: str,
     integration_id: str,
-    request: Request,
     org_id_from_token: str = Depends(_get_org_id),
 ):
     if org_id_from_token != org_id:
         raise HTTPException(status_code=403, detail="Forbidden")
-    _require_owner(request)
     secret = secrets.token_urlsafe(32)
     async with session_context() as session:
         integration = (

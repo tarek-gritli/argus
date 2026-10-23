@@ -3,7 +3,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from api.routes.integrations import _get_org_id, router
+from api.routes.integrations import router
 from fastapi import FastAPI, Request
 from gitlab.exceptions import GitlabAuthenticationError
 from httpx import ASGITransport, AsyncClient
@@ -12,16 +12,15 @@ from shared.crypto import decrypt
 from shared.models.org_integration import OrgIntegration
 
 
-def _app(role: str = "owner") -> FastAPI:
+def _app(role: str = "owner", org_id: str = "org-1") -> FastAPI:
     app = FastAPI()
     app.include_router(router)
 
-    async def _state(request: Request):
-        request.state.org_id = "org-1"
-        request.state.role = role
-        return "org-1"
+    @app.middleware("http")
+    async def _auth(request: Request, call_next):  # stands in for AuthMiddleware
+        request.state.org_id, request.state.role = org_id, role
+        return await call_next(request)
 
-    app.dependency_overrides[_get_org_id] = _state
     return app
 
 
@@ -50,15 +49,7 @@ async def test_connect_requires_owner():
 
 @pytest.mark.asyncio
 async def test_connect_rejects_other_orgs():
-    app = FastAPI()
-    app.include_router(router)
-
-    async def _other(request: Request):
-        request.state.role = "owner"
-        return "someone-else"
-
-    app.dependency_overrides[_get_org_id] = _other
-    assert (await _connect(app)).status_code == 403
+    assert (await _connect(_app(org_id="someone-else"))).status_code == 403
 
 
 @pytest.mark.asyncio
