@@ -9,6 +9,7 @@ from integrations.billing.stripe_sync import (
     create_stripe_checkout_session,
     create_stripe_customer,
     create_stripe_portal_session,
+    list_stripe_invoices,
 )
 from pydantic import BaseModel, Field
 from shared.config import get_settings
@@ -110,3 +111,21 @@ async def create_portal_session(request: Request):
     except StripeBillingError as exc:
         _raise_stripe_http_error(exc)
     return {"portal_url": portal.url}
+
+
+@router.get("/invoices")
+async def get_invoices(request: Request):
+    org_id: str = request.state.org_id
+    settings = get_settings()
+    if not settings.stripe_secret_key:
+        return []
+    async with session_context() as session:
+        result = await session.execute(select(OrgBilling).where(OrgBilling.org_id == org_id))
+        billing = result.scalar_one_or_none()
+        if not billing or not billing.stripe_customer_id:
+            return []
+        customer_id = billing.stripe_customer_id
+    try:
+        return await list_stripe_invoices(settings.stripe_secret_key, customer_id)
+    except StripeBillingError as exc:
+        _raise_stripe_http_error(exc)
