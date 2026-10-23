@@ -78,6 +78,9 @@ and learns from accepted/rejected suggestions over time.
 - Blue-green Qdrant collection swap for zero-downtime reindex ✅
 - CLI `argus login` + `argus review` — browser OAuth flow + async local review via SSE ✅
 - Next.js dashboard — marketing site + authed dashboard (reviews, findings, billing, integrations, settings) ✅
+- GitLab (gitlab.com + self-hosted): MR reviews, push indexing, per-org credentials, GitLab sign-in ✅
+- Provider-neutral identities (`auth_identities`): GitHub/GitLab sign-in, account linking, multi-org ownership ✅
+- Stripe invoices, Resend transactional email, team invitations bound to verified emails ✅
 
 ---
 
@@ -147,7 +150,7 @@ argus/
 ├── packages/
 │   ├── shared/         # Cross-app models, schemas, DB session, queue interface
 │   ├── context/        # Vector embeddings (Qdrant), AST chunking, Redis cache ✅
-│   └── integrations/   # GitHub App client, GitLab stub
+│   └── integrations/   # GitHub App client, GitLab client, Stripe, Resend email
 ├── migrations/         # Alembic migrations — models live in packages/shared
 ├── tests/
 │   ├── unit/
@@ -172,13 +175,17 @@ It does NOT process findings.
 apps/gateway/
 ├── gateway_main.py          # FastAPI app init, router registration, lifespan hooks
 ├── auth_utils.py            # JWT decode helpers
-├── org_resolver.py          # Org resolution from JWT claims
+├── org_resolver.py          # GitHub installation → org; GitLab repo rows
+├── identity_providers.py    # Sign-in providers (GitHub, GitLab) normalised to one Profile
+├── permissions.py           # require_owner route dependency (fails closed)
 ├── api/
 │   ├── __init__.py          # api_router — aggregates all sub-routers
 │   └── routes/
-│       ├── webhooks.py      # POST /api/v1/webhooks/github — GitHub PR webhook
+│       ├── webhooks.py      # POST /webhooks/github; POST /webhooks/gitlab/{integration_id} (MR + push)
 │       ├── stripe_webhooks.py # POST /api/v1/webhooks/stripe — Stripe events
-│       ├── auth.py          # JWT auth endpoints
+│       ├── auth.py          # Sign-in (/{provider}/login|callback), /providers, link/unlink identities
+│       ├── orgs.py          # GET/POST /orgs, POST /orgs/{id}/switch (users may own several orgs)
+│       ├── invites.py       # Members, invitations (accepted at sign-in via a verified email)
 │       ├── auth_cli.py      # CLI session: POST /session, GET /token/{session_id}
 │       ├── oauth.py         # GitHub OAuth callback
 │       ├── reviews.py       # GET /api/v1/reviews/
@@ -197,7 +204,14 @@ apps/gateway/
 
 ```
 POST /api/v1/webhooks/github     — validate HMAC, filter PR events, enqueue review_pr
+POST /api/v1/webhooks/gitlab/{integration_id} — per-org GitLab MR/push webhook (X-Gitlab-Token or signing token)
 POST /api/v1/webhooks/stripe     — handle Stripe billing events
+GET  /api/v1/auth/providers      — sign-in methods enabled on this deployment
+GET  /api/v1/auth/{github|gitlab}/login|callback — OAuth sign-in (state carries cli session / invite token)
+GET  /api/v1/auth/link/{provider} — authed: attach another sign-in method (browser-bound state cookie)
+GET  /api/v1/auth/identities  ·  DELETE /api/v1/auth/identities/{id} — list / unlink (never the last one)
+GET/POST /api/v1/orgs  ·  POST /api/v1/orgs/{id}/switch — my orgs / create (max 5 owned) / re-scope the session
+POST /api/v1/orgs/{id}/integrations/gitlab — owner: connect a GitLab instance (URL + token verified first)
 POST /api/v1/auth/cli/session    — create CLI login session, return session_id + browser_url
 GET  /api/v1/auth/cli/token/{id} — poll for JWT after browser OAuth completes (atomic GETDEL)
 GET  /api/v1/reviews/            — list reviews for authenticated org
@@ -219,7 +233,8 @@ apps/agents/
 ├── main.py                  # Celery worker entrypoint
 ├── orchestrator/
 │   ├── graph.py             # LangGraph graph: parallel fan-out to agents
-│   ├── coordinator.py       # Receives Celery task → fetches diff + context → triggers graph → posts review
+│   ├── coordinator.py       # Receives Celery task → provider → quota/dedupe/context → graph → fixes → posts review
+│   ├── vcs.py               # VCSProvider (GitHub + GitLab) and UnifiedPayload — agents never see host types
 │   ├── quota.py             # Quota check + increment helpers
 │   └── __init__.py
 ├── specialized/
@@ -258,7 +273,8 @@ apps/agents/
 └── workers/
     ├── celery_app.py        # Celery app instance + tasks: review_pr, index_repo, review_local
     ├── connections.py       # Shared Redis/Qdrant connection helpers for workers
-    ├── index_task.py        # Repo indexing task (embeds code → Qdrant)
+    ├── credentials.py       # Per-org GitLab URL + token, loaded from org_integrations (never from task payloads)
+    ├── index_task.py        # Repo indexing task (GitHub installation or GitLab project → Qdrant)
     └── local_review_task.py # Local diff review task — runs agents, publishes findings to Redis pub/sub
 ```
 
@@ -349,7 +365,7 @@ GET    /api/v1/oauth/{kind}/authorize  ·  DELETE /api/v1/auth/logout  ·  GET /
 
 ```
 packages/shared/shared/
-├── models/          # SQLAlchemy ORM models: Repo, Review, Finding, Fix, Tenant
+├── models/          # SQLAlchemy ORM models: User, AuthIdentity, Org, UserOrg, OrgInvite, Repo, Review, Finding, ...
 ├── schemas/         # Pydantic schemas used across apps
 │   ├── finding.py   # FindingSchema — canonical agent output format
 │   └── review.py    # ReviewSchema
@@ -375,9 +391,21 @@ packages/integrations/integrations/
 │   ├── client.py    # get_installation_client(installation_id) → Github
 │   ├── pr.py        # get_pr_diff(), post_issue_comment(), post_findings_as_review()
 │   └── webhook.py   # validate_signature(payload, signature, secret) → bool
-└── gitlab/
-    └── __init__.py  # Phase 2 — stub only
+├── gitlab/
+│   ├── client.py    # get_gitlab_client(base_url, token): https + public-host (SSRF) checks
+│   ├── mr.py        # get_mr (exact numeric project id only), diff/files/comments/inline discussions
+│   ├── repo.py      # get_repo_files() for indexing
+│   └── webhook.py   # validate_gitlab_token() and Standard Webhooks validate_gitlab_signature()
+├── email/           # Resend client + receipt/invite templates
+├── billing/         # Stripe sync, invoices
+└── code_extensions.py  # indexable file types, shared by every host
 ```
+
+GitLab rules:
+- Instance URL, access token, webhook secret (and optional signing token) live **per org** in `org_integrations` (kind `gitlab`, secrets encrypted). There are no global GitLab credentials.
+- Tenant-supplied URLs must be https and resolve to public addresses unless `GITLAB_ALLOW_PRIVATE_HOSTS=true`.
+- A configured signing token must be honoured — never fall back to the plain secret header.
+- Webhook dedupe keys on MR + head commit, not on unsigned headers.
 
 GitHub client rules:
 - Private key loaded lazily via `get_settings()` (lru_cache) from GITHUB_PRIVATE_KEY_B64 env var (base64 string)
@@ -450,6 +478,15 @@ REDIS_URL=redis://localhost:6379/0
 # Celery
 CELERY_BROKER_URL=redis://localhost:6379/1
 
+# Sign-in with GitLab (optional); repo access is per-org, configured in the dashboard
+GITLAB_CLIENT_ID=
+GITLAB_CLIENT_SECRET=
+GITLAB_LOGIN_BASE_URL=https://gitlab.com   # one instance only; self-hosted repos work per org regardless
+GITLAB_ALLOW_PRIVATE_HOSTS=false
+
+# Email (optional; sending is disabled when unset)
+RESEND_API_KEY=
+
 # LLM
 ANTHROPIC_API_KEY=
 
@@ -481,7 +518,9 @@ ENV=development
 | Ticket compliance agent | 3 | ✅ active |
 | CLI login + review commands | 5 | ✅ complete |
 | Web dashboard (marketing + authed app) | 6 | ✅ in progress |
-| GitLab integration | — | stub only |
+| GitLab integration (MR review, push indexing, sign-in, self-hosted) | 6 | ✅ complete |
+| Provider-neutral identities + linking | 6 | ✅ complete |
+| Team invitations, Stripe invoices, Resend email | 6 | ✅ complete |
 
 Stubs are allowed. Implementation is not.
 
@@ -498,3 +537,6 @@ Stubs are allowed. Implementation is not.
 7. **Middleware is active** — `AuthMiddleware` and `RateLimitMiddleware` are registered in `gateway_main.py`; do not disable or bypass them
 8. **uv only for Python deps** — never suggest pip install
 9. **Do not add dependencies without checking if they are already in the workspace**
+10. **Org configuration is owner-only** — mutating integration routes use `Depends(require_owner)`; reads stay open to members. Never trust a client-side role (the `argus_role` cookie is a UI hint only)
+11. **Agents consume `UnifiedPayload`, not host types** — GitHub/GitLab specifics stay in `orchestrator/vcs.py` and `packages/integrations`
+12. **Sign-in lives in `auth_identities`** — never key a user on a provider id column; org slugs must go through `unique_org_slug`
