@@ -17,6 +17,8 @@ def _build_exempt_prefixes() -> tuple[str, ...]:
     return (
         f"{p}/webhooks/",
         f"{p}/auth/github/",
+        f"{p}/auth/gitlab/",
+        f"{p}/auth/providers",
         f"{p}/auth/logout",
         f"{p}/auth/cli/",
         f"{p}/auth/validate-nonce",

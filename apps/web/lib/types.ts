@@ -49,10 +49,30 @@ export const InvoiceSchema = z.object({
 
 export const MemberSchema = z.object({
   user_id: z.string(),
-  github_login: z.string(),
+  login: z.string(),
   avatar_url: z.string().nullable(),
   role: z.string(),
   joined_at: z.string(),
+})
+
+export const ProviderSchema = z.object({ id: z.string(), label: z.string(), host: z.string() })
+
+export const IdentitySchema = z.object({
+  id: z.string(),
+  provider: z.string(),
+  host: z.string(),
+  login: z.string(),
+  email: z.string().nullable(),
+  avatar_url: z.string().nullable(),
+  linked_at: z.string(),
+})
+
+export const OrgSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+  role: z.string(),
+  current: z.boolean(),
 })
 
 export const PendingInviteSchema = z.object({
@@ -83,6 +103,9 @@ export type ReviewDetail = z.infer<typeof ReviewDetailSchema>
 export type Billing = z.infer<typeof BillingSchema>
 export type Invoice = z.infer<typeof InvoiceSchema>
 export type Member = z.infer<typeof MemberSchema>
+export type Provider = z.infer<typeof ProviderSchema>
+export type Identity = z.infer<typeof IdentitySchema>
+export type Org = z.infer<typeof OrgSchema>
 export type PendingInvite = z.infer<typeof PendingInviteSchema>
 export type Integration = z.infer<typeof IntegrationSchema>
 

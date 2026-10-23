@@ -1,6 +1,6 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "./api"
-import { ReviewSchema, ReviewDetailSchema, BillingSchema, InvoiceSchema, MemberSchema, PendingInviteSchema, IntegrationSchema } from "./types"
+import { ReviewSchema, ReviewDetailSchema, BillingSchema, IdentitySchema, InvoiceSchema, MemberSchema, OrgSchema, ProviderSchema, PendingInviteSchema, IntegrationSchema } from "./types"
 import { z } from "zod"
 
 export const reviewKeys = {
@@ -134,5 +134,57 @@ export function useSelectNotionDatabase(orgId: string, integrationId: string) {
     mutationFn: (databaseId: string) =>
       api.integrations.selectNotionDatabase(orgId, integrationId, databaseId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["integrations", orgId] }),
+  })
+}
+
+export const providersOptions = () =>
+  queryOptions({
+    queryKey: ["auth-providers"],
+    queryFn: () => api.auth.providers().then((data) => z.array(ProviderSchema).parse(data)),
+    staleTime: 5 * 60_000,
+  })
+
+export const identitiesOptions = () =>
+  queryOptions({
+    queryKey: ["identities"],
+    queryFn: () => api.auth.identities().then((data) => z.array(IdentitySchema).parse(data)),
+  })
+
+export function useUnlinkIdentity() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.auth.unlinkIdentity(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["identities"] }),
+  })
+}
+
+export const orgsOptions = () =>
+  queryOptions({
+    queryKey: ["orgs"],
+    queryFn: () => api.orgs.list().then((data) => z.array(OrgSchema).parse(data)),
+  })
+
+/** Re-scope the session to another org: swap the cookies, then reload so every query refetches. */
+async function activateOrg(orgId: string) {
+  const { token, nonce } = await api.orgs.switch(orgId)
+  const res = await fetch("/api/auth/set-token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, nonce }),
+  })
+  if (!res.ok) throw new Error("Failed to switch organization")
+  window.location.assign("/dashboard")
+}
+
+export function useSwitchOrg() {
+  return useMutation({ mutationFn: activateOrg })
+}
+
+export function useCreateOrg() {
+  return useMutation({
+    mutationFn: async (name: string) => {
+      const org = await api.orgs.create(name)
+      await activateOrg(org.id)
+    },
   })
 }

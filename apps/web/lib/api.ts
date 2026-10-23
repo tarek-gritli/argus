@@ -59,6 +59,11 @@ export const api = {
       }),
     revokeInvite: (orgId: string, inviteId: string) =>
       request(`/api/v1/orgs/${orgId}/invites/${inviteId}`, { method: "DELETE" }),
+    list: () => request<unknown[]>(`/api/v1/orgs`),
+    create: (name: string) =>
+      request<{ id: string }>(`/api/v1/orgs`, { method: "POST", body: JSON.stringify({ name }) }),
+    switch: (orgId: string) =>
+      request<{ token: string; nonce: string }>(`/api/v1/orgs/${orgId}/switch`, { method: "POST" }),
   },
   integrations: {
     list: (orgId: string) =>
@@ -97,7 +102,12 @@ export const api = {
   },
   auth: {
     logout: () => request("/api/v1/auth/logout", { method: "DELETE" }),
-    loginUrl: () => `${BASE}/api/v1/auth/github/login`,
+    providers: () => request<unknown[]>(`/api/v1/auth/providers`),
+    identities: () => request<unknown[]>(`/api/v1/auth/identities`),
+    unlinkIdentity: (id: string) => request(`/api/v1/auth/identities/${id}`, { method: "DELETE" }),
+    loginUrl: (provider = "github", inviteToken?: string) =>
+      `${BASE}/api/v1/auth/${provider}/login${inviteToken ? `?invite_token=${encodeURIComponent(inviteToken)}` : ""}`,
+    linkUrl: (provider: string) => `${BASE}/api/v1/auth/link/${provider}`,
   },
 }
 

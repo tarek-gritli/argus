@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     jwt_ttl_seconds: int = 86400
     dashboard_token_secret: str = ""
 
+    # GitLab sign-in (optional). One OAuth app on gitlab.com, or on a single self-hosted
+    # instance if GITLAB_LOGIN_BASE_URL points at it. Repo access is configured per org instead.
+    gitlab_client_id: str = ""
+    gitlab_client_secret: str = ""
+    gitlab_login_base_url: str = "https://gitlab.com"
+
     # Encryption
     secret_encryption_key: str
 

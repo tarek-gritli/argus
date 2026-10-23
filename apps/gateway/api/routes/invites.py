@@ -37,7 +37,7 @@ async def list_members(org_id: str, request: Request):
     return [
         {
             "user_id": uo.user_id,
-            "github_login": u.github_login,
+            "login": u.login,
             "avatar_url": u.avatar_url,
             "role": uo.role,
             "joined_at": uo.joined_at.isoformat(),
@@ -73,7 +73,7 @@ async def list_invites(org_id: str, request: Request):
             "id": inv.id,
             "email": inv.email,
             "role": inv.role,
-            "invited_by_login": u.github_login,
+            "invited_by_login": u.login,
             "expires_at": inv.expires_at.isoformat(),
             "created_at": inv.created_at.isoformat(),
         }
@@ -117,7 +117,7 @@ async def create_invite(org_id: str, body: InviteRequest, request: Request):
         session.add(invite)
         await session.commit()
         await session.refresh(invite)
-        invite_id, invite_token, org_name, inviter_login = invite.id, invite.token, org.name, inviter.github_login
+        invite_id, invite_token, org_name, inviter_login = invite.id, invite.token, org.name, inviter.login
 
     if settings.resend_api_key:
         html = invite_html(org_name, inviter_login, f"{settings.frontend_url}/invite/{invite_token}")
@@ -170,7 +170,7 @@ async def get_invite(token: str):
     return {
         "org_name": org.name,
         "org_id": org.id,
-        "inviter_login": inviter.github_login,
+        "inviter_login": inviter.login,
         "role": invite.role,
         "email": invite.email,
         "expires_at": invite.expires_at.isoformat(),

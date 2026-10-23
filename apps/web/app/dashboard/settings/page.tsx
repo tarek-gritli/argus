@@ -12,6 +12,8 @@ import {
 } from "@/lib/queries"
 import { getOrgId } from "@/lib/auth"
 import { Topbar } from "@/components/topbar"
+import { ConnectedAccounts } from "./_components/connected-accounts"
+import { Organizations } from "./_components/organizations"
 import { Building2, Users, Info, Mail, X } from "lucide-react"
 
 export default function SettingsPage() {
@@ -78,6 +80,10 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        <Organizations />
+
+        <ConnectedAccounts />
+
         {/* Team members */}
         <section className="border border-white/8 p-4" style={{ background: "rgba(255,255,255,0.04)" }}>
           <div className="flex items-start justify-between mb-4">
@@ -131,15 +137,15 @@ export default function SettingsPage() {
                 <div className="w-8 h-8 bg-[#2a2a2a] flex items-center justify-center shrink-0 overflow-hidden">
                   {m.avatar_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={m.avatar_url} alt={m.github_login} className="w-full h-full object-cover" />
+                    <img src={m.avatar_url} alt={m.login} className="w-full h-full object-cover" />
                   ) : (
                     <span className="text-[11px] font-bold text-[#c6c6c7]">
-                      {m.github_login[0].toUpperCase()}
+                      {m.login[0].toUpperCase()}
                     </span>
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[14px] text-[#e5e2e1]">@{m.github_login}</p>
+                  <p className="text-[14px] text-[#e5e2e1]">@{m.login}</p>
                   <p className="text-[11px] text-[#8e9192]">
                     Joined {new Date(m.joined_at).toLocaleDateString()}
                   </p>
