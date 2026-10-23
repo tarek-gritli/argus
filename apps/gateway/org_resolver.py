@@ -50,3 +50,15 @@ async def get_or_create_org(session: AsyncSession, installation_id: int, repo_fu
             if repo:
                 return repo.org_id
             raise
+
+
+async def ensure_gitlab_repo(session: AsyncSession, org_id: str, project_path: str) -> None:
+    """Make sure a Repo row exists for a GitLab project in this org (first MR seen creates it)."""
+    existing = await session.execute(select(Repo.id).where(Repo.org_id == org_id, Repo.provider == "gitlab", Repo.full_name == project_path))
+    if existing.scalar_one_or_none():
+        return
+    try:
+        session.add(Repo(org_id=org_id, provider="gitlab", full_name=project_path, installation_id=None))
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()  # concurrent first MR for the same project

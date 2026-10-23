@@ -94,10 +94,10 @@ def _run(payload: dict, billing: OrgBilling, post_comment: MagicMock, post_revie
     """Run coordinator.run() with all external deps patched."""
     mock_factory = _make_factory(billing)
     with (
-        patch("orchestrator.coordinator.get_pr", return_value=_make_pr()),
-        patch("orchestrator.coordinator.get_pr_files", return_value=_make_files()),
-        patch("orchestrator.coordinator.get_pr_diff", return_value=DIFF),
-        patch("orchestrator.coordinator.get_pr_file_content", return_value="mock content"),
+        patch("orchestrator.vcs.get_pr", return_value=_make_pr()),
+        patch("orchestrator.vcs.get_pr_files", return_value=_make_files()),
+        patch("orchestrator.vcs.get_pr_diff", return_value=DIFF),
+        patch("orchestrator.vcs.get_pr_file_content", return_value="mock content"),
         patch("orchestrator.coordinator.run_async", side_effect=lambda coro, **_: _run_coro(coro)),
         patch("orchestrator.coordinator.get_session_factory", return_value=mock_factory),
         patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
@@ -108,9 +108,9 @@ def _run(payload: dict, billing: OrgBilling, post_comment: MagicMock, post_revie
         patch("orchestrator.graph.documentation_analyze", return_value=[]),
         patch("orchestrator.coordinator.run_fix_pipeline", side_effect=lambda f, _: f),
         patch("orchestrator.coordinator.generate_pr_description", return_value=""),
-        patch("orchestrator.coordinator.update_pr_body"),
-        patch("orchestrator.coordinator.post_findings_as_review", new=post_review or MagicMock()),
-        patch("orchestrator.coordinator.post_issue_comment", new=post_comment),
+        patch("orchestrator.vcs.update_pr_body"),
+        patch("orchestrator.vcs.post_findings_as_review_github", new=post_review or MagicMock()),
+        patch("orchestrator.vcs.post_issue_comment_github", new=post_comment),
         patch("orchestrator.coordinator._persist", new=AsyncMock()),
     ):
         from orchestrator.coordinator import run

@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     jira_client_id: str = ""
     jira_client_secret: str = ""
 
+    # GitLab: instance URL, access token and webhook secrets are per-org (org_integrations).
+    # Self-hosted instances on private networks are refused unless this is enabled (SSRF guard).
+    gitlab_allow_private_hosts: bool = False
+
     # Stripe
     stripe_secret_key: str
     stripe_webhook_secret: str

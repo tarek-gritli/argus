@@ -15,7 +15,7 @@ from .providers.linear import LinearProvider
 from .schemas import AgentInput
 
 if TYPE_CHECKING:
-    from integrations.github.schemas import PullRequestPayload
+    from orchestrator.vcs import UnifiedPayload
 
 logger = logging.getLogger(__name__)
 
@@ -83,19 +83,16 @@ def _build_providers(installation_id: int, repo_full_name: str, org_id: str) -> 
     return providers
 
 
-def analyze(files: list[Any], diff: str, pr_payload: "PullRequestPayload") -> list[FindingSchema]:
+def analyze(files: list[Any], diff: str, pr_payload: "UnifiedPayload") -> list[FindingSchema]:
     agent_input = AgentInput(
         diff=diff,
-        repo_full_name=pr_payload.repo_full_name,
-        pr_number=pr_payload.pr_number,
+        repo_full_name=pr_payload.repo_id,
+        pr_number=pr_payload.pr_id,
         head_sha=pr_payload.head_sha,
         base_sha=pr_payload.base_sha,
         installation_id=pr_payload.installation_id,
-        pr_title=getattr(pr_payload, "pr_title", None) or "",
-        pr_description=getattr(pr_payload, "pr_body", None) or "",
+        pr_title=pr_payload.pr_title,
+        pr_description=pr_payload.pr_body,
     )
-    org_id = getattr(pr_payload, "org_id", None)
-    if not isinstance(org_id, str):
-        org_id = ""
-    providers = _build_providers(pr_payload.installation_id, pr_payload.repo_full_name, org_id)
+    providers = _build_providers(pr_payload.installation_id, pr_payload.repo_id, pr_payload.org_id)
     return run_ticket_compliance_agent(agent_input, providers)

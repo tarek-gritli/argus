@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import operator
-from typing import Annotated, Any, TypedDict
+from typing import Annotated, TypedDict
 
 from context.bundle import ContextBundle
-from integrations.github import PullRequestPayload
 from langgraph.graph import END, START, StateGraph
 from shared.schemas import FindingSchema
 from shared.telemetry import get_callback_handler
@@ -13,11 +12,13 @@ from specialized.quality import analyze as quality_analyze
 from specialized.security import analyze as security_analyze
 from specialized.testing import analyze as testing_analyze
 
+from .vcs import FileChange, UnifiedPayload
+
 
 class ReviewState(TypedDict):
-    files: list[Any]
+    files: list[FileChange]
     diff: str
-    pr_payload: PullRequestPayload
+    pr_payload: UnifiedPayload
     findings: Annotated[list[FindingSchema], operator.add]
     context: ContextBundle
 
@@ -74,9 +75,9 @@ def build_review_graph(plan: str = "free"):
 
 
 def run_review(
-    files: list[Any],
+    files: list[FileChange],
     diff: str,
-    pr_payload: PullRequestPayload,
+    pr_payload: UnifiedPayload,
     plan: str = "free",
     context: ContextBundle | None = None,
 ) -> list[FindingSchema]:

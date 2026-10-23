@@ -78,16 +78,16 @@ def test_pipeline_detects_findings_and_posts_comment():
     mock_files = _make_mock_files(DIFF_WITH_FINDINGS)
 
     with (
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
-        patch("orchestrator.coordinator.get_pr_diff", return_value=DIFF_WITH_FINDINGS),
-        patch("orchestrator.coordinator.get_pr_file_content", return_value="mock file content"),
+        patch("orchestrator.vcs.get_pr", return_value=mock_pr),
+        patch("orchestrator.vcs.get_pr_files", return_value=mock_files),
+        patch("orchestrator.vcs.get_pr_diff", return_value=DIFF_WITH_FINDINGS),
+        patch("orchestrator.vcs.get_pr_file_content", return_value="mock file content"),
         patch("specialized.quality.agent._call_claude", return_value="[]"),
         patch("specialized.testing.agent._call_claude", return_value="[]"),
         patch("orchestrator.graph.documentation_analyze", return_value=[]),
         patch("orchestrator.coordinator.run_fix_pipeline") as mock_fix,
-        patch("orchestrator.coordinator.post_findings_as_review"),
-        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
+        patch("orchestrator.vcs.post_findings_as_review_github"),
+        patch("orchestrator.vcs.post_issue_comment_github") as mock_post,
     ):
 
         def fake_run_fix(findings, files_content):
@@ -124,15 +124,15 @@ def test_pipeline_clean_diff_posts_no_issues():
     mock_files = _make_mock_files(DIFF_CLEAN)
 
     with (
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
-        patch("orchestrator.coordinator.get_pr_diff", return_value=DIFF_CLEAN),
-        patch("orchestrator.coordinator.get_pr_file_content", return_value="mock file content"),
+        patch("orchestrator.vcs.get_pr", return_value=mock_pr),
+        patch("orchestrator.vcs.get_pr_files", return_value=mock_files),
+        patch("orchestrator.vcs.get_pr_diff", return_value=DIFF_CLEAN),
+        patch("orchestrator.vcs.get_pr_file_content", return_value="mock file content"),
         patch("specialized.quality.agent._call_claude", return_value="[]"),
         patch("specialized.testing.agent._call_claude", return_value="[]"),
         patch("orchestrator.graph.documentation_analyze", return_value=[]),
-        patch("orchestrator.coordinator.post_findings_as_review"),
-        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
+        patch("orchestrator.vcs.post_findings_as_review_github"),
+        patch("orchestrator.vcs.post_issue_comment_github") as mock_post,
     ):
         from orchestrator.coordinator import run
 
@@ -149,16 +149,16 @@ def test_pipeline_comment_severity_ordering():
     mock_files = _make_mock_files(DIFF_WITH_FINDINGS)
 
     with (
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
-        patch("orchestrator.coordinator.get_pr_diff", return_value=DIFF_WITH_FINDINGS),
-        patch("orchestrator.coordinator.get_pr_file_content", return_value="mock file content"),
+        patch("orchestrator.vcs.get_pr", return_value=mock_pr),
+        patch("orchestrator.vcs.get_pr_files", return_value=mock_files),
+        patch("orchestrator.vcs.get_pr_diff", return_value=DIFF_WITH_FINDINGS),
+        patch("orchestrator.vcs.get_pr_file_content", return_value="mock file content"),
         patch("specialized.quality.agent._call_claude", return_value="[]"),
         patch("specialized.testing.agent._call_claude", return_value="[]"),
         patch("orchestrator.graph.documentation_analyze", return_value=[]),
         patch("orchestrator.coordinator.run_fix_pipeline", side_effect=lambda f, _: f),
-        patch("orchestrator.coordinator.post_findings_as_review"),
-        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
+        patch("orchestrator.vcs.post_findings_as_review_github"),
+        patch("orchestrator.vcs.post_issue_comment_github") as mock_post,
     ):
         from orchestrator.coordinator import run
 
@@ -178,9 +178,9 @@ def test_pipeline_empty_file_list_posts_warning():
     mock_pr = MagicMock()
 
     with (
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=[]),
-        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
+        patch("orchestrator.vcs.get_pr", return_value=mock_pr),
+        patch("orchestrator.vcs.get_pr_files", return_value=[]),
+        patch("orchestrator.vcs.post_issue_comment_github") as mock_post,
     ):
         from orchestrator.coordinator import run
 
@@ -196,16 +196,16 @@ def test_coordinator_calls_post_findings_as_review():
     mock_files = _make_mock_files(DIFF_WITH_FINDINGS)
 
     with (
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
-        patch("orchestrator.coordinator.get_pr_diff", return_value=DIFF_WITH_FINDINGS),
-        patch("orchestrator.coordinator.get_pr_file_content", return_value="mock file content"),
+        patch("orchestrator.vcs.get_pr", return_value=mock_pr),
+        patch("orchestrator.vcs.get_pr_files", return_value=mock_files),
+        patch("orchestrator.vcs.get_pr_diff", return_value=DIFF_WITH_FINDINGS),
+        patch("orchestrator.vcs.get_pr_file_content", return_value="mock file content"),
         patch("specialized.quality.agent._call_claude", return_value="[]"),
         patch("specialized.testing.agent._call_claude", return_value="[]"),
         patch("orchestrator.graph.documentation_analyze", return_value=[]),
         patch("orchestrator.coordinator.run_fix_pipeline", side_effect=lambda f, _: f),
-        patch("orchestrator.coordinator.post_findings_as_review") as mock_review,
-        patch("orchestrator.coordinator.post_issue_comment"),
+        patch("orchestrator.vcs.post_findings_as_review_github") as mock_review,
+        patch("orchestrator.vcs.post_issue_comment_github"),
     ):
         from orchestrator.coordinator import run
 

@@ -52,4 +52,5 @@ JWT_SECRET_KEY=
 DATABASE_URL=postgresql+asyncpg://argus:argus@localhost:5432/argus
 REDIS_URL=redis://localhost:6379/0
 CELERY_BROKER_URL=redis://localhost:6379/1
+GITLAB_ALLOW_PRIVATE_HOSTS=false  # self-hosted GitLab on private IPs
 ```

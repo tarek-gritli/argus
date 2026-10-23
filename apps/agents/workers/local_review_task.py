@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Any
 
-from integrations.github import PullRequestPayload
+from orchestrator.vcs import UnifiedPayload
 from specialized.quality import analyze as quality_analyze
 from specialized.security import analyze as security_analyze
 from specialized.testing import analyze as testing_analyze
@@ -26,15 +26,8 @@ class _FakeFile:
         self.patch = ""
 
 
-def _fake_payload() -> PullRequestPayload:
-    return PullRequestPayload(
-        action="opened",
-        repo_full_name="local/local",
-        pr_number=0,
-        head_sha="local",
-        base_sha="local",
-        installation_id=0,
-    )
+def _fake_payload() -> UnifiedPayload:
+    return UnifiedPayload(platform="local", repo_id="local/local", pr_id=0, head_sha="local", base_sha="local")
 
 
 def _publish(redis_client, channel: str, event: str, data: Any) -> None:

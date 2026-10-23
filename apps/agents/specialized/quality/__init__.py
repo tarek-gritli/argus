@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from shared.schemas import FindingSchema
 
@@ -11,7 +11,7 @@ from .schemas import AgentInput
 
 if TYPE_CHECKING:
     from context.bundle import ContextBundle
-    from integrations.github.schemas import PullRequestPayload
+    from orchestrator.vcs import FileChange, UnifiedPayload
 
 __all__ = ["analyze", "run_quality_agent"]
 
@@ -46,14 +46,14 @@ def _format_vector_context(chunks: list[dict]) -> list[str]:
     return out
 
 
-def analyze(files: list[Any], diff: str, pr_payload: "PullRequestPayload", context: ContextBundle | None = None) -> list[FindingSchema]:
+def analyze(files: list["FileChange"], diff: str, pr_payload: "UnifiedPayload", context: ContextBundle | None = None) -> list[FindingSchema]:
     """Adapter: build AgentInput from coordinator inputs and run the quality agent."""
     changed_files = {f.filename: _patch_to_source(f.patch or "") for f in files}
     agent_input = AgentInput(
         diff=diff,
         changed_files=changed_files,
-        repo_full_name=pr_payload.repo_full_name,
-        pr_number=pr_payload.pr_number,
+        repo_full_name=pr_payload.repo_id,
+        pr_number=pr_payload.pr_id,
         head_sha=pr_payload.head_sha,
         base_sha=pr_payload.base_sha,
         vector_context=_format_vector_context(context.similar_chunks) if context else [],

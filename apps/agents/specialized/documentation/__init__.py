@@ -10,7 +10,7 @@ from .agent import run_documentation_agent
 from .schemas import AgentInput
 
 if TYPE_CHECKING:
-    from integrations.github.schemas import PullRequestPayload
+    from orchestrator.vcs import UnifiedPayload
 
 __all__ = ["analyze", "run_documentation_agent"]
 
@@ -28,17 +28,17 @@ def _patch_to_source(patch: str) -> str:
     return "\n".join(lines)
 
 
-def analyze(files: list[Any], diff: str, pr_payload: "PullRequestPayload") -> list[FindingSchema]:
+def analyze(files: list[Any], diff: str, pr_payload: "UnifiedPayload") -> list[FindingSchema]:
     """Adapter: build AgentInput from coordinator inputs and run the documentation agent."""
     changed_files = {f.filename: _patch_to_source(f.patch or "") for f in files}
     agent_input = AgentInput(
         diff=diff,
         changed_files=changed_files,
-        repo_full_name=pr_payload.repo_full_name,
-        pr_number=pr_payload.pr_number,
+        repo_full_name=pr_payload.repo_id,
+        pr_number=pr_payload.pr_id,
         head_sha=pr_payload.head_sha,
         base_sha=pr_payload.base_sha,
-        pr_title=getattr(pr_payload, "pr_title", ""),
-        pr_description=getattr(pr_payload, "pr_description", ""),
+        pr_title=pr_payload.pr_title,
+        pr_description=pr_payload.pr_body,
     )
     return run_documentation_agent(agent_input)
