@@ -37,7 +37,7 @@ async def list_members(org_id: str, request: Request):
     return [
         {
             "user_id": uo.user_id,
-            "github_login": u.login,
+            "login": u.login,
             "avatar_url": u.avatar_url,
             "role": uo.role,
             "joined_at": uo.joined_at.isoformat(),

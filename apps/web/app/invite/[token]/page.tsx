@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
-import { BASE } from "@/lib/api"
+import { ProviderButtons } from "@/components/provider-buttons"
 
 interface InviteDetails {
   org_name: string
@@ -27,10 +27,6 @@ export default function InvitePage() {
       .then(setInvite)
       .catch((e: Error) => setError(e.message))
   }, [token])
-
-  function handleGitHubLogin() {
-    window.location.href = `${BASE}/api/v1/auth/github/login?invite_token=${encodeURIComponent(token)}`
-  }
 
   if (error) {
     return (
@@ -88,14 +84,9 @@ export default function InvitePage() {
           </div>
 
           <div className="w-full pt-1">
-            <button
-              onClick={handleGitHubLogin}
-              className="w-full bg-[#e2e2e2] text-[#2f3131] py-3 text-[10px] font-bold tracking-widest uppercase hover:opacity-90 active:scale-[0.98] transition-all"
-            >
-              Accept via GitHub
-            </button>
+            <ProviderButtons inviteToken={token} prefix="Accept with" />
             <p className="text-[11px] text-[#8e9192] mt-3">
-              Sign in with a GitHub account that has a verified email matching {invite.email}.
+              Sign in with an account that has a verified email matching {invite.email}.
             </p>
           </div>
         </div>
