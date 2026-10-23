@@ -1,7 +1,7 @@
 """repo_provider
 
 Revision ID: d1a7b3c9e5f2
-Revises: f1f442e916f4
+Revises: c9d4e7a1b2f3
 Create Date: 2026-06-02 12:00:00.000000
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "d1a7b3c9e5f2"
-down_revision: str | Sequence[str] | None = "f1f442e916f4"
+down_revision: str | Sequence[str] | None = "c9d4e7a1b2f3"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

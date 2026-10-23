@@ -3,9 +3,9 @@ from __future__ import annotations
 import asyncio
 import secrets
 
-import gitlab
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
+from gitlab.exceptions import GitlabError
 from integrations.gitlab import DEFAULT_BASE_URL, InvalidGitLabURL, get_gitlab_client, normalize_base_url
 from pydantic import BaseModel
 from shared.config import get_settings
@@ -229,7 +229,7 @@ async def connect_gitlab(
         await asyncio.to_thread(_verify_gitlab_token, body.base_url, body.access_token)
     except InvalidGitLabURL as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except gitlab.exceptions.GitlabError as exc:
+    except GitlabError as exc:
         raise HTTPException(status_code=400, detail="GitLab rejected the access token") from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Could not reach the GitLab instance") from exc

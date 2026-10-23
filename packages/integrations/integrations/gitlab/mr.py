@@ -1,11 +1,17 @@
 import logging
 import re
-from typing import Any
+from typing import Any, cast
 
 import gitlab
-from gitlab.v4.objects import ProjectMergeRequest
+from gitlab.exceptions import GitlabGetError
+from gitlab.v4.objects.merge_requests import ProjectMergeRequest
 
 logger = logging.getLogger(__name__)
+
+
+def _changes(mr: ProjectMergeRequest) -> list[dict[str, Any]]:
+    # python-gitlab types changes() as dict | Response; the API always returns the JSON dict
+    return cast(dict, mr.changes())["changes"]
 
 
 def get_mr(gl: gitlab.Gitlab, project_id: int, mr_iid: int) -> ProjectMergeRequest:
@@ -22,7 +28,7 @@ def get_mr(gl: gitlab.Gitlab, project_id: int, mr_iid: int) -> ProjectMergeReque
 
 def get_mr_files(mr: ProjectMergeRequest) -> list[dict[str, Any]]:
     """Return changed files for a MR."""
-    return mr.changes()["changes"]
+    return _changes(mr)
 
 
 def get_mr_file_content(mr: ProjectMergeRequest, filename: str) -> str | None:
@@ -31,14 +37,14 @@ def get_mr_file_content(mr: ProjectMergeRequest, filename: str) -> str | None:
     try:
         f = project.files.get(file_path=filename, ref=mr.sha)
         return f.decode().decode("utf-8")
-    except gitlab.exceptions.GitlabGetError:
+    except GitlabGetError:
         return None
 
 
 def get_mr_diff(mr: ProjectMergeRequest) -> str:
     """Return the full unified diff for an MR as a single string."""
     parts: list[str] = []
-    for change in mr.changes()["changes"]:
+    for change in _changes(mr):
         diff = change.get("diff", "")
         if not diff:
             continue
@@ -97,7 +103,7 @@ def post_findings_as_review(
 
     # Build set of (filename, line) pairs that are part of this MR's diff
     diff_lines: set[tuple[str, int]] = set()
-    for change in mr.changes()["changes"]:
+    for change in _changes(mr):
         diff = change.get("diff", "")
         if not diff:
             continue
