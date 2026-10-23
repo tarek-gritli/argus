@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     stripe_success_url: str = "http://localhost:3000/billing/success"
     stripe_cancel_url: str = "http://localhost:3000/billing/cancel"
 
+    # Email (Resend — optional, email sending disabled when unset)
+    resend_api_key: str | None = None
+
     # App
     env: str = "development"
     api_prefix: str = "/api/v1"

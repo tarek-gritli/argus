@@ -1279,6 +1279,7 @@ name = "integrations"
 version = "0.1.0"
 source = { editable = "packages/integrations" }
 dependencies = [
+    { name = "httpx" },
     { name = "pygithub" },
     { name = "shared" },
     { name = "stripe" },
@@ -1286,6 +1287,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "pygithub" },
     { name = "shared", editable = "packages/shared" },
     { name = "stripe", specifier = ">=15.1.0" },
