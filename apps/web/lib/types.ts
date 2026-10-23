@@ -38,6 +38,32 @@ export const BillingSchema = z.object({
   has_stripe_customer: z.boolean(),
 })
 
+export const InvoiceSchema = z.object({
+  id: z.string(),
+  number: z.string(),
+  amount_paid: z.number(),
+  created: z.number(),
+  invoice_pdf: z.string().nullable(),
+  status: z.string(),
+})
+
+export const MemberSchema = z.object({
+  user_id: z.string(),
+  github_login: z.string(),
+  avatar_url: z.string().nullable(),
+  role: z.string(),
+  joined_at: z.string(),
+})
+
+export const PendingInviteSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  role: z.string(),
+  invited_by_login: z.string(),
+  expires_at: z.string(),
+  created_at: z.string(),
+})
+
 export const IntegrationSchema = z.object({
   id: z.string(),
   kind: z.string(),
@@ -54,4 +80,7 @@ export type Finding = z.infer<typeof FindingSchema>
 export type Review = z.infer<typeof ReviewSchema>
 export type ReviewDetail = z.infer<typeof ReviewDetailSchema>
 export type Billing = z.infer<typeof BillingSchema>
+export type Invoice = z.infer<typeof InvoiceSchema>
+export type Member = z.infer<typeof MemberSchema>
+export type PendingInvite = z.infer<typeof PendingInviteSchema>
 export type Integration = z.infer<typeof IntegrationSchema>

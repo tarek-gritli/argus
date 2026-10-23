@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import secrets
+from datetime import datetime, timezone
 
 import httpx
 from auth_utils import create_jwt
@@ -9,8 +11,8 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from shared.config import Settings, get_settings
 from shared.db import get_session
-from shared.models import Org, OrgBilling, User, UserOrg
-from sqlalchemy import select
+from shared.models import Org, OrgBilling, OrgInvite, User, UserOrg
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +21,7 @@ router = APIRouter()
 _GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
 _GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
 _GITHUB_USER_URL = "https://api.github.com/user"
+_GITHUB_EMAILS_URL = "https://api.github.com/user/emails"
 _CSRF_TTL = 600  # 10 minutes
 _COOKIE_NONCE_TTL = 300  # 5 minutes
 
@@ -27,14 +30,15 @@ _COOKIE_NONCE_TTL = 300  # 5 minutes
 async def github_login(
     request: Request,
     cli_session_id: str | None = None,
+    invite_token: str | None = None,
     settings: Settings = Depends(get_settings),
 ):
     state = secrets.token_urlsafe(32)
-    # Store cli_session_id alongside the CSRF token so the callback can retrieve
-    # it — GitHub does not round-trip unknown query params back to the callback.
-    state_value = cli_session_id if cli_session_id else "1"
+    # Store cli_session_id / invite_token alongside the CSRF token so the callback
+    # can retrieve them — GitHub does not round-trip unknown query params.
+    state_value = json.dumps({"cli": cli_session_id or "", "invite": invite_token or ""})
     await request.app.state.redis.set(f"oauth_state:{state}", state_value, ex=_CSRF_TTL)
-    url = f"{_GITHUB_AUTHORIZE_URL}?client_id={settings.github_client_id}&state={state}&scope=read:user"
+    url = f"{_GITHUB_AUTHORIZE_URL}?client_id={settings.github_client_id}&state={state}&scope=read:user%20user:email"
     return RedirectResponse(url=url)
 
 
@@ -51,9 +55,14 @@ async def github_callback(
     if not state_value:
         return Response(status_code=400, content="Invalid or expired state")
     decoded = state_value.decode() if isinstance(state_value, bytes) else state_value
-    # Value is the cli_session_id when the login was initiated from the CLI,
-    # or the sentinel "1" for a regular browser login.
-    cli_session_id: str | None = decoded if decoded != "1" else None
+    try:
+        state_obj = json.loads(decoded)
+        cli_session_id: str | None = state_obj.get("cli") or None
+        invite_token: str | None = state_obj.get("invite") or None
+    except (json.JSONDecodeError, ValueError, AttributeError):
+        # Legacy format: raw cli_session_id, or the sentinel "1" for a browser login.
+        cli_session_id = decoded if decoded != "1" else None
+        invite_token = None
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -77,6 +86,16 @@ async def github_callback(
             )
             user_resp.raise_for_status()
             gh_user = user_resp.json()
+
+            # Only needed to bind an invite to its invitee; skip the extra call otherwise.
+            verified_emails: set[str] = set()
+            if invite_token:
+                emails_resp = await client.get(
+                    _GITHUB_EMAILS_URL,
+                    headers={"Authorization": f"Bearer {access_token}", "Accept": "application/vnd.github+json"},
+                )
+                emails_resp.raise_for_status()
+                verified_emails = {e["email"].lower() for e in emails_resp.json() if e.get("verified")}
     except httpx.HTTPError:
         return Response(status_code=502, content="GitHub API unavailable")
     except ValueError:
@@ -102,7 +121,13 @@ async def github_callback(
         result3 = await session.execute(select(Org).where(Org.id == membership.org_id))
         org = result3.scalar_one()
 
-    token = create_jwt(user_id=user.id, org_id=org.id, role=membership.role)
+    token_org_id, token_role = org.id, membership.role
+    if invite_token:
+        accepted = await _consume_invite(session, user.id, invite_token, verified_emails)
+        if accepted:
+            token_org_id, token_role = accepted
+
+    token = create_jwt(user_id=user.id, org_id=token_org_id, role=token_role)
     if cli_session_id:
         await request.app.state.redis.set(f"cli_session:{cli_session_id}", token, ex=300)
         return Response(content=f'{{"token":"{token}"}}', media_type="application/json")
@@ -182,3 +207,34 @@ async def _upsert_user_org(
     result3 = await session.execute(select(Org).where(Org.id == membership.org_id))
     org = result3.scalar_one()
     return user, org, membership
+
+
+async def _consume_invite(session: AsyncSession, user_id: str, token: str, verified_emails: set[str]) -> tuple[str, str] | None:
+    """Accept a pending invite: create the membership and mark the invite accepted.
+
+    Returns (org_id, role) on success. Returns None if the token is unknown, used or
+    expired, if none of the user's verified GitHub emails match the invited address,
+    or if the org has no free seat.
+    """
+    result = await session.execute(
+        select(OrgInvite).where(
+            OrgInvite.token == token,
+            OrgInvite.accepted_at.is_(None),
+            OrgInvite.expires_at > datetime.now(timezone.utc),
+        )
+    )
+    invite = result.scalar_one_or_none()
+    if not invite or invite.email.lower() not in verified_emails:
+        return None
+
+    existing = await session.execute(select(UserOrg).where(UserOrg.user_id == user_id, UserOrg.org_id == invite.org_id))
+    if not existing.scalar_one_or_none():
+        seats = await session.scalar(select(OrgBilling.seat_count).where(OrgBilling.org_id == invite.org_id))
+        members = await session.scalar(select(func.count()).where(UserOrg.org_id == invite.org_id)) or 0
+        if seats is None or members >= seats:
+            return None
+        session.add(UserOrg(user_id=user_id, org_id=invite.org_id, role=invite.role))
+
+    invite.accepted_at = datetime.now(timezone.utc)
+    await session.commit()
+    return invite.org_id, invite.role

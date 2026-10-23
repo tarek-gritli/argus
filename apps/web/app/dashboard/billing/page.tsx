@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { billingOptions } from "@/lib/queries";
+import { billingOptions, invoicesOptions } from "@/lib/queries";
 import { PlanCard } from "./_components/plan-card";
 import { QuotaBar } from "./_components/quota-bar";
 import { UpgradeDialog } from "./_components/upgrade-dialog";
@@ -11,6 +11,7 @@ import { FileText } from "lucide-react";
 
 export default function BillingPage() {
   const { data: billing, isLoading } = useQuery(billingOptions());
+  const { data: invoices = [] } = useQuery(invoicesOptions());
 
   async function handlePortal() {
     const { portal_url } = await api.billing.portal();
@@ -61,18 +62,52 @@ export default function BillingPage() {
                     Recent Invoices
                   </h3>
                 </div>
-                <div className="px-4 py-6 flex items-center gap-3 text-[#8e9192]">
-                  <FileText className="h-4 w-4 shrink-0" />
-                  <span className="text-[13px]">
-                    Invoices are managed via the Stripe billing portal.
-                  </span>
-                  <button
-                    onClick={handlePortal}
-                    className="ml-auto text-[12px] text-[#c6c6c7] hover:text-white underline underline-offset-2 transition-colors"
-                  >
-                    Open portal
-                  </button>
-                </div>
+                {invoices.length === 0 ? (
+                  <div className="px-4 py-6 text-center text-[13px] text-[#8e9192]">
+                    No invoices yet
+                  </div>
+                ) : (
+                  <div className="divide-y divide-white/5">
+                    {invoices.map((inv) => (
+                      <div
+                        key={inv.id}
+                        className="flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors"
+                      >
+                        <div className="flex items-center gap-4">
+                          <FileText className="h-5 w-5 text-[#8e9192]" />
+                          <div>
+                            <p className="text-[14px] text-[#e5e2e1]">{inv.number}</p>
+                            <p className="text-[12px] text-[#8e9192]">
+                              {new Date(inv.created * 1000).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right flex items-center gap-3">
+                          <div>
+                            <p className="text-[14px] font-semibold text-[#e5e2e1]">
+                              ${(inv.amount_paid / 100).toFixed(2)}
+                            </p>
+                            <p
+                              className={`text-[12px] capitalize ${inv.status === "paid" ? "text-[#4ade80]" : "text-[#8e9192]"}`}
+                            >
+                              {inv.status}
+                            </p>
+                          </div>
+                          {inv.invoice_pdf && (
+                            <a
+                              href={inv.invoice_pdf}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[11px] text-[#8e9192] hover:text-[#c6c6c7] underline"
+                            >
+                              PDF
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -10,13 +10,17 @@ from shared.models.org_billing import OrgBilling
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from integrations.email.client import invoice_receipt_html, send_email
+
 logger = logging.getLogger(__name__)
 
 _HANDLED_EVENTS = frozenset(
     [
+        "checkout.session.completed",
         "customer.subscription.created",
         "customer.subscription.updated",
         "customer.subscription.deleted",
+        "invoice.paid",
     ]
 )
 
@@ -85,17 +89,68 @@ async def create_stripe_portal_session(api_key: str, customer_id: str, return_ur
     )
 
 
+async def list_stripe_invoices(api_key: str, customer_id: str, limit: int = 12) -> list[dict]:
+    result = await _run_stripe_call(api_key, stripe.Invoice.list, customer=customer_id, limit=limit)
+    return [
+        {
+            "id": inv["id"],
+            "number": inv.get("number") or inv["id"],
+            "amount_paid": inv["amount_paid"],
+            "created": inv["created"],
+            "invoice_pdf": inv.get("invoice_pdf"),
+            "status": inv["status"],
+        }
+        for inv in result.get("data", [])
+    ]
+
+
+def _resend_key() -> str | None:
+    from shared.config import get_settings
+
+    return get_settings().resend_api_key
+
+
+async def _billing_for_customer(session: AsyncSession, customer_id: str) -> OrgBilling | None:
+    result = await session.execute(select(OrgBilling).where(OrgBilling.stripe_customer_id == customer_id))
+    return result.scalar_one_or_none()
+
+
 async def sync_subscription_event(session: AsyncSession, event: Any) -> None:
     event_type = event.get("type", "")
     if event_type not in _HANDLED_EVENTS:
         return
 
     obj = event["data"]["object"]
+
+    if event_type == "checkout.session.completed":
+        email = (obj.get("customer_details") or {}).get("email")
+        billing = await _billing_for_customer(session, obj.get("customer") or "")
+        if billing and email:
+            billing.billing_email = email
+            await session.commit()
+        return
+
+    if event_type == "invoice.paid":
+        customer_id = obj.get("customer") or ""
+        billing = await _billing_for_customer(session, customer_id)
+        api_key = _resend_key()
+        if billing and billing.billing_email and api_key:
+            html = invoice_receipt_html(
+                billing.plan,
+                obj.get("amount_paid", 0),
+                obj.get("number") or obj.get("id", ""),
+                obj.get("invoice_pdf") or "",
+            )
+            try:
+                await send_email(api_key, billing.billing_email, "Your Argus invoice", html)
+            except Exception:
+                logger.warning("Failed to send invoice email for customer %s", customer_id)
+        return
+
     customer_id: str = obj["customer"]
     sub_id: str = obj["id"]
 
-    result = await session.execute(select(OrgBilling).where(OrgBilling.stripe_customer_id == customer_id))
-    billing = result.scalar_one_or_none()
+    billing = await _billing_for_customer(session, customer_id)
     if billing is None:
         logger.warning("No OrgBilling found for stripe_customer_id=%s — skipping", customer_id)
         return
