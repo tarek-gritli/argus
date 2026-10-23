@@ -8,7 +8,7 @@ def test_org_creation():
 
 
 def test_user_has_no_org_id():
-    user = User(github_id=123, github_login="alice")
+    user = User(login="alice")
     assert not hasattr(user, "org_id")
     assert not hasattr(user, "role")
 

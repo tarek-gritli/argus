@@ -8,6 +8,7 @@ from .routes.billing import router as billing_router
 from .routes.integrations import router as integrations_router
 from .routes.invites import router as invites_router
 from .routes.oauth import router as oauth_router
+from .routes.orgs import router as orgs_router
 from .routes.reviews import router as reviews_router
 from .routes.reviews_local import router as reviews_local_router
 from .routes.stripe_webhooks import router as stripe_webhooks_router
@@ -25,3 +26,4 @@ api_router.include_router(admin_router, prefix="/admin", tags=["admin"])
 api_router.include_router(integrations_router, tags=["integrations"])
 api_router.include_router(oauth_router, prefix="/oauth", tags=["oauth"])
 api_router.include_router(invites_router, tags=["invites"])
+api_router.include_router(orgs_router, tags=["orgs"])

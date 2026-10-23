@@ -1,4 +1,5 @@
 from .api_key import ApiKey
+from .auth_identity import AuthIdentity
 from .base import Base
 from .finding import Finding
 from .invite import OrgInvite
@@ -10,4 +11,4 @@ from .review import Review
 from .user import User
 from .user_org import UserOrg
 
-__all__ = ["Base", "Org", "OrgBilling", "OrgIntegration", "OrgInvite", "User", "UserOrg", "ApiKey", "Repo", "Review", "Finding"]
+__all__ = ["AuthIdentity", "Base", "Org", "OrgBilling", "OrgIntegration", "OrgInvite", "User", "UserOrg", "ApiKey", "Repo", "Review", "Finding"]
