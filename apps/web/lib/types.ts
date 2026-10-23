@@ -38,6 +38,15 @@ export const BillingSchema = z.object({
   has_stripe_customer: z.boolean(),
 })
 
+export const InvoiceSchema = z.object({
+  id: z.string(),
+  number: z.string(),
+  amount_paid: z.number(),
+  created: z.number(),
+  invoice_pdf: z.string().nullable(),
+  status: z.string(),
+})
+
 export const IntegrationSchema = z.object({
   id: z.string(),
   kind: z.string(),
@@ -54,4 +63,5 @@ export type Finding = z.infer<typeof FindingSchema>
 export type Review = z.infer<typeof ReviewSchema>
 export type ReviewDetail = z.infer<typeof ReviewDetailSchema>
 export type Billing = z.infer<typeof BillingSchema>
+export type Invoice = z.infer<typeof InvoiceSchema>
 export type Integration = z.infer<typeof IntegrationSchema>

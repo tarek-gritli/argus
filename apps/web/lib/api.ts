@@ -47,6 +47,7 @@ export const api = {
       }),
     portal: () =>
       request<{ portal_url: string }>(`/api/v1/billing/portal`, { method: "POST" }),
+    invoices: () => request<unknown[]>(`/api/v1/billing/invoices`),
   },
   integrations: {
     list: (orgId: string) =>

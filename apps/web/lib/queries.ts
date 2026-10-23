@@ -1,6 +1,6 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "./api"
-import { ReviewSchema, ReviewDetailSchema, BillingSchema, IntegrationSchema } from "./types"
+import { ReviewSchema, ReviewDetailSchema, BillingSchema, InvoiceSchema, IntegrationSchema } from "./types"
 import { z } from "zod"
 
 export const reviewKeys = {
@@ -27,6 +27,12 @@ export const billingOptions = () =>
   queryOptions({
     queryKey: ["billing"],
     queryFn: () => api.billing.get().then((data) => BillingSchema.parse(data)),
+  })
+
+export const invoicesOptions = () =>
+  queryOptions({
+    queryKey: ["invoices"],
+    queryFn: () => api.billing.invoices().then((data) => z.array(InvoiceSchema).parse(data)),
   })
 
 export const integrationsOptions = (orgId: string) =>
