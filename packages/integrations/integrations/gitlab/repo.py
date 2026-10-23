@@ -1,4 +1,5 @@
 import gitlab
+from gitlab.exceptions import GitlabError
 
 from integrations.code_extensions import CODE_EXTENSIONS
 
@@ -13,7 +14,7 @@ def get_repo_files(gl: gitlab.Gitlab, project_id: int, ref: str = "main") -> lis
             continue
         try:
             raw = project.repository_raw_blob(item["id"])
-        except gitlab.exceptions.GitlabError:
+        except GitlabError:
             continue
         files.append({"filename": path, "content": raw.decode("utf-8", errors="replace")})
     return files
