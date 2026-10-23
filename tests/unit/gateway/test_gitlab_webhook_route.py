@@ -157,3 +157,73 @@ async def test_signing_token_is_enforced_and_secret_header_cannot_downgrade(patc
         resp = await _post(app, headers={**_sign(body, "wh-1", key), "X-Gitlab-Token": ""})
     assert resp.status_code == 200
     celery.send_task.assert_called_once()
+
+
+PUSH_BODY = {
+    "ref": "refs/heads/main",
+    "after": "abc",
+    "checkout_sha": "abc",
+    "project": {"id": 7, "path_with_namespace": "group/proj", "default_branch": "main"},
+}
+
+
+async def _push(app, body):
+    return await _post(app, body=body, headers={"X-Gitlab-Event": "Push Hook"})
+
+
+@pytest.mark.asyncio
+async def test_push_to_default_branch_schedules_debounced_index_task(patch_gateway_deps):
+    app, redis, celery = patch_gateway_deps
+    with _db(_integration()) as ensure_repo:
+        ensure_repo.return_value = "repo-1"
+        resp = await _push(app, PUSH_BODY)
+
+    assert resp.status_code == 200
+    redis.set.assert_any_await("index:latest:repo-1", "main", ex=600)
+    celery.send_task.assert_called_once()
+    assert celery.send_task.call_args.kwargs["countdown"] == 300
+    assert celery.send_task.call_args.kwargs["kwargs"] == {
+        "repo_id": "repo-1",
+        "ref": "main",
+        "repo_full_name": "group/proj",
+        "integration_id": "int-1",
+        "org_id": "org-1",
+        "project_id": 7,
+    }
+
+
+@pytest.mark.asyncio
+async def test_push_is_debounced_when_index_already_scheduled(patch_gateway_deps):
+    app, redis, celery = patch_gateway_deps
+    redis.set.side_effect = [True, False]  # latest-ref write, then the nx "scheduled" lock
+    with _db(_integration()) as ensure_repo:
+        ensure_repo.return_value = "repo-1"
+        await _push(app, PUSH_BODY)
+    celery.send_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"ref": "refs/heads/feature"},
+        {"ref": "refs/tags/v1"},
+        {"after": "0" * 40, "checkout_sha": None},
+    ],
+    ids=["other-branch", "tag", "branch-deleted"],
+)
+async def test_push_ignored_unless_default_branch_advanced(patch_gateway_deps, change):
+    app, _, celery = patch_gateway_deps
+    with _db(_integration()):
+        resp = await _push(app, {**PUSH_BODY, **change})
+    assert resp.status_code == 200
+    celery.send_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_push_requires_valid_secret(patch_gateway_deps):
+    app, _, celery = patch_gateway_deps
+    with _db(_integration()):
+        resp = await _post(app, body=PUSH_BODY, headers={"X-Gitlab-Event": "Push Hook", "X-Gitlab-Token": "nope"})
+    assert resp.status_code == 403
+    celery.send_task.assert_not_called()

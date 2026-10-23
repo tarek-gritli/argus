@@ -5,6 +5,8 @@ from github import Github
 from github.File import File
 from github.PullRequest import PullRequest
 
+from integrations.code_extensions import CODE_EXTENSIONS
+
 from .client import get_installation_client
 
 _MAX_ISSUE_COMMENT_LENGTH = 60000
@@ -291,28 +293,6 @@ def post_findings_as_review(
     )
 
 
-_CODE_EXTENSIONS = {
-    ".py",
-    ".js",
-    ".ts",
-    ".tsx",
-    ".jsx",
-    ".go",
-    ".rs",
-    ".java",
-    ".rb",
-    ".cpp",
-    ".cc",
-    ".cxx",
-    ".c",
-    ".h",
-    ".cs",
-    ".kt",
-    ".kts",
-    ".php",
-}
-
-
 def get_repo_files(repo_full_name: str, installation_id: int, ref: str = "main") -> list[dict]:
     """Fetch all indexable source files from a repo at a given ref."""
     client = get_installation_client(installation_id)
@@ -323,7 +303,7 @@ def get_repo_files(repo_full_name: str, installation_id: int, ref: str = "main")
         if item.type != "blob":
             continue
         ext = "." + item.path.rsplit(".", 1)[-1] if "." in item.path else ""
-        if ext not in _CODE_EXTENSIONS:
+        if ext not in CODE_EXTENSIONS:
             continue
         try:
             blob = repo.get_contents(item.path, ref=ref)

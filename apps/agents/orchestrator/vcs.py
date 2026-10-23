@@ -24,11 +24,9 @@ from integrations.gitlab import (
 )
 from integrations.gitlab import post_findings_as_review as post_findings_as_review_gitlab
 from integrations.gitlab import post_issue_comment as post_issue_comment_gitlab
-from shared.crypto import decrypt
-from shared.models.org_integration import OrgIntegration
 from shared.schemas import FindingSchema
-from sqlalchemy import select
-from workers.connections import get_session_factory, run_async
+from workers.connections import run_async
+from workers.credentials import load_gitlab_credentials
 
 
 @dataclass
@@ -107,7 +105,7 @@ class GitHubProvider(VCSProvider):
 class GitLabProvider(VCSProvider):
     def __init__(self, payload: dict):
         self.payload = MergeRequestPayload(**payload)
-        base_url, token = run_async(_load_credentials(self.payload.org_id, self.payload.integration_id))
+        base_url, token = run_async(load_gitlab_credentials(self.payload.org_id, self.payload.integration_id))
         self.mr = get_mr(get_gitlab_client(base_url, token), self.payload.project_id, self.payload.mr_iid)
         self.title = self.mr.title or ""
         self.body = self.mr.description or ""
@@ -130,24 +128,6 @@ class GitLabProvider(VCSProvider):
 
     def update_description(self, body: str) -> None:
         update_mr_description(self.mr, body)
-
-
-async def _load_credentials(org_id: str, integration_id: str) -> tuple[str, str]:
-    """Instance URL + access token for this org's GitLab integration (never from the task payload)."""
-    async with get_session_factory()() as session:
-        row = (
-            await session.execute(
-                select(OrgIntegration).where(
-                    OrgIntegration.id == integration_id,
-                    OrgIntegration.org_id == org_id,
-                    OrgIntegration.kind == "gitlab",
-                    OrgIntegration.enabled.is_(True),
-                )
-            )
-        ).scalar_one_or_none()
-    if row is None:
-        raise ValueError(f"No enabled GitLab integration {integration_id} for org {org_id}")
-    return row.config["base_url"], decrypt(row.config["access_token"])
 
 
 def get_vcs_provider(payload: dict) -> tuple[VCSProvider, UnifiedPayload]:

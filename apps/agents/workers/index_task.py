@@ -6,15 +6,29 @@ import logging
 from context.chunker import chunk_file, extension_to_language
 from context.embeddings import embed_chunks
 from integrations.github.pr import get_repo_files
-from workers.connections import redis_client
+from integrations.gitlab import get_gitlab_client
+from integrations.gitlab import get_repo_files as get_gitlab_repo_files
+from workers.connections import redis_client, run_async
+from workers.credentials import load_gitlab_credentials
 
 logger = logging.getLogger(__name__)
 
 
-def index_repo_task(repo_id: str, installation_id: int, repo_full_name: str, ref: str = "main") -> None:
+def index_repo_task(
+    repo_id: str,
+    installation_id: int = 0,
+    repo_full_name: str = "",
+    ref: str = "main",
+    integration_id: str = "",
+    org_id: str = "",
+    project_id: int = 0,
+) -> None:
     """Celery-callable. Reads the latest ref from Redis (set by the gateway at schedule time)
     and indexes that commit. The gateway debounces scheduling so this task fires at most
     once per 5-minute window, always for the most recent push in that window.
+
+    GitHub repos are read through the App installation; GitLab repos (integration_id set)
+    through the org's own access token and instance URL.
     """
     logger.info("index_repo_task starting: repo=%s repo_id=%s", repo_full_name, repo_id)
 
@@ -27,7 +41,11 @@ def index_repo_task(repo_id: str, installation_id: int, repo_full_name: str, ref
 
     logger.info("index_repo_task: fetching files at ref=%s for repo=%s", latest_ref, repo_full_name)
     try:
-        files = get_repo_files(repo_full_name, installation_id, latest_ref)
+        if integration_id:
+            base_url, token = run_async(load_gitlab_credentials(org_id, integration_id))
+            files = get_gitlab_repo_files(get_gitlab_client(base_url, token), project_id, latest_ref)
+        else:
+            files = get_repo_files(repo_full_name, installation_id, latest_ref)
         logger.info("index_repo_task: fetched %d files from %s", len(files), repo_full_name)
         asyncio.run(_index_all(repo_id, files))
         logger.info("index_repo_task: completed successfully for repo=%s", repo_full_name)

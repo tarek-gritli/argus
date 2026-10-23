@@ -135,3 +135,29 @@ def test_worker_init_bootstraps_connections():
         on_worker_init()
 
     mock_init.assert_called_once()
+
+
+def test_index_repo_task_reads_gitlab_project_with_org_credentials():
+    r_patch, _ = _redis_patch()
+    files = [{"filename": "app/main.py", "content": "def f():\n    return 1\n"}]
+    gl = MagicMock()
+
+    with (
+        r_patch,
+        patch("workers.index_task.run_async", side_effect=lambda coro: ("https://git.corp.io", "glpat")) as run_async,
+        patch("workers.index_task.load_gitlab_credentials", new=MagicMock(return_value=None)) as load_creds,
+        patch("workers.index_task.get_gitlab_client", return_value=gl) as get_client,
+        patch("workers.index_task.get_gitlab_repo_files", return_value=files) as gl_files,
+        patch("workers.index_task.get_repo_files") as gh_files,
+        patch("workers.index_task.embed_chunks", new_callable=AsyncMock) as mock_embed,
+    ):
+        from workers.index_task import index_repo_task
+
+        index_repo_task(repo_id="repo_gl", repo_full_name="group/proj", ref="main", integration_id="int-1", org_id="org-1", project_id=7)
+
+    run_async.assert_called_once()
+    load_creds.assert_called_once_with("org-1", "int-1")
+    get_client.assert_called_once_with("https://git.corp.io", "glpat")
+    gl_files.assert_called_once_with(gl, 7, "main")
+    gh_files.assert_not_called()
+    mock_embed.assert_awaited_once()
