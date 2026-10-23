@@ -1,3 +1,4 @@
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from api.routes.auth import router
@@ -39,9 +40,25 @@ def test_login_with_cli_session_id_stores_it_in_state():
     location = resp.headers["location"]
     # cli_session_id must NOT be forwarded to GitHub
     assert "cli_session_id" not in location
-    # Redis must store the cli_session_id as the state value
-    stored_value = mock_redis.set.call_args[0][1]
-    assert stored_value == "sess_abc"
+    # Redis must store the cli_session_id in the JSON state value
+    stored_value = json.loads(mock_redis.set.call_args[0][1])
+    assert stored_value == {"cli": "sess_abc", "invite": ""}
+
+
+def test_login_with_invite_token_stores_it_in_state():
+    mock_redis = MagicMock()
+    mock_redis.set = AsyncMock()
+    with patch("api.routes.auth.get_settings") as mock_s:
+        mock_s.return_value.github_client_id = "test_client_id"
+        app = FastAPI()
+        app.include_router(router, prefix="/api/v1/auth")
+        app.state.redis = mock_redis
+        client = TestClient(app, follow_redirects=False)
+        resp = client.get("/api/v1/auth/github/login?invite_token=inv-abc")
+
+    assert "inv-abc" not in resp.headers["location"]
+    stored_value = json.loads(mock_redis.set.call_args[0][1])
+    assert stored_value == {"cli": "", "invite": "inv-abc"}
 
 
 def test_logout_clears_cookie():

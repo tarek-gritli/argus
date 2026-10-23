@@ -26,6 +26,8 @@ def _build_exempt_prefixes() -> tuple[str, ...]:
         f"{p}/oauth/notion/callback",
         f"{p}/oauth/linear/callback",
         f"{p}/oauth/jira/callback",
+        # GET invite details is public; POST accept validates the JWT itself
+        f"{p}/invites/",
     )
 
 
