@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useQuery } from "@tanstack/react-query";
 import { integrationsOptions, billingOptions } from "@/lib/queries";
 import { IntegrationCard } from "./_components/integration-card";
+import { GitlabSection } from "./_components/gitlab-section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Topbar } from "@/components/topbar";
 import { api } from "@/lib/api";
@@ -43,7 +44,7 @@ export default function IntegrationsPage() {
   const isLoading = billingLoading || integrationsLoading;
   const hasAccess = billing?.plan === "team" || billing?.plan === "enterprise";
 
-  const connectedByKind = (integrations ?? []).reduce<
+  const connectedByKind = (integrations ?? []).filter((i) => i.kind !== "gitlab").reduce<
     Record<string, Integration>
   >((acc, i) => ({ ...acc, [i.kind]: i }), {});
 
@@ -60,6 +61,8 @@ export default function IntegrationsPage() {
             each review.
           </p>
         </div>
+
+        {orgId && <GitlabSection orgId={orgId} />}
 
         {isLoading ? (
           <div className="space-y-3">

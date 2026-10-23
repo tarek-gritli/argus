@@ -70,6 +70,7 @@ export const IntegrationSchema = z.object({
   enabled: z.boolean(),
   ready: z.boolean(),
   config: z.record(z.string(), z.unknown()),
+  webhook_url: z.string().optional(),
   created_at: z.string(),
   updated_at: z.string(),
 })
@@ -84,3 +85,5 @@ export type Invoice = z.infer<typeof InvoiceSchema>
 export type Member = z.infer<typeof MemberSchema>
 export type PendingInvite = z.infer<typeof PendingInviteSchema>
 export type Integration = z.infer<typeof IntegrationSchema>
+
+export type GitlabWebhookDetails = { webhook_url: string; webhook_secret: string }
