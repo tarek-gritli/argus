@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import secrets
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -191,4 +192,8 @@ async def accept_invite(token: str, request: Request):
     if not accepted:
         raise HTTPException(status_code=404, detail="Invite not found or expired")
     org_id, role = accepted
-    return {"token": create_jwt(user_id=user_id, org_id=org_id, role=role)}
+    new_token = create_jwt(user_id=user_id, org_id=org_id, role=role)
+    # Same one-time nonce the OAuth callback issues — /api/auth/set-token requires it.
+    nonce = secrets.token_urlsafe(32)
+    await request.app.state.redis.set(f"cookie_nonce:{nonce}", new_token, ex=300)
+    return {"token": new_token, "nonce": nonce}

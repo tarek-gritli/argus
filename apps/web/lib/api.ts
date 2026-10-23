@@ -49,6 +49,17 @@ export const api = {
       request<{ portal_url: string }>(`/api/v1/billing/portal`, { method: "POST" }),
     invoices: () => request<unknown[]>(`/api/v1/billing/invoices`),
   },
+  orgs: {
+    members: (orgId: string) => request<unknown[]>(`/api/v1/orgs/${orgId}/members`),
+    pendingInvites: (orgId: string) => request<unknown[]>(`/api/v1/orgs/${orgId}/invites`),
+    createInvite: (orgId: string, email: string) =>
+      request(`/api/v1/orgs/${orgId}/invites`, {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      }),
+    revokeInvite: (orgId: string, inviteId: string) =>
+      request(`/api/v1/orgs/${orgId}/invites/${inviteId}`, { method: "DELETE" }),
+  },
   integrations: {
     list: (orgId: string) =>
       request<unknown[]>(`/api/v1/orgs/${orgId}/integrations`),

@@ -1,6 +1,6 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "./api"
-import { ReviewSchema, ReviewDetailSchema, BillingSchema, InvoiceSchema, IntegrationSchema } from "./types"
+import { ReviewSchema, ReviewDetailSchema, BillingSchema, InvoiceSchema, MemberSchema, PendingInviteSchema, IntegrationSchema } from "./types"
 import { z } from "zod"
 
 export const reviewKeys = {
@@ -34,6 +34,36 @@ export const invoicesOptions = () =>
     queryKey: ["invoices"],
     queryFn: () => api.billing.invoices().then((data) => z.array(InvoiceSchema).parse(data)),
   })
+
+export const membersOptions = (orgId: string) =>
+  queryOptions({
+    queryKey: ["members", orgId],
+    queryFn: () => api.orgs.members(orgId).then((data) => z.array(MemberSchema).parse(data)),
+    enabled: !!orgId,
+  })
+
+export const pendingInvitesOptions = (orgId: string) =>
+  queryOptions({
+    queryKey: ["pending-invites", orgId],
+    queryFn: () => api.orgs.pendingInvites(orgId).then((data) => z.array(PendingInviteSchema).parse(data)),
+    enabled: !!orgId,
+  })
+
+export function useCreateInvite(orgId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (email: string) => api.orgs.createInvite(orgId, email),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["pending-invites", orgId] }),
+  })
+}
+
+export function useRevokeInvite(orgId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (inviteId: string) => api.orgs.revokeInvite(orgId, inviteId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["pending-invites", orgId] }),
+  })
+}
 
 export const integrationsOptions = (orgId: string) =>
   queryOptions({
