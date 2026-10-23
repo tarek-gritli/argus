@@ -31,6 +31,7 @@ class OrgBilling(Base):
     )
     stripe_customer_id: Mapped[str | None] = mapped_column(String, nullable=True, unique=True, index=True)
     stripe_subscription_id: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
+    billing_email: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
 
     __table_args__ = (
         CheckConstraint("seat_count >= 1", name="ck_org_billing_seat_count_positive"),
@@ -45,6 +46,7 @@ class OrgBilling(Base):
         reviews_used_this_month: int = 0,
         stripe_customer_id: str | None = None,
         stripe_subscription_id: str | None = None,
+        billing_email: str | None = None,
         **kwargs,
     ):
         super().__init__(
@@ -54,6 +56,7 @@ class OrgBilling(Base):
             reviews_used_this_month=reviews_used_this_month,
             stripe_customer_id=stripe_customer_id,
             stripe_subscription_id=stripe_subscription_id,
+            billing_email=billing_email,
             **kwargs,
         )
 
