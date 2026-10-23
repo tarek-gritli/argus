@@ -40,6 +40,40 @@ async def _get_repo_id(installation_id: int | None, repo_full_name: str | None) 
         return None
 
 
+async def _schedule_index(request: Request, repo_id: str, ref_name: str, repo_full_name: str, task_kwargs: dict) -> None:
+    """Debounced repo indexing: at most one task per 5-minute window, always for the latest ref."""
+    redis_client = request.app.state.redis
+    latest_key = f"index:latest:{repo_id}"
+    scheduled_key = f"index:scheduled:{repo_id}"
+    try:
+        await redis_client.set(latest_key, ref_name, ex=600)
+        scheduled = await redis_client.set(scheduled_key, "1", ex=300, nx=True)
+    except Exception:
+        logger.warning(
+            "Redis unavailable for repo_id=%s ref=%s — enqueuing with ref fallback",
+            repo_id,
+            ref_name,
+            exc_info=True,
+        )
+        scheduled = True
+    if not scheduled:
+        logger.info("index already scheduled for repo=%s — debounced", repo_full_name)
+        return
+    try:
+        request.app.state.celery.send_task(
+            INDEX_REPO_TASK_NAME,
+            kwargs={"repo_id": repo_id, "ref": ref_name, **task_kwargs},
+            countdown=300,
+        )
+        logger.info("index task scheduled: repo=%s ref=%s (5 min delay)", repo_full_name, ref_name)
+    except Exception:
+        try:
+            await redis_client.delete(scheduled_key)
+        except Exception:
+            logger.warning("Failed to clean up scheduled_key for repo_id=%s", repo_id, exc_info=True)
+        logger.warning("Failed to enqueue %s for repo_id=%s", INDEX_REPO_TASK_NAME, repo_id, exc_info=True)
+
+
 @router.post("/github")
 async def github_webhook(request: Request, settings: Settings = Depends(get_settings)) -> Response:
     payload = await request.body()
@@ -69,43 +103,13 @@ async def github_webhook(request: Request, settings: Settings = Depends(get_sett
             logger.info("push ignored: repo %s not found in DB (not yet installed?)", repo_full_name)
             return Response(status_code=200)
 
-        redis_client = request.app.state.redis
-        latest_key = f"index:latest:{repo_id}"
-        scheduled_key = f"index:scheduled:{repo_id}"
-        try:
-            await redis_client.set(latest_key, ref_name, ex=600)
-            scheduled = await redis_client.set(scheduled_key, "1", ex=300, nx=True)
-        except Exception:
-            logger.warning(
-                "Redis unavailable for repo_id=%s ref=%s installation_id=%s — enqueuing with ref fallback",
-                repo_id,
-                ref_name,
-                installation_id,
-                exc_info=True,
-            )
-            scheduled = True
-        if scheduled:
-            celery_app = request.app.state.celery
-            try:
-                celery_app.send_task(
-                    INDEX_REPO_TASK_NAME,
-                    kwargs={
-                        "repo_id": repo_id,
-                        "installation_id": installation_id,
-                        "repo_full_name": repo_full_name,
-                        "ref": ref_name,
-                    },
-                    countdown=300,
-                )
-                logger.info("index task scheduled: repo=%s ref=%s (5 min delay)", repo_full_name, ref_name)
-            except Exception:
-                try:
-                    await redis_client.delete(scheduled_key)
-                except Exception:
-                    logger.warning("Failed to clean up scheduled_key for repo_id=%s", repo_id, exc_info=True)
-                logger.warning("Failed to enqueue %s for repo_id=%s", INDEX_REPO_TASK_NAME, repo_id, exc_info=True)
-        else:
-            logger.info("index already scheduled for repo=%s — debounced", repo_full_name)
+        await _schedule_index(
+            request,
+            repo_id=repo_id,
+            ref_name=ref_name,
+            repo_full_name=repo_full_name,
+            task_kwargs={"installation_id": installation_id, "repo_full_name": repo_full_name},
+        )
         return Response(status_code=200)
 
     if event != "pull_request":
@@ -215,13 +219,17 @@ async def gitlab_webhook(integration_id: str, request: Request) -> Response:
         logger.warning("Rejected GitLab webhook for integration %s: bad signature/token", integration_id)
         return Response(status_code=403, content="Invalid signature")
 
-    if request.headers.get("X-Gitlab-Event", "") != "Merge Request Hook":
+    event = request.headers.get("X-Gitlab-Event", "")
+    if event not in ("Merge Request Hook", "Push Hook"):
         return Response(status_code=200, content="Event ignored")
 
     try:
         body = json.loads(payload_bytes)
     except json.JSONDecodeError:
         return Response(status_code=400, content="Invalid JSON payload")
+
+    if event == "Push Hook":
+        return await _gitlab_push(request, integration, body)
 
     attrs = body.get("object_attributes", {})
     # Normalize GitLab actions to the ones the GitHub path uses
@@ -275,3 +283,31 @@ async def gitlab_webhook(integration_id: str, request: Request) -> Response:
         return Response(status_code=503, content="Queue unavailable")
 
     return Response(status_code=200, content="Webhook accepted")
+
+
+async def _gitlab_push(request: Request, integration: OrgIntegration, body: dict) -> Response:
+    """Re-index a project when its default branch moves, like the GitHub push handler."""
+    project = body.get("project", {})
+    ref = body.get("ref", "")
+    default_branch = project.get("default_branch") or "main"
+    project_id, path = project.get("id"), project.get("path_with_namespace")
+    deleted = not body.get("checkout_sha") or set(body.get("after", "")) == {"0"}
+    if ref != f"refs/heads/{default_branch}" or deleted or not project_id or not path:
+        logger.info("gitlab push ignored: ref=%s default=%s project=%s", ref, default_branch, path)
+        return Response(status_code=200, content="Push ignored")
+
+    try:
+        async with session_context() as session:
+            repo_id = await ensure_gitlab_repo(session, integration.org_id, path)
+    except Exception:
+        logger.warning("gitlab push: repo resolution failed for %s", path, exc_info=True)
+        return Response(status_code=503, content="Repo resolution failed")
+
+    await _schedule_index(
+        request,
+        repo_id=repo_id,
+        ref_name=ref.removeprefix("refs/heads/"),
+        repo_full_name=path,
+        task_kwargs={"integration_id": integration.id, "org_id": integration.org_id, "project_id": project_id, "repo_full_name": path},
+    )
+    return Response(status_code=200, content="Push accepted")

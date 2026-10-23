@@ -31,7 +31,8 @@ export function WebhookDetails({ details }: { details: GitlabWebhookDetails }) {
       <CopyRow label="Secret token" value={details.webhook_secret} />
       <p className="text-[12px] text-[#8e9192]">
         In your GitLab project, open Settings → Webhooks, paste both values and enable{" "}
-        <strong className="text-[#c6c6c7]">Merge request events</strong>. The secret is shown only once.
+        <strong className="text-[#c6c6c7]">Merge request events</strong> (reviews) and{" "}
+        <strong className="text-[#c6c6c7]">Push events</strong> (keeps code context fresh). The secret is shown only once.
       </p>
     </div>
   )

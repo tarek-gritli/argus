@@ -9,6 +9,7 @@ from .mr import (
     post_review_comment,
     update_mr_description,
 )
+from .repo import get_repo_files
 from .schemas import MergeRequestPayload
 from .webhook import validate_gitlab_signature, validate_gitlab_token
 
@@ -21,6 +22,7 @@ __all__ = [
     "get_mr_diff",
     "get_mr_file_content",
     "get_mr_files",
+    "get_repo_files",
     "normalize_base_url",
     "post_findings_as_review",
     "post_issue_comment",

@@ -52,13 +52,17 @@ async def get_or_create_org(session: AsyncSession, installation_id: int, repo_fu
             raise
 
 
-async def ensure_gitlab_repo(session: AsyncSession, org_id: str, project_path: str) -> None:
-    """Make sure a Repo row exists for a GitLab project in this org (first MR seen creates it)."""
-    existing = await session.execute(select(Repo.id).where(Repo.org_id == org_id, Repo.provider == "gitlab", Repo.full_name == project_path))
-    if existing.scalar_one_or_none():
-        return
+async def ensure_gitlab_repo(session: AsyncSession, org_id: str, project_path: str) -> str:
+    """Return the Repo id for a GitLab project in this org, creating it on first sight."""
+    query = select(Repo.id).where(Repo.org_id == org_id, Repo.provider == "gitlab", Repo.full_name == project_path)
+    existing = (await session.execute(query)).scalar_one_or_none()
+    if existing:
+        return existing
     try:
-        session.add(Repo(org_id=org_id, provider="gitlab", full_name=project_path, installation_id=None))
+        repo = Repo(org_id=org_id, provider="gitlab", full_name=project_path, installation_id=None)
+        session.add(repo)
         await session.commit()
+        return repo.id
     except IntegrityError:
-        await session.rollback()  # concurrent first MR for the same project
+        await session.rollback()  # concurrent first sight of the same project
+        return (await session.execute(query)).scalar_one()

@@ -48,7 +48,15 @@ def review_local(job_id: str, diff: str, files: list[str] | None = None) -> None
 
 
 @celery_app.task(name=INDEX_REPO_TASK_NAME)
-def index_repo(repo_id: str, installation_id: int, repo_full_name: str, ref: str = "main") -> None:
+def index_repo(
+    repo_id: str,
+    installation_id: int = 0,
+    repo_full_name: str = "",
+    ref: str = "main",
+    integration_id: str = "",
+    org_id: str = "",
+    project_id: int = 0,
+) -> None:
     from workers.index_task import index_repo_task
 
     index_repo_task(
@@ -56,4 +64,7 @@ def index_repo(repo_id: str, installation_id: int, repo_full_name: str, ref: str
         installation_id=installation_id,
         repo_full_name=repo_full_name,
         ref=ref,
+        integration_id=integration_id,
+        org_id=org_id,
+        project_id=project_id,
     )
