@@ -93,13 +93,16 @@ async def create_invite(org_id: str, body: InviteRequest, request: Request):
         if not billing or billing.plan == "free":
             raise HTTPException(status_code=403, detail="Upgrade to Pro to invite team members")
 
-        members = await session.scalar(select(func.count()).where(UserOrg.org_id == org_id))
-        pending = await session.scalar(
-            select(func.count()).where(
-                OrgInvite.org_id == org_id,
-                OrgInvite.accepted_at.is_(None),
-                OrgInvite.expires_at > datetime.now(timezone.utc),
+        members = await session.scalar(select(func.count()).where(UserOrg.org_id == org_id)) or 0
+        pending = (
+            await session.scalar(
+                select(func.count()).where(
+                    OrgInvite.org_id == org_id,
+                    OrgInvite.accepted_at.is_(None),
+                    OrgInvite.expires_at > datetime.now(timezone.utc),
+                )
             )
+            or 0
         )
         if members + pending >= billing.seat_count:
             raise HTTPException(

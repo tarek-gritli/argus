@@ -230,7 +230,7 @@ async def _consume_invite(session: AsyncSession, user_id: str, token: str, verif
     existing = await session.execute(select(UserOrg).where(UserOrg.user_id == user_id, UserOrg.org_id == invite.org_id))
     if not existing.scalar_one_or_none():
         seats = await session.scalar(select(OrgBilling.seat_count).where(OrgBilling.org_id == invite.org_id))
-        members = await session.scalar(select(func.count()).where(UserOrg.org_id == invite.org_id))
+        members = await session.scalar(select(func.count()).where(UserOrg.org_id == invite.org_id)) or 0
         if seats is None or members >= seats:
             return None
         session.add(UserOrg(user_id=user_id, org_id=invite.org_id, role=invite.role))
