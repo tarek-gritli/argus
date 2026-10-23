@@ -34,8 +34,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if not request.url.path.startswith(_WEBHOOK_PATH):
             return await call_next(request)
 
-        installation_id = request.headers.get("X-GitHub-Hook-Installation-Target-ID", "unknown")
-        key = f"tb:{installation_id}"
+        if request.url.path.startswith(f"{_WEBHOOK_PATH}/gitlab/"):
+            # one bucket per GitLab integration, not one shared "unknown" bucket for all tenants
+            key = f"tb:gitlab:{request.url.path.rsplit('/', 1)[-1]}"
+        else:
+            installation_id = request.headers.get("X-GitHub-Hook-Installation-Target-ID", "unknown")
+            key = f"tb:{installation_id}"
 
         try:
             redis = get_redis(request)

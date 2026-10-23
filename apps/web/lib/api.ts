@@ -79,6 +79,19 @@ export const api = {
         method: "PATCH",
         body: JSON.stringify({ database_id: databaseId }),
       }),
+    connectGitlab: (
+      orgId: string,
+      body: { base_url: string; access_token: string; signing_token?: string },
+    ) =>
+      request<{ id: string; webhook_url: string; webhook_secret: string }>(
+        `/api/v1/orgs/${orgId}/integrations/gitlab`,
+        { method: "POST", body: JSON.stringify(body) },
+      ),
+    rotateGitlabSecret: (orgId: string, integrationId: string) =>
+      request<{ webhook_url: string; webhook_secret: string }>(
+        `/api/v1/orgs/${orgId}/integrations/${integrationId}/gitlab/rotate-secret`,
+        { method: "POST" },
+      ),
     connectUrl: (kind: string, orgId: string) =>
       `${BASE}/api/v1/oauth/${kind}/authorize?org_id=${orgId}`,
   },
@@ -86,6 +99,16 @@ export const api = {
     logout: () => request("/api/v1/auth/logout", { method: "DELETE" }),
     loginUrl: () => `${BASE}/api/v1/auth/github/login`,
   },
+}
+
+/** Pull the FastAPI `detail` string out of an ApiError message, falling back to a default. */
+export function errorDetail(err: unknown, fallback: string): string {
+  try {
+    const detail = JSON.parse((err as Error).message).detail
+    return typeof detail === "string" ? detail : fallback
+  } catch {
+    return fallback
+  }
 }
 
 export { ApiError }

@@ -98,6 +98,21 @@ export function useToggleIntegration(orgId: string) {
   })
 }
 
+export function useConnectGitlab(orgId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { base_url: string; access_token: string; signing_token?: string }) =>
+      api.integrations.connectGitlab(orgId, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["integrations", orgId] }),
+  })
+}
+
+export function useRotateGitlabSecret(orgId: string) {
+  return useMutation({
+    mutationFn: (integrationId: string) => api.integrations.rotateGitlabSecret(orgId, integrationId),
+  })
+}
+
 export function useRemoveIntegration(orgId: string) {
   const qc = useQueryClient()
   return useMutation({

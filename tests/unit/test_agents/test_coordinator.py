@@ -33,9 +33,64 @@ SAMPLE_FINDING = FindingSchema(
 )
 
 
-def _make_mock_pr():
-    mock_pr = MagicMock()
-    return mock_pr
+def _vcs(files=None, diff="+ some diff", platform="github"):
+    """Patch the coordinator's provider factory with a fake provider; returns (patcher, provider)."""
+    from orchestrator.vcs import UnifiedPayload
+
+    provider = MagicMock()
+    provider.title = "title"
+    provider.body = "body"
+    provider.url = "https://example.test/pr/1"
+    provider.get_files.return_value = _make_mock_files() if files is None else files
+    provider.get_diff.return_value = diff
+    provider.get_file_content.return_value = "code"
+
+    def factory(payload):
+        unified = UnifiedPayload(
+            platform=platform,
+            repo_id=payload.get("repo_full_name") or payload.get("project_path", ""),
+            pr_id=payload.get("pr_number") or payload.get("mr_iid", 0),
+            head_sha=payload["head_sha"],
+            base_sha=payload["base_sha"],
+            org_id=payload.get("org_id", ""),
+            installation_id=payload.get("installation_id", 0),
+        )
+        return provider, unified
+
+    return patch("orchestrator.coordinator.get_vcs_provider", side_effect=factory), provider
+
+
+def _pipeline(**overrides):
+    """The patches every full-run test needs, as a list for ExitStack."""
+    patches = {
+        "orchestrator.coordinator._already_reviewed": AsyncMock(return_value=False),
+        "orchestrator.coordinator._check_quota": AsyncMock(return_value=(True, "pro")),
+        "orchestrator.coordinator._get_repo_id_for_run": AsyncMock(return_value="repo_abc"),
+        "orchestrator.coordinator._fetch_context": AsyncMock(return_value=ContextBundle.empty()),
+        "orchestrator.coordinator.get_rejected_finding_keys": AsyncMock(return_value=set()),
+        "orchestrator.coordinator.run_review": MagicMock(return_value=[SAMPLE_FINDING]),
+        "orchestrator.coordinator.run_fix_pipeline": MagicMock(return_value=[SAMPLE_FINDING]),
+        "orchestrator.coordinator._persist": AsyncMock(),
+        "orchestrator.coordinator._notify": AsyncMock(),
+    }
+    patches.update(overrides)
+    return patches
+
+
+def _run(payload, vcs_patch, **overrides):
+    """Run the coordinator with the standard patches; returns the dict of mocks used."""
+    from contextlib import ExitStack
+
+    mocks = _pipeline(**overrides)
+    with ExitStack() as stack:
+        stack.enter_context(_patch_run_async())
+        stack.enter_context(vcs_patch)
+        for target, mock in mocks.items():
+            stack.enter_context(patch(target, new=mock))
+        from orchestrator.coordinator import run
+
+        run(payload)
+    return mocks
 
 
 def _make_mock_files(n: int = 2):
@@ -50,68 +105,43 @@ def _make_mock_files(n: int = 2):
 
 def test_run_happy_path_posts_findings():
     """Coordinator fetches files, runs analysis, posts comment."""
-    mock_pr = _make_mock_pr()
-    mock_files = _make_mock_files()
+    vcs, provider = _vcs()
+    _run(VALID_PAYLOAD, vcs)
 
-    with (
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
-        patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
-        patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]),
-        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
-    ):
-        from orchestrator.coordinator import run
-
-        run(VALID_PAYLOAD)
-
-    mock_post.assert_called_once()
-    body = mock_post.call_args[0][1]
+    provider.post_issue_comment.assert_called_once()
+    body = provider.post_issue_comment.call_args[0][0]
     assert "SQL Injection" in body
     assert "HIGH" in body or "high" in body.lower()
 
 
 def test_run_no_files_posts_warning():
     """Empty file list posts a warning comment and skips analysis."""
-    mock_pr = _make_mock_pr()
+    vcs, provider = _vcs(files=[])
+    mocks = _run(VALID_PAYLOAD, vcs)
 
-    with (
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=[]),
-        patch("orchestrator.coordinator.run_review") as mock_analyze,
-        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
-    ):
-        from orchestrator.coordinator import run
-
-        run(VALID_PAYLOAD)
-
-    mock_analyze.assert_not_called()
-    mock_post.assert_called_once()
-    body = mock_post.call_args[0][1]
-    assert "No changes detected" in body
+    mocks["orchestrator.coordinator.run_review"].assert_not_called()
+    provider.post_issue_comment.assert_called_once()
+    assert "No changes detected" in provider.post_issue_comment.call_args[0][0]
 
 
 def test_run_no_findings_posts_clean_message():
     """No findings from analysis posts a clean bill of health."""
-    mock_pr = _make_mock_pr()
+    vcs, provider = _vcs(diff="")
+    _run(
+        VALID_PAYLOAD,
+        vcs,
+        **{
+            "orchestrator.coordinator.run_review": MagicMock(return_value=[]),
+            "orchestrator.coordinator.run_fix_pipeline": MagicMock(return_value=[]),
+        },
+    )
 
-    with (
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
-        patch("orchestrator.coordinator.get_pr_diff", return_value=""),
-        patch("orchestrator.coordinator.run_review", return_value=[]),
-        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
-    ):
-        from orchestrator.coordinator import run
-
-        run(VALID_PAYLOAD)
-
-    body = mock_post.call_args[0][1]
-    assert "no issues" in body
+    assert "no issues" in provider.post_issue_comment.call_args[0][0]
 
 
-def test_run_raises_on_get_pr_failure():
-    """If get_pr raises, the exception propagates out of run()."""
-    with patch("orchestrator.coordinator.get_pr", side_effect=Exception("GitHub API down")):
+def test_run_raises_when_provider_cannot_be_built():
+    """If the provider can't be resolved (e.g. GitHub API down), the exception propagates."""
+    with patch("orchestrator.coordinator.get_vcs_provider", side_effect=Exception("GitHub API down")):
         from orchestrator.coordinator import run
 
         with pytest.raises(Exception, match="GitHub API down"):
@@ -183,205 +213,122 @@ def test_format_findings_empty_returns_clean():
 
 def test_run_persists_review_and_findings_when_org_id_present():
     """When org_id is in payload, coordinator should persist Review + Findings to DB."""
-    mock_pr = _make_mock_pr()
-    mock_files = _make_mock_files()
-    mock_persist = AsyncMock()
-    payload_with_org = {**VALID_PAYLOAD, "org_id": "org-123"}
+    vcs, _ = _vcs()
+    mocks = _run({**VALID_PAYLOAD, "org_id": "org-123"}, vcs)
 
-    with (
-        _patch_run_async(),
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
-        patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
-        patch("orchestrator.coordinator.get_pr_file_content", return_value="code"),
-        patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]) as mock_review,
-        patch("orchestrator.coordinator.run_fix_pipeline", return_value=[SAMPLE_FINDING]),
-        patch("orchestrator.coordinator.post_findings_as_review"),
-        patch("orchestrator.coordinator.post_issue_comment"),
-        patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=(True, "pro"))),
-        patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
-        patch("orchestrator.coordinator._get_repo_id_for_run", new=AsyncMock(return_value="repo-uuid")),
-        patch("orchestrator.coordinator._fetch_context", new=AsyncMock(return_value=ContextBundle.empty())),
-        patch("orchestrator.coordinator.get_rejected_finding_keys", new=AsyncMock(return_value=set())),
-        patch("orchestrator.coordinator._persist", new=mock_persist),
-    ):
-        from orchestrator.coordinator import run
-
-        run(payload_with_org)
-
-    mock_persist.assert_called_once()
-    assert mock_review.call_args.kwargs["plan"] == "pro"
+    mocks["orchestrator.coordinator._persist"].assert_called_once()
+    assert mocks["orchestrator.coordinator.run_review"].call_args.kwargs["plan"] == "pro"
 
 
 def test_quota_exceeded_posts_comment_and_returns():
-    mock_pr = _make_mock_pr()
+    vcs, provider = _vcs()
+    mocks = _run(
+        {**VALID_PAYLOAD, "org_id": "o1"},
+        vcs,
+        **{"orchestrator.coordinator._check_quota": AsyncMock(return_value=(False, "free"))},
+    )
 
-    with (
-        _patch_run_async(),
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
-        patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
-        patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=(False, "free"))),
-        patch("orchestrator.coordinator.run_review") as mock_review,
-        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
-    ):
-        from orchestrator.coordinator import run
-
-        run({**VALID_PAYLOAD, "org_id": "o1"})
-
-    mock_review.assert_not_called()
-    mock_post.assert_called_once()
-    assert "quota" in mock_post.call_args[0][1].lower()
+    mocks["orchestrator.coordinator.run_review"].assert_not_called()
+    provider.post_issue_comment.assert_called_once()
+    assert "quota" in provider.post_issue_comment.call_args[0][0].lower()
 
 
 def test_run_skips_review_when_head_sha_already_reviewed():
     """Coordinator skips analysis entirely if head_sha was already reviewed."""
-    mock_pr = _make_mock_pr()
+    vcs, provider = _vcs()
+    mocks = _run(
+        {**VALID_PAYLOAD, "org_id": "org-1"},
+        vcs,
+        **{"orchestrator.coordinator._already_reviewed": AsyncMock(return_value=True)},
+    )
 
-    with (
-        _patch_run_async(),
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
-        patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
-        patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=True)),
-        patch("orchestrator.coordinator.run_review") as mock_review,
-        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
-    ):
-        from orchestrator.coordinator import run
-
-        run({**VALID_PAYLOAD, "org_id": "org-1"})
-
-    mock_review.assert_not_called()
-    mock_post.assert_not_called()
+    mocks["orchestrator.coordinator.run_review"].assert_not_called()
+    provider.post_issue_comment.assert_not_called()
 
 
 def test_run_proceeds_when_head_sha_not_yet_reviewed():
     """Coordinator runs full review when head_sha has no completed review."""
-    mock_pr = _make_mock_pr()
+    vcs, provider = _vcs()
+    _run({**VALID_PAYLOAD, "org_id": "org-1"}, vcs)
 
-    with (
-        _patch_run_async(),
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
-        patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
-        patch("orchestrator.coordinator.get_pr_file_content", return_value="code"),
-        patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
-        patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=(True, "pro"))),
-        patch("orchestrator.coordinator._get_repo_id_for_run", new=AsyncMock(return_value="repo_abc")),
-        patch("orchestrator.coordinator._fetch_context", new=AsyncMock(return_value=ContextBundle.empty())),
-        patch("orchestrator.coordinator.get_rejected_finding_keys", new=AsyncMock(return_value=set())),
-        patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]),
-        patch("orchestrator.coordinator.run_fix_pipeline", return_value=[SAMPLE_FINDING]),
-        patch("orchestrator.coordinator.post_findings_as_review"),
-        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
-        patch("orchestrator.coordinator._persist", new=AsyncMock()),
-    ):
-        from orchestrator.coordinator import run
-
-        run({**VALID_PAYLOAD, "org_id": "org-1"})
-
-    mock_post.assert_called_once()
+    provider.post_issue_comment.assert_called_once()
 
 
-def test_notify_called_for_team_plan():
+def test_notify_called_for_team_plan_not_pro():
     """_notify is invoked for team plan but not for pro."""
-    mock_pr = _make_mock_pr()
+    vcs, _ = _vcs()
+    team = _run(
+        {**VALID_PAYLOAD, "org_id": "org-1"},
+        vcs,
+        **{"orchestrator.coordinator._check_quota": AsyncMock(return_value=(True, "team"))},
+    )
+    team["orchestrator.coordinator._notify"].assert_called_once()
 
-    # team plan → notify should be called
-    with (
-        _patch_run_async(),
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
-        patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
-        patch("orchestrator.coordinator.get_pr_file_content", return_value="code"),
-        patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
-        patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=(True, "team"))),
-        patch("orchestrator.coordinator._get_repo_id_for_run", new=AsyncMock(return_value="repo_abc")),
-        patch("orchestrator.coordinator._fetch_context", new=AsyncMock(return_value=ContextBundle.empty())),
-        patch("orchestrator.coordinator.get_rejected_finding_keys", new=AsyncMock(return_value=set())),
-        patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]),
-        patch("orchestrator.coordinator.run_fix_pipeline", return_value=[SAMPLE_FINDING]),
-        patch("orchestrator.coordinator.post_findings_as_review"),
-        patch("orchestrator.coordinator.post_issue_comment"),
-        patch("orchestrator.coordinator._persist", new=AsyncMock()),
-        patch("orchestrator.coordinator._notify", new=AsyncMock()) as mock_notify,
-    ):
-        from orchestrator.coordinator import run
-
-        run({**VALID_PAYLOAD, "org_id": "org-1"})
-
-    mock_notify.assert_called_once()
-
-    # pro plan → notify should NOT be called
-    with (
-        _patch_run_async(),
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
-        patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
-        patch("orchestrator.coordinator.get_pr_file_content", return_value="code"),
-        patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
-        patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=(True, "pro"))),
-        patch("orchestrator.coordinator._get_repo_id_for_run", new=AsyncMock(return_value="repo_abc")),
-        patch("orchestrator.coordinator._fetch_context", new=AsyncMock(return_value=ContextBundle.empty())),
-        patch("orchestrator.coordinator.get_rejected_finding_keys", new=AsyncMock(return_value=set())),
-        patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]),
-        patch("orchestrator.coordinator.run_fix_pipeline", return_value=[SAMPLE_FINDING]),
-        patch("orchestrator.coordinator.post_findings_as_review"),
-        patch("orchestrator.coordinator.post_issue_comment"),
-        patch("orchestrator.coordinator._persist", new=AsyncMock()),
-        patch("orchestrator.coordinator._notify", new=AsyncMock()) as mock_notify_pro,
-    ):
-        run({**VALID_PAYLOAD, "org_id": "org-1"})
-
-    mock_notify_pro.assert_not_called()
+    vcs, _ = _vcs()
+    pro = _run({**VALID_PAYLOAD, "org_id": "org-1"}, vcs)
+    pro["orchestrator.coordinator._notify"].assert_not_called()
 
 
 def test_run_skips_persist_when_no_org_id():
     """When org_id is absent, coordinator skips DB writes."""
-    mock_pr = _make_mock_pr()
-    mock_files = _make_mock_files()
-
-    with (
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=mock_files),
-        patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
-        patch("orchestrator.coordinator.get_pr_file_content", return_value="code"),
-        patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]),
-        patch("orchestrator.coordinator.run_fix_pipeline", return_value=[SAMPLE_FINDING]),
-        patch("orchestrator.coordinator.post_findings_as_review"),
-        patch("orchestrator.coordinator.post_issue_comment"),
-        patch("orchestrator.coordinator.get_session_factory") as mock_sf,
-    ):
-        from orchestrator.coordinator import run
-
-        run(VALID_PAYLOAD)  # no org_id
+    vcs, _ = _vcs()
+    with patch("orchestrator.coordinator.get_session_factory") as mock_sf:
+        _run(VALID_PAYLOAD, vcs)
 
     mock_sf.assert_not_called()
 
 
 def test_run_posts_summary_even_if_inline_review_fails():
     """The summary comment should still be posted if inline review creation fails."""
-    mock_pr = _make_mock_pr()
+    vcs, provider = _vcs()
+    provider.post_findings_as_review.side_effect = RuntimeError("review failed")
+    _run({**VALID_PAYLOAD, "org_id": "org-1"}, vcs)
 
-    with (
-        _patch_run_async(),
-        patch("orchestrator.coordinator.get_pr", return_value=mock_pr),
-        patch("orchestrator.coordinator.get_pr_files", return_value=_make_mock_files()),
-        patch("orchestrator.coordinator.get_pr_diff", return_value="+ some diff"),
-        patch("orchestrator.coordinator.get_pr_file_content", return_value="code"),
-        patch("orchestrator.coordinator._already_reviewed", new=AsyncMock(return_value=False)),
-        patch("orchestrator.coordinator._check_quota", new=AsyncMock(return_value=(True, "pro"))),
-        patch("orchestrator.coordinator._get_repo_id_for_run", new=AsyncMock(return_value="repo_abc")),
-        patch("orchestrator.coordinator._fetch_context", new=AsyncMock(return_value=ContextBundle.empty())),
-        patch("orchestrator.coordinator.get_rejected_finding_keys", new=AsyncMock(return_value=set())),
-        patch("orchestrator.coordinator.run_review", return_value=[SAMPLE_FINDING]),
-        patch("orchestrator.coordinator.run_fix_pipeline", return_value=[SAMPLE_FINDING]),
-        patch("orchestrator.coordinator.post_issue_comment") as mock_post,
-        patch("orchestrator.coordinator.post_findings_as_review", side_effect=RuntimeError("GitHub review failed")),
-        patch("orchestrator.coordinator._persist", new=AsyncMock()),
-    ):
-        from orchestrator.coordinator import run
+    assert provider.post_issue_comment.call_count == 1
 
-        run({**VALID_PAYLOAD, "org_id": "org-1"})
 
-    assert mock_post.call_count == 1
+def test_run_updates_description_when_generated():
+    vcs, provider = _vcs()
+    _run(VALID_PAYLOAD, vcs)
+    with patch("orchestrator.coordinator.generate_pr_description", return_value="new body"):
+        vcs, provider = _vcs()
+        _run(VALID_PAYLOAD, vcs)
+    provider.update_description.assert_called_once_with("new body")
+
+
+GITLAB_PAYLOAD = {
+    "platform": "gitlab",
+    "project_id": 7,
+    "project_path": "group/proj",
+    "mr_iid": 3,
+    "head_sha": "abc123",
+    "base_sha": "base456",
+    "action": "opened",
+    "org_id": "org-gl",
+    "integration_id": "int-1",
+}
+
+
+def test_run_gitlab_mr_uses_same_pipeline_and_notifies_with_provider_url():
+    vcs, provider = _vcs(platform="gitlab")
+    mocks = _run(
+        GITLAB_PAYLOAD,
+        vcs,
+        **{"orchestrator.coordinator._check_quota": AsyncMock(return_value=(True, "team"))},
+    )
+
+    provider.post_issue_comment.assert_called_once()
+    persisted = mocks["orchestrator.coordinator._persist"].call_args.kwargs["pr_payload"]
+    assert (persisted.platform, persisted.repo_id, persisted.pr_id) == ("gitlab", "group/proj", 3)
+    assert mocks["orchestrator.coordinator._notify"].call_args.kwargs["provider"] is provider
+
+
+def test_repo_query_keys_github_by_installation_and_gitlab_by_org():
+    from orchestrator.coordinator import _repo_query
+    from orchestrator.vcs import UnifiedPayload
+
+    gh = str(_repo_query(UnifiedPayload("github", "o/r", 1, "h", "b", org_id="o1", installation_id=42)).whereclause)
+    gl = str(_repo_query(UnifiedPayload("gitlab", "g/p", 1, "h", "b", org_id="o1")).whereclause)
+
+    assert "installation_id" in gh and "provider" not in gh
+    assert "repos.org_id" in gl and "repos.provider" in gl and "installation_id" not in gl

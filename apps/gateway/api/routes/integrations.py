@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+import asyncio
+import secrets
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
+from gitlab.exceptions import GitlabError
+from integrations.gitlab import DEFAULT_BASE_URL, InvalidGitLabURL, get_gitlab_client, normalize_base_url
 from pydantic import BaseModel
-from shared.crypto import decrypt
+from shared.config import get_settings
+from shared.crypto import decrypt, encrypt
 from shared.db import session_context
 from shared.models.org_integration import OrgIntegration
 from sqlalchemy import select
 
 router = APIRouter()
 
-_SENSITIVE_KEYS = {"api_key", "webhook_url", "token", "access_token"}
+_SENSITIVE_KEYS = {"api_key", "webhook_url", "token", "access_token", "webhook_secret", "signing_token"}
 _NOTION_API = "https://api.notion.com/v1"
 _NOTION_VERSION = "2022-06-28"
 
@@ -20,6 +26,7 @@ _READY_KEYS: dict[str, set[str]] = {
     "notion": {"token", "database_id"},
     "linear": {"access_token"},
     "jira": {"access_token", "cloud_id"},
+    "gitlab": {"base_url", "access_token", "webhook_secret"},
 }
 
 
@@ -31,9 +38,19 @@ def _mask_config(config: dict) -> dict:
     return {k: ("***" if k in _SENSITIVE_KEYS else v) for k, v in config.items()}
 
 
+def _webhook_url(integration_id: str) -> str:
+    return f"{get_settings().app_base_url}/api/v1/webhooks/gitlab/{integration_id}"
+
+
 def _is_ready(kind: str, config: dict) -> bool:
     required = _READY_KEYS.get(kind, set())
     return all(config.get(k) for k in required)
+
+
+class GitLabConnect(BaseModel):
+    base_url: str = DEFAULT_BASE_URL  # gitlab.com or a self-hosted instance
+    access_token: str
+    signing_token: str | None = None  # optional GitLab webhook signing token (whsec_...)
 
 
 class IntegrationUpdate(BaseModel):
@@ -58,6 +75,7 @@ async def list_integrations(org_id: str, org_id_from_token: str = Depends(_get_o
             "enabled": i.enabled,
             "ready": _is_ready(i.kind, i.config),
             "config": _mask_config(i.config),
+            **({"webhook_url": _webhook_url(i.id)} if i.kind == "gitlab" else {}),
             "created_at": i.created_at,
             "updated_at": i.updated_at,
         }
@@ -183,3 +201,78 @@ async def select_notion_database(
         integration.config = {**integration.config, "database_id": body.database_id}
         await session.commit()
     return {"status": "ok", "database_id": body.database_id}
+
+
+def _require_owner(request: Request) -> None:
+    if request.state.role != "owner":
+        raise HTTPException(status_code=403, detail="Only owners can manage GitLab connections")
+
+
+def _verify_gitlab_token(base_url: str, token: str) -> None:
+    """Blocking: resolve the host (SSRF guard) and confirm the token authenticates."""
+    gl = get_gitlab_client(base_url, token)
+    gl.auth()
+
+
+@router.post("/orgs/{org_id}/integrations/gitlab", status_code=201)
+async def connect_gitlab(
+    org_id: str,
+    body: GitLabConnect,
+    request: Request,
+    org_id_from_token: str = Depends(_get_org_id),
+):
+    """Connect a GitLab instance. The webhook secret is returned once — paste it into GitLab."""
+    if org_id_from_token != org_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    _require_owner(request)
+    try:
+        await asyncio.to_thread(_verify_gitlab_token, body.base_url, body.access_token)
+    except InvalidGitLabURL as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GitlabError as exc:
+        raise HTTPException(status_code=400, detail="GitLab rejected the access token") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Could not reach the GitLab instance") from exc
+
+    secret = secrets.token_urlsafe(32)
+    config = {
+        "base_url": normalize_base_url(body.base_url),
+        "access_token": encrypt(body.access_token),
+        "webhook_secret": encrypt(secret),
+    }
+    if body.signing_token:
+        config["signing_token"] = encrypt(body.signing_token)
+    async with session_context() as session:
+        integration = OrgIntegration(org_id=org_id, kind="gitlab", config=config)
+        session.add(integration)
+        await session.commit()
+        integration_id = integration.id
+    return {"id": integration_id, "webhook_url": _webhook_url(integration_id), "webhook_secret": secret}
+
+
+@router.post("/orgs/{org_id}/integrations/{integration_id}/gitlab/rotate-secret")
+async def rotate_gitlab_secret(
+    org_id: str,
+    integration_id: str,
+    request: Request,
+    org_id_from_token: str = Depends(_get_org_id),
+):
+    if org_id_from_token != org_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    _require_owner(request)
+    secret = secrets.token_urlsafe(32)
+    async with session_context() as session:
+        integration = (
+            await session.execute(
+                select(OrgIntegration).where(
+                    OrgIntegration.id == integration_id,
+                    OrgIntegration.org_id == org_id,
+                    OrgIntegration.kind == "gitlab",
+                )
+            )
+        ).scalar_one_or_none()
+        if not integration:
+            raise HTTPException(status_code=404, detail="GitLab integration not found")
+        integration.config = {**integration.config, "webhook_secret": encrypt(secret)}
+        await session.commit()
+    return {"webhook_url": _webhook_url(integration_id), "webhook_secret": secret}

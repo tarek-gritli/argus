@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from shared.schemas import FindingSchema
 
@@ -9,7 +9,7 @@ from .schemas import AgentTask, RepoConfig
 
 if TYPE_CHECKING:
     from context.bundle import ContextBundle
-    from integrations.github import PullRequestPayload
+    from orchestrator.vcs import FileChange, UnifiedPayload
 
 __all__ = ["analyze", "run_security_agent"]
 
@@ -26,7 +26,7 @@ def _format_vector_context(chunks: list[dict]) -> list[str]:
     return out
 
 
-def analyze(files: list[Any], diff: str, pr_payload: PullRequestPayload, context: ContextBundle | None = None) -> list[FindingSchema]:
+def analyze(files: list["FileChange"], diff: str, pr_payload: UnifiedPayload, context: ContextBundle | None = None) -> list[FindingSchema]:
     """
     Adapter: Convert coordinator's interface to agent's interface and back.
 
@@ -35,8 +35,8 @@ def analyze(files: list[Any], diff: str, pr_payload: PullRequestPayload, context
     """
     task = AgentTask(
         diff=diff,
-        pr_number=pr_payload.pr_number,
-        repo_id=pr_payload.repo_full_name,
+        pr_number=pr_payload.pr_id,
+        repo_id=pr_payload.repo_id,
         repo_config=RepoConfig(exempt_paths=["tests/", "fixtures/"]),
         vector_context=_format_vector_context(context.similar_chunks) if context else [],
     )
