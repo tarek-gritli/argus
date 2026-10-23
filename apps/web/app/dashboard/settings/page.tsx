@@ -52,7 +52,7 @@ export default function SettingsPage() {
         {/* Page header */}
         <div className="mb-6">
           <h2 className="text-[24px] font-semibold leading-8 tracking-[-0.02em] text-[#c6c6c7]">Settings</h2>
-          <p className="text-[14px] text-[#8e9192] mt-1">Manage your organization's core configuration and team access.</p>
+          <p className="text-[14px] text-[#8e9192] mt-1">Manage your organization&apos;s core configuration and team access.</p>
         </div>
 
         {/* Organization */}

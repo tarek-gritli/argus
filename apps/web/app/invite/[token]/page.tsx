@@ -1,8 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useParams, useRouter } from "next/navigation"
-import { isAuthenticated } from "@/lib/auth"
+import { useParams } from "next/navigation"
 import { BASE } from "@/lib/api"
 
 interface InviteDetails {
@@ -16,10 +15,8 @@ interface InviteDetails {
 
 export default function InvitePage() {
   const { token } = useParams<{ token: string }>()
-  const router = useRouter()
   const [invite, setInvite] = useState<InviteDetails | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [accepting, setAccepting] = useState(false)
 
   useEffect(() => {
     fetch(`/api/v1/invites/${token}`, { credentials: "include" })
@@ -31,35 +28,9 @@ export default function InvitePage() {
       .catch((e: Error) => setError(e.message))
   }, [token])
 
-  async function handleAccept() {
-    setAccepting(true)
-    try {
-      const res = await fetch(`/api/v1/invites/${token}/accept`, {
-        method: "POST",
-        credentials: "include",
-      })
-      if (!res.ok) throw new Error("Failed to accept invite")
-      const { token: newToken, nonce } = (await res.json()) as { token: string; nonce: string }
-      // Re-set cookies with the new org-scoped token
-      const setRes = await fetch("/api/auth/set-token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: newToken, nonce }),
-      })
-      if (!setRes.ok) throw new Error("Failed to set session")
-      router.replace("/dashboard")
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Something went wrong")
-      setAccepting(false)
-    }
-  }
-
   function handleGitHubLogin() {
     window.location.href = `${BASE}/api/v1/auth/github/login?invite_token=${encodeURIComponent(token)}`
   }
-
-  // Safe to read cookies in render: invite is only set client-side after the fetch resolves.
-  const authed = invite !== null && isAuthenticated()
 
   if (error) {
     return (
@@ -117,32 +88,16 @@ export default function InvitePage() {
           </div>
 
           <div className="w-full pt-1">
-            {authed ? (
-              <button
-                onClick={handleAccept}
-                disabled={accepting}
-                className="w-full bg-[#e2e2e2] text-[#2f3131] py-3 text-[10px] font-bold tracking-widest uppercase hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50"
-              >
-                {accepting ? "Accepting…" : "Accept as current user"}
-              </button>
-            ) : (
-              <button
-                onClick={handleGitHubLogin}
-                className="w-full bg-[#e2e2e2] text-[#2f3131] py-3 text-[10px] font-bold tracking-widest uppercase hover:opacity-90 active:scale-[0.98] transition-all"
-              >
-                Accept via GitHub
-              </button>
-            )}
-          </div>
-
-          {authed && (
-            <p className="text-[11px] text-[#8e9192]">
-              Not you?{" "}
-              <button onClick={handleGitHubLogin} className="underline hover:text-[#c6c6c7]">
-                Sign in with a different account
-              </button>
+            <button
+              onClick={handleGitHubLogin}
+              className="w-full bg-[#e2e2e2] text-[#2f3131] py-3 text-[10px] font-bold tracking-widest uppercase hover:opacity-90 active:scale-[0.98] transition-all"
+            >
+              Accept via GitHub
+            </button>
+            <p className="text-[11px] text-[#8e9192] mt-3">
+              Sign in with a GitHub account that has a verified email matching {invite.email}.
             </p>
-          )}
+          </div>
         </div>
       </div>
     </div>

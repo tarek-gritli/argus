@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 import logging
-import secrets
 from datetime import datetime, timezone
 from typing import Literal
 
-import jwt as pyjwt
-from auth_utils import create_jwt, decode_jwt
 from fastapi import APIRouter, HTTPException, Request
 from integrations.email.client import invite_html, send_email
 from pydantic import BaseModel, field_validator
@@ -15,22 +12,8 @@ from shared.db import session_context
 from shared.models import Org, OrgBilling, OrgInvite, User, UserOrg
 from sqlalchemy import func, select
 
-from .auth import _consume_invite
-
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-
-def _require_auth(request: Request) -> str:
-    """Validate the JWT by hand — the /invites/ prefix is exempt from AuthMiddleware."""
-    auth = request.headers.get("Authorization", "")
-    raw = auth[7:] if auth.startswith("Bearer ") else request.cookies.get("argus_token")
-    if not raw:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    try:
-        return decode_jwt(raw)["sub"]
-    except (pyjwt.PyJWTError, KeyError):
-        raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 def _check_org(request: Request, org_id: str) -> None:
@@ -110,8 +93,15 @@ async def create_invite(org_id: str, body: InviteRequest, request: Request):
         if not billing or billing.plan == "free":
             raise HTTPException(status_code=403, detail="Upgrade to Pro to invite team members")
 
-        seat_count = await session.scalar(select(func.count()).where(UserOrg.org_id == org_id))
-        if seat_count >= billing.seat_count:
+        members = await session.scalar(select(func.count()).where(UserOrg.org_id == org_id))
+        pending = await session.scalar(
+            select(func.count()).where(
+                OrgInvite.org_id == org_id,
+                OrgInvite.accepted_at.is_(None),
+                OrgInvite.expires_at > datetime.now(timezone.utc),
+            )
+        )
+        if members + pending >= billing.seat_count:
             raise HTTPException(
                 status_code=403,
                 detail="Seat limit reached. Upgrade your plan to add more seats.",
@@ -182,18 +172,3 @@ async def get_invite(token: str):
         "email": invite.email,
         "expires_at": invite.expires_at.isoformat(),
     }
-
-
-@router.post("/invites/{token}/accept")
-async def accept_invite(token: str, request: Request):
-    user_id = _require_auth(request)
-    async with session_context() as session:
-        accepted = await _consume_invite(session, user_id, token)
-    if not accepted:
-        raise HTTPException(status_code=404, detail="Invite not found or expired")
-    org_id, role = accepted
-    new_token = create_jwt(user_id=user_id, org_id=org_id, role=role)
-    # Same one-time nonce the OAuth callback issues — /api/auth/set-token requires it.
-    nonce = secrets.token_urlsafe(32)
-    await request.app.state.redis.set(f"cookie_nonce:{nonce}", new_token, ex=300)
-    return {"token": new_token, "nonce": nonce}

@@ -87,7 +87,11 @@ export default function BillingPage() {
                             <p className="text-[14px] font-semibold text-[#e5e2e1]">
                               ${(inv.amount_paid / 100).toFixed(2)}
                             </p>
-                            <p className="text-[12px] text-[#4ade80] capitalize">{inv.status}</p>
+                            <p
+                              className={`text-[12px] capitalize ${inv.status === "paid" ? "text-[#4ade80]" : "text-[#8e9192]"}`}
+                            >
+                              {inv.status}
+                            </p>
                           </div>
                           {inv.invoice_pdf && (
                             <a
