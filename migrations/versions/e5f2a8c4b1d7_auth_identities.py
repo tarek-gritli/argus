@@ -1,11 +1,10 @@
 """auth_identities
 
-Merges the invites and repo-provider heads, moves sign-in identity out of `users`
-into `auth_identities` (so GitLab and GitHub accounts are interchangeable), and lifts
-the one-owned-org-per-user limit.
+Moves sign-in identity out of `users` into `auth_identities` (so GitLab and GitHub
+accounts are interchangeable), and lifts the one-owned-org-per-user limit.
 
 Revision ID: e5f2a8c4b1d7
-Revises: c9d4e7a1b2f3, d1a7b3c9e5f2
+Revises: d1a7b3c9e5f2
 Create Date: 2026-06-03 12:00:00.000000
 
 """
@@ -16,7 +15,7 @@ import sqlalchemy as sa
 from alembic import context, op
 
 revision: str = "e5f2a8c4b1d7"
-down_revision: str | Sequence[str] | None = ("c9d4e7a1b2f3", "d1a7b3c9e5f2")
+down_revision: str | Sequence[str] | None = "d1a7b3c9e5f2"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

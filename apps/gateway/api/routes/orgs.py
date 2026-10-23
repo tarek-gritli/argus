@@ -43,7 +43,7 @@ async def list_orgs(request: Request, session: AsyncSession = Depends(get_sessio
 @router.post("/orgs", status_code=201)
 async def create_org(body: OrgCreate, request: Request, session: AsyncSession = Depends(get_session)):
     user_id: str = request.state.user_id
-    owned = await session.scalar(select(func.count()).where(UserOrg.user_id == user_id, UserOrg.role == "owner"))
+    owned = await session.scalar(select(func.count()).where(UserOrg.user_id == user_id, UserOrg.role == "owner")) or 0
     if owned >= MAX_OWNED_ORGS:
         raise HTTPException(status_code=403, detail=f"You can own at most {MAX_OWNED_ORGS} organizations")
 
